@@ -203,16 +203,24 @@ private:
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.pEngineName = "No Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_1;
+        appInfo.apiVersion = VK_API_VERSION_1_0;
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
         createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
-        auto extensions = getRequiredExtensions();
+        auto requiredExtensions = getRequiredExtensions();
+        std::vector<const char*> extensions(requiredExtensions.size());
+        std::transform(requiredExtensions.cbegin(), requiredExtensions.cend(), extensions.begin(),
+                     [](auto& e) { return e.data(); });
+
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
+
+        if(requiredExtensions.find(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME) != requiredExtensions.end()) {
+          createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        }
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         if (enableValidationLayers) {
@@ -885,19 +893,21 @@ private:
         return indices;
     }
 
-    std::vector<const char*> getRequiredExtensions() {
+    std::set<std::string_view> getRequiredExtensions() {
+        std::set<std::string_view> extensions;
         uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (enableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        for(uint32_t i = 0; i < glfwExtensionCount; i++) {
+          extensions.insert(glfwExtensions[i]);
         }
 
-        // Required for MoltenVK on macOS
-        extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+        if (enableValidationLayers) {
+            extensions.insert(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+
+        extensions.insert(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+        extensions.insert(VK_KHR_SURFACE_EXTENSION_NAME);
+        extensions.insert(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
         return extensions;
     }
