@@ -14,12 +14,6 @@
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
-
 struct Vertex {
     glm::vec2 pos;
     glm::vec3 color;
@@ -93,7 +87,7 @@ private:
 
     void initRender() {
         // Initialize render API
-        m_renderAPI.init(m_window, WIDTH, HEIGHT, enableValidationLayers);
+        m_renderAPI.init(m_window, WIDTH, HEIGHT);
 
         // Create vertex buffer
         m_vertexBuffer = m_renderAPI.createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());

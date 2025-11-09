@@ -34,7 +34,7 @@ public:
     ~RenderAPI() = default;
 
     // Initialization and shutdown
-    void init(GLFWwindow* window, uint32_t width, uint32_t height, bool enableValidation = true);
+    void init(GLFWwindow* window, uint32_t width, uint32_t height);
     void shutdown();
 
     // Frame lifecycle

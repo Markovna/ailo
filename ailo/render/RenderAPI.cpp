@@ -6,6 +6,12 @@
 #include <algorithm>
 #include <cstring>
 
+#ifdef NDEBUG
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
+#endif
+
 namespace ailo {
 
 // Static helper to load debug extension functions
@@ -44,11 +50,10 @@ static std::vector<char> readFile(const std::string& filename) {
 
 // Initialization and shutdown
 
-void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height, bool enableValidation) {
+void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     m_window = window;
     m_windowWidth = width;
     m_windowHeight = height;
-    m_enableValidationLayers = enableValidation;
 
     createInstance();
     setupDebugMessenger();
@@ -76,7 +81,7 @@ void RenderAPI::shutdown() {
     m_device.destroyCommandPool(m_commandPool);
     m_device.destroy();
 
-    if (m_enableValidationLayers) {
+    if (enableValidationLayers) {
         DestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
     }
 
@@ -494,7 +499,7 @@ void RenderAPI::handleWindowResize() {
 // Internal initialization
 
 void RenderAPI::createInstance() {
-    if (m_enableValidationLayers && !checkValidationLayerSupport()) {
+    if (enableValidationLayers && !checkValidationLayerSupport()) {
         throw std::runtime_error("validation layers requested, but not available!");
     }
 
@@ -514,7 +519,7 @@ void RenderAPI::createInstance() {
     createInfo.ppEnabledExtensionNames = extensions.data();
 
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (m_enableValidationLayers) {
+    if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
         createInfo.ppEnabledLayerNames = m_validationLayers.data();
 
@@ -536,7 +541,7 @@ void RenderAPI::createInstance() {
 }
 
 void RenderAPI::setupDebugMessenger() {
-    if (!m_enableValidationLayers) return;
+    if (!enableValidationLayers) return;
 
     VkDebugUtilsMessengerCreateInfoEXT createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -620,7 +625,7 @@ void RenderAPI::createLogicalDevice() {
     createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = enabledExtensions.data();
 
-    if (m_enableValidationLayers) {
+    if (enableValidationLayers) {
         createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
         createInfo.ppEnabledLayerNames = m_validationLayers.data();
     } else {
@@ -813,7 +818,7 @@ std::vector<const char*> RenderAPI::getRequiredExtensions() {
 
     std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
-    if (m_enableValidationLayers) {
+    if (enableValidationLayers) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
 
