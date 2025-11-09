@@ -12,11 +12,14 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/glfw)
 
+# Add GLM library from third_party
+add_subdirectory(third_party/glm)
+
 # Add executable
 add_executable(ailo ailo/main.cpp)
 
 # Link libraries
-target_link_libraries(ailo Vulkan::Vulkan glfw)
+target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm)
 
 # Include directories
 target_include_directories(ailo PRIVATE ${Vulkan_INCLUDE_DIRS})
