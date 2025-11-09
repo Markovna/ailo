@@ -39,3 +39,27 @@
 
 # debug information files
 *.dwo
+
+
+# idea
+.idea/
+.cache/
+.vscode/
+cmake-build-*/
+*.db
+*.ipch
+*.filters
+*.db-wal
+*.opendb
+*.db-shm
+*.vcxproj
+*.tcl
+*.user
+*.sln
+
+# macos
+*.DS_store
+*.xcodeproj/
+/.vs
+/out/build
+/CMakeSettings.json
