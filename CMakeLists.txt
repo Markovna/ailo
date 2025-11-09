@@ -16,13 +16,20 @@ add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glm)
 
 # Add executable
-add_executable(ailo ailo/main.cpp)
+add_executable(ailo
+    ailo/main.cpp
+    ailo/render/RenderAPI.cpp
+    ailo/render/RenderAPI.h
+)
 
 # Link libraries
 target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm)
 
 # Include directories
-target_include_directories(ailo PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_include_directories(ailo PRIVATE
+    ${Vulkan_INCLUDE_DIRS}
+    ${CMAKE_SOURCE_DIR}/ailo
+)
 
 # Find glslc shader compiler
 find_program(GLSLC glslc HINTS
