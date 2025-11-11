@@ -95,6 +95,7 @@ private:
     void createLogicalDevice();
     void createSwapchain();
     void createImageViews();
+    void createDepthResources();
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
@@ -131,6 +132,10 @@ private:
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+    vk::Format findDepthFormat();
+    void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+    vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags);
 
     // Debug callback
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -162,6 +167,11 @@ private:
     vk::Extent2D m_swapchainExtent;
     std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
+
+    // Depth buffering
+    vk::Image m_depthImage;
+    vk::DeviceMemory m_depthImageMemory;
+    vk::ImageView m_depthImageView;
 
     // Command buffers
     vk::CommandPool m_commandPool;

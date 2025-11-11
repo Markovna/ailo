@@ -17,7 +17,7 @@ const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
 struct Vertex {
-    glm::vec2 pos;
+    glm::vec3 pos;
     glm::vec3 color;
 
     static vk::VertexInputBindingDescription getBindingDescription() {
@@ -33,7 +33,7 @@ struct Vertex {
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = vk::Format::eR32G32Sfloat;
+        attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
         attributeDescriptions[0].offset = offsetof(Vertex, pos);
 
         attributeDescriptions[1].binding = 0;
@@ -46,14 +46,31 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    // Back face
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+    // Front face
+    {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},
+    {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}},
+    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}}
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0
+    // Back face
+    0, 1, 2, 2, 3, 0,
+    // Front face
+    5, 4, 7, 7, 6, 5,
+    // Left face
+    4, 0, 3, 3, 7, 4,
+    // Right face
+    1, 5, 6, 6, 2, 1,
+    // Bottom face
+    4, 5, 1, 1, 0, 4,
+    // Top face
+    3, 2, 6, 6, 7, 3
 };
 
 struct UniformBufferObject {
@@ -77,7 +94,6 @@ private:
     ailo::BufferHandle m_vertexBuffer;
     ailo::BufferHandle m_indexBuffer;
     ailo::PipelineHandle m_pipeline;
-    bool m_framebufferResized = false;
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
     std::vector<ailo::BufferHandle> m_uniformBuffers;
@@ -96,7 +112,6 @@ private:
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = reinterpret_cast<Application*>(glfwGetWindowUserPointer(window));
-        app->m_framebufferResized = true;
         app->m_renderAPI.handleWindowResize();
     }
 
@@ -167,10 +182,11 @@ private:
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 2.0f));
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f) , glm::vec3(0.0f, 0.0f, 1.0f)) *
+            glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f) , glm::vec3(0.0f, 1.0f, 0.0f));
 
         // View matrix: look at the scene from above
-        ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
         // Projection matrix: perspective projection
         auto extent = m_renderAPI.getSwapchainExtent();
