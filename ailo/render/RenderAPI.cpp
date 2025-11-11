@@ -65,6 +65,7 @@ void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     createCommandPool();
     createCommandBuffers();
     createSyncObjects();
+    createDescriptorPool();
 }
 
 void RenderAPI::shutdown() {
@@ -78,6 +79,7 @@ void RenderAPI::shutdown() {
         m_device.destroyFence(m_inFlightFences[i]);
     }
 
+    m_device.destroyDescriptorPool(m_descriptorPool);
     m_device.destroyCommandPool(m_commandPool);
     m_device.destroy();
 
@@ -246,15 +248,80 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::D
     m_device.unmapMemory(handle.memory);
 }
 
+// Descriptor set management
+
+vk::DescriptorSetLayout RenderAPI::createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings) {
+    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    layoutInfo.pBindings = bindings.data();
+
+    return m_device.createDescriptorSetLayout(layoutInfo);
+}
+
+void RenderAPI::destroyDescriptorSetLayout(vk::DescriptorSetLayout layout) {
+    m_device.destroyDescriptorSetLayout(layout);
+}
+
+DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layout) {
+    DescriptorSetHandle handle;
+
+    vk::DescriptorSetAllocateInfo allocInfo{};
+    allocInfo.descriptorPool = m_descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &layout;
+
+    auto result = m_device.allocateDescriptorSets(allocInfo);
+    handle.descriptorSet = result[0];
+
+    return handle;
+}
+
+void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
+    // Descriptor sets are automatically freed when the pool is destroyed
+    // But we can explicitly free them if needed
+    m_device.freeDescriptorSets(m_descriptorPool, 1, &handle.descriptorSet);
+}
+
+void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding) {
+    vk::DescriptorBufferInfo bufferInfo{};
+    bufferInfo.buffer = buffer.buffer;
+    bufferInfo.offset = 0;
+    bufferInfo.range = buffer.size;
+
+    vk::WriteDescriptorSet descriptorWrite{};
+    descriptorWrite.dstSet = descriptorSet.descriptorSet;
+    descriptorWrite.dstBinding = binding;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pBufferInfo = &bufferInfo;
+
+    m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+}
+
+void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSet, vk::PipelineLayout pipelineLayout, uint32_t firstSet) {
+    m_currentCommandBuffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
+        pipelineLayout,
+        firstSet,
+        1,
+        &descriptorSet.descriptorSet,
+        0,
+        nullptr
+    );
+}
+
 // Pipeline management
 
 PipelineHandle RenderAPI::createGraphicsPipeline(
     const std::string& vertShaderPath,
     const std::string& fragShaderPath,
     const VertexInputDescription& vertexInput,
-    vk::PrimitiveTopology topology) {
+    vk::PrimitiveTopology topology,
+    vk::DescriptorSetLayout descriptorSetLayout) {
 
     PipelineHandle handle;
+    handle.descriptorSetLayout = descriptorSetLayout;
 
     // Create render pass
     vk::AttachmentDescription colorAttachment{};
@@ -337,7 +404,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     rasterizer.polygonMode = vk::PolygonMode::eFill;
     rasterizer.lineWidth = 1.0f;
     rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-    rasterizer.frontFace = vk::FrontFace::eClockwise;
+    rasterizer.frontFace = vk::FrontFace::eCounterClockwise;
     rasterizer.depthBiasEnable = VK_FALSE;
 
     // Multisampling
@@ -367,6 +434,10 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     // Pipeline layout
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+    if (descriptorSetLayout) {
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+    }
     handle.layout = m_device.createPipelineLayout(pipelineLayoutInfo);
 
     // Create graphics pipeline
@@ -740,6 +811,21 @@ void RenderAPI::createSyncObjects() {
         m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
         m_inFlightFences[i] = m_device.createFence(fenceInfo);
     }
+}
+
+void RenderAPI::createDescriptorPool() {
+    // Create a descriptor pool that can allocate descriptor sets
+    // We'll allocate enough for a reasonable number of uniform buffers
+    std::vector<vk::DescriptorPoolSize> poolSizes{};
+    poolSizes.push_back({vk::DescriptorType::eUniformBuffer, 100});
+
+    vk::DescriptorPoolCreateInfo poolInfo{};
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = 100;
+    poolInfo.flags |= vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+
+    m_descriptorPool = m_device.createDescriptorPool(poolInfo);
 }
 
 void RenderAPI::cleanupSwapchain() {

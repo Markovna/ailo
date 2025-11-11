@@ -21,6 +21,11 @@ struct PipelineHandle {
     vk::Pipeline pipeline;
     vk::PipelineLayout layout;
     vk::RenderPass renderPass;
+    vk::DescriptorSetLayout descriptorSetLayout;
+};
+
+struct DescriptorSetHandle {
+    vk::DescriptorSet descriptorSet;
 };
 
 struct VertexInputDescription {
@@ -49,12 +54,21 @@ public:
     void destroyBuffer(const BufferHandle& handle);
     void updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size);
 
+    // Descriptor set management
+    vk::DescriptorSetLayout createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings);
+    void destroyDescriptorSetLayout(vk::DescriptorSetLayout layout);
+    DescriptorSetHandle createDescriptorSet(vk::DescriptorSetLayout layout);
+    void destroyDescriptorSet(const DescriptorSetHandle& handle);
+    void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding = 0);
+    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, vk::PipelineLayout pipelineLayout, uint32_t firstSet = 0);
+
     // Pipeline management
     PipelineHandle createGraphicsPipeline(
         const std::string& vertShaderPath,
         const std::string& fragShaderPath,
         const VertexInputDescription& vertexInput,
-        vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList
+        vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
+        vk::DescriptorSetLayout descriptorSetLayout = nullptr
     );
     void destroyPipeline(const PipelineHandle& handle);
 
@@ -84,6 +98,7 @@ private:
     void createCommandPool();
     void createCommandBuffers();
     void createSyncObjects();
+    void createDescriptorPool();
 
     // Internal cleanup
     void cleanupSwapchain();
@@ -151,6 +166,9 @@ private:
     // Command buffers
     vk::CommandPool m_commandPool;
     std::vector<vk::CommandBuffer> m_commandBuffers;
+
+    // Descriptor pool
+    vk::DescriptorPool m_descriptorPool;
 
     // Synchronization
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;

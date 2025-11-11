@@ -3,6 +3,7 @@
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "render/RenderAPI.h"
 
@@ -10,6 +11,7 @@
 #include <stdexcept>
 #include <vector>
 #include <array>
+#include <chrono>
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -44,13 +46,20 @@ struct Vertex {
 };
 
 const std::vector<Vertex> vertices = {
-    {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
-    0, 1, 2
+    0, 1, 2, 2, 3, 0
+};
+
+struct UniformBufferObject {
+    alignas(16) glm::mat4 model;
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
 };
 
 class Application {
@@ -70,11 +79,17 @@ private:
     ailo::PipelineHandle m_pipeline;
     bool m_framebufferResized = false;
 
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+    std::vector<ailo::BufferHandle> m_uniformBuffers;
+    vk::DescriptorSetLayout m_descriptorSetLayout;
+    std::vector<ailo::DescriptorSetHandle> m_descriptorSets;
+    uint32_t m_currentFrame = 0;
+
     void initWindow() {
         glfwInit();
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-        m_window = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan Window", nullptr, nullptr);
+        m_window = glfwCreateWindow(WIDTH, HEIGHT, "Ailo", nullptr, nullptr);
         glfwSetWindowUserPointer(m_window, this);
         glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
     }
@@ -86,14 +101,37 @@ private:
     }
 
     void initRender() {
-        // Initialize render API
         m_renderAPI.init(m_window, WIDTH, HEIGHT);
 
-        // Create vertex buffer
         m_vertexBuffer = m_renderAPI.createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
-
-        // Create index buffer
         m_indexBuffer = m_renderAPI.createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
+
+        // Create descriptor set layout for uniform buffer
+        vk::DescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding};
+        m_descriptorSetLayout = m_renderAPI.createDescriptorSetLayout(bindings);
+
+        // Create uniform buffers (one for each frame in flight)
+        m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            m_uniformBuffers[i] = m_renderAPI.createBuffer(
+                sizeof(UniformBufferObject),
+                vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+            );
+        }
+
+        // Create descriptor sets
+        m_descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            m_descriptorSets[i] = m_renderAPI.createDescriptorSet(m_descriptorSetLayout);
+            m_renderAPI.updateDescriptorSetBuffer(m_descriptorSets[i], m_uniformBuffers[i], 0);
+        }
 
         // Create graphics pipeline
         ailo::VertexInputDescription vertexInput;
@@ -107,7 +145,9 @@ private:
         m_pipeline = m_renderAPI.createGraphicsPipeline(
             "shaders/shader.vert.spv",
             "shaders/shader.frag.spv",
-            vertexInput
+            vertexInput,
+            vk::PrimitiveTopology::eTriangleList,
+            m_descriptorSetLayout
         );
     }
 
@@ -119,15 +159,43 @@ private:
         m_renderAPI.waitIdle();
     }
 
+    void updateUniformBuffer(uint32_t currentFrame) {
+        UniformBufferObject ubo{};
+
+        // Model matrix: rotate around Z axis
+        static auto startTime = std::chrono::high_resolution_clock::now();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 2.0f));
+
+        // View matrix: look at the scene from above
+        ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+        // Projection matrix: perspective projection
+        auto extent = m_renderAPI.getSwapchainExtent();
+        ubo.proj = glm::perspective(glm::radians(45.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1; // Flip Y for Vulkan
+
+        // Update the uniform buffer
+        m_renderAPI.updateBuffer(m_uniformBuffers[currentFrame], &ubo, sizeof(ubo));
+    }
+
     void drawFrame() {
         uint32_t imageIndex;
         if (!m_renderAPI.beginFrame(imageIndex)) {
             return; // Swapchain was recreated, try again next frame
         }
 
+        // Update uniform buffer for current frame
+        updateUniformBuffer(m_currentFrame);
+
         // Bind pipeline and begin render pass
         m_renderAPI.bindPipeline(m_pipeline);
         m_renderAPI.beginRenderPass(imageIndex);
+
+        // Bind descriptor set
+        m_renderAPI.bindDescriptorSet(m_descriptorSets[m_currentFrame], m_pipeline.layout);
 
         // Bind buffers and draw
         m_renderAPI.bindVertexBuffer(m_vertexBuffer);
@@ -137,18 +205,31 @@ private:
         // End render pass and frame
         m_renderAPI.endRenderPass();
         m_renderAPI.endFrame(imageIndex);
+
+        // Advance to next frame
+        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void cleanup() {
-        // Destroy resources
+        // Clean up uniform buffers
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            m_renderAPI.destroyBuffer(m_uniformBuffers[i]);
+        }
+
+        // Clean up descriptor sets
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            m_renderAPI.destroyDescriptorSet(m_descriptorSets[i]);
+        }
+
+        // Clean up descriptor set layout
+        m_renderAPI.destroyDescriptorSetLayout(m_descriptorSetLayout);
+
         m_renderAPI.destroyBuffer(m_vertexBuffer);
         m_renderAPI.destroyBuffer(m_indexBuffer);
         m_renderAPI.destroyPipeline(m_pipeline);
 
-        // Shutdown render API
         m_renderAPI.shutdown();
 
-        // Cleanup GLFW
         glfwDestroyWindow(m_window);
         glfwTerminate();
     }
