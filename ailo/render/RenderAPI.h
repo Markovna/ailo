@@ -28,6 +28,15 @@ struct DescriptorSetHandle {
     vk::DescriptorSet descriptorSet;
 };
 
+struct TextureHandle {
+    vk::Image image;
+    vk::DeviceMemory memory;
+    vk::ImageView imageView;
+    vk::Sampler sampler;
+    uint32_t width;
+    uint32_t height;
+};
+
 struct VertexInputDescription {
     std::vector<vk::VertexInputBindingDescription> bindings;
     std::vector<vk::VertexInputAttributeDescription> attributes;
@@ -54,12 +63,18 @@ public:
     void destroyBuffer(const BufferHandle& handle);
     void updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size);
 
+    // Texture management
+    TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear);
+    void destroyTexture(const TextureHandle& handle);
+    void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize);
+
     // Descriptor set management
     vk::DescriptorSetLayout createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings);
     void destroyDescriptorSetLayout(vk::DescriptorSetLayout layout);
     DescriptorSetHandle createDescriptorSet(vk::DescriptorSetLayout layout);
     void destroyDescriptorSet(const DescriptorSetHandle& handle);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding = 0);
+    void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
     void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, vk::PipelineLayout pipelineLayout, uint32_t firstSet = 0);
 
     // Pipeline management
@@ -136,6 +151,8 @@ private:
     vk::Format findDepthFormat();
     void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
     vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags);
+    void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+    void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
     // Debug callback
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(

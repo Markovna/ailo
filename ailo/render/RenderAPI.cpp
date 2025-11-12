@@ -249,6 +249,81 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::D
     m_device.unmapMemory(handle.memory);
 }
 
+// Texture management
+
+TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
+    TextureHandle handle;
+    handle.width = width;
+    handle.height = height;
+
+    // Create image
+    createImage(width, height, format, vk::ImageTiling::eOptimal,
+                vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                vk::MemoryPropertyFlagBits::eDeviceLocal,
+                handle.image, handle.memory);
+
+    // Create image view
+    handle.imageView = createImageView(handle.image, format, vk::ImageAspectFlagBits::eColor);
+
+    // Create sampler
+    vk::SamplerCreateInfo samplerInfo{};
+    samplerInfo.magFilter = filter;
+    samplerInfo.minFilter = filter;
+    samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+
+    vk::PhysicalDeviceProperties properties = m_physicalDevice.getProperties();
+    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+    samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = vk::CompareOp::eAlways;
+    samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
+
+    handle.sampler = m_device.createSampler(samplerInfo);
+
+    return handle;
+}
+
+void RenderAPI::destroyTexture(const TextureHandle& handle) {
+    m_device.destroySampler(handle.sampler);
+    m_device.destroyImageView(handle.imageView);
+    m_device.destroyImage(handle.image);
+    m_device.freeMemory(handle.memory);
+}
+
+void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize) {
+    // Create staging buffer
+    auto stagingBuffer = createBuffer(dataSize,
+                                      vk::BufferUsageFlagBits::eTransferSrc,
+                                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    // Copy data to staging buffer
+    void* mappedData = m_device.mapMemory(stagingBuffer.memory, 0, dataSize);
+    memcpy(mappedData, data, dataSize);
+    m_device.unmapMemory(stagingBuffer.memory);
+
+    // Transition image layout to transfer destination
+    transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
+                         vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+
+    // Copy buffer to image
+    copyBufferToImage(stagingBuffer.buffer, handle.image, handle.width, handle.height);
+
+    // Transition image layout to shader read
+    transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
+                         vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    // Cleanup staging buffer
+    destroyBuffer(stagingBuffer);
+}
+
 // Descriptor set management
 
 vk::DescriptorSetLayout RenderAPI::createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings) {
@@ -296,6 +371,23 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pBufferInfo = &bufferInfo;
+
+    m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+}
+
+void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding) {
+    vk::DescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    imageInfo.imageView = texture.imageView;
+    imageInfo.sampler = texture.sampler;
+
+    vk::WriteDescriptorSet descriptorWrite{};
+    descriptorWrite.dstSet = descriptorSet.descriptorSet;
+    descriptorWrite.dstBinding = binding;
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imageInfo;
 
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 }
@@ -703,6 +795,7 @@ void RenderAPI::createLogicalDevice() {
     }
 
     vk::PhysicalDeviceFeatures deviceFeatures{};
+    deviceFeatures.samplerAnisotropy = true;
 
     // Check for portability subset extension
     std::vector<const char*> enabledExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
@@ -856,9 +949,10 @@ void RenderAPI::createSyncObjects() {
 
 void RenderAPI::createDescriptorPool() {
     // Create a descriptor pool that can allocate descriptor sets
-    // We'll allocate enough for a reasonable number of uniform buffers
+    // We'll allocate enough for a reasonable number of uniform buffers and textures
     std::vector<vk::DescriptorPoolSize> poolSizes{};
     poolSizes.push_back({vk::DescriptorType::eUniformBuffer, 100});
+    poolSizes.push_back({vk::DescriptorType::eCombinedImageSampler, 100});
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -974,7 +1068,10 @@ bool RenderAPI::isDeviceSuitable(vk::PhysicalDevice device) {
         swapchainAdequate = !swapchainSupport.formats.empty() && !swapchainSupport.presentModes.empty();
     }
 
-    return indices.isComplete() && extensionsSupported && swapchainAdequate;
+    vk::PhysicalDeviceFeatures supportedFeatures;
+    device.getFeatures(&supportedFeatures);
+
+    return indices.isComplete() && extensionsSupported && swapchainAdequate && supportedFeatures.samplerAnisotropy;
 }
 
 bool RenderAPI::checkDeviceExtensionSupport(vk::PhysicalDevice device) {
@@ -1178,6 +1275,106 @@ vk::ImageView RenderAPI::createImageView(vk::Image image, vk::Format format, vk:
     viewInfo.subresourceRange.layerCount = 1;
 
     return m_device.createImageView(viewInfo);
+}
+
+void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    vk::CommandBufferAllocateInfo allocInfo{};
+    allocInfo.level = vk::CommandBufferLevel::ePrimary;
+    allocInfo.commandPool = m_commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    vk::CommandBuffer commandBuffer = m_device.allocateCommandBuffers(allocInfo)[0];
+
+    vk::CommandBufferBeginInfo beginInfo{};
+    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    commandBuffer.begin(beginInfo);
+
+    vk::ImageMemoryBarrier barrier{};
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    vk::PipelineStageFlags sourceStage;
+    vk::PipelineStageFlags destinationStage;
+
+    if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+        barrier.srcAccessMask = {};
+        barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    } else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal) {
+        barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+        barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+        sourceStage = vk::PipelineStageFlagBits::eTransfer;
+        destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+    } else {
+        throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    commandBuffer.pipelineBarrier(
+        sourceStage, destinationStage,
+        {},
+        0, nullptr,
+        0, nullptr,
+        1, &barrier
+    );
+
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo{};
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    m_graphicsQueue.submit(submitInfo, nullptr);
+    m_graphicsQueue.waitIdle();
+
+    m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
+}
+
+void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
+    vk::CommandBufferAllocateInfo allocInfo{};
+    allocInfo.level = vk::CommandBufferLevel::ePrimary;
+    allocInfo.commandPool = m_commandPool;
+    allocInfo.commandBufferCount = 1;
+
+    vk::CommandBuffer commandBuffer = m_device.allocateCommandBuffers(allocInfo)[0];
+
+    vk::CommandBufferBeginInfo beginInfo{};
+    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+    commandBuffer.begin(beginInfo);
+
+    vk::BufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = vk::Offset3D{0, 0, 0};
+    region.imageExtent = vk::Extent3D{width, height, 1};
+
+    commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
+
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo{};
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    m_graphicsQueue.submit(submitInfo, nullptr);
+    m_graphicsQueue.waitIdle();
+
+    m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(

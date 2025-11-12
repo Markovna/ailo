@@ -2,8 +2,11 @@
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+
+#include <stb_image/stb_image.h>
 
 #include "render/RenderAPI.h"
 
@@ -19,6 +22,7 @@ const uint32_t HEIGHT = 600;
 struct Vertex {
     glm::vec3 pos;
     glm::vec3 color;
+    glm::vec2 texCoord;
 
     static vk::VertexInputBindingDescription getBindingDescription() {
         vk::VertexInputBindingDescription bindingDescription{};
@@ -28,8 +32,8 @@ struct Vertex {
         return bindingDescription;
     }
 
-    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions() {
-        std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions{};
+    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
+        std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions{};
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
@@ -41,21 +45,26 @@ struct Vertex {
         attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
         attributeDescriptions[1].offset = offsetof(Vertex, color);
 
+        attributeDescriptions[2].binding = 0;
+        attributeDescriptions[2].location = 2;
+        attributeDescriptions[2].format = vk::Format::eR32G32Sfloat;
+        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+
         return attributeDescriptions;
     }
 };
 
 const std::vector<Vertex> vertices = {
     // Back face
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}},
+    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
     // Front face
-    {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}},
-    {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}}
+    {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
@@ -94,6 +103,7 @@ private:
     ailo::BufferHandle m_vertexBuffer;
     ailo::BufferHandle m_indexBuffer;
     ailo::PipelineHandle m_pipeline;
+    ailo::TextureHandle m_texture;
 
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
     std::vector<ailo::BufferHandle> m_uniformBuffers;
@@ -121,14 +131,34 @@ private:
         m_vertexBuffer = m_renderAPI.createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
         m_indexBuffer = m_renderAPI.createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
 
-        // Create descriptor set layout for uniform buffer
+        // Load texture
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load("textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        if (!pixels) {
+            throw std::runtime_error("failed to load texture image!");
+        }
+        vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+        // Create texture
+        m_texture = m_renderAPI.createTexture(vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
+        m_renderAPI.updateTextureImage(m_texture, pixels, imageSize);
+
+        stbi_image_free(pixels);
+
+        // Create descriptor set layout for uniform buffer and texture
         vk::DescriptorSetLayoutBinding uboLayoutBinding{};
         uboLayoutBinding.binding = 0;
         uboLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-        std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding};
+        vk::DescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 1;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        samplerLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
         m_descriptorSetLayout = m_renderAPI.createDescriptorSetLayout(bindings);
 
         // Create uniform buffers (one for each frame in flight)
@@ -146,6 +176,7 @@ private:
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             m_descriptorSets[i] = m_renderAPI.createDescriptorSet(m_descriptorSetLayout);
             m_renderAPI.updateDescriptorSetBuffer(m_descriptorSets[i], m_uniformBuffers[i], 0);
+            m_renderAPI.updateDescriptorSetTexture(m_descriptorSets[i], m_texture, 1);
         }
 
         // Create graphics pipeline
@@ -177,13 +208,14 @@ private:
     void updateUniformBuffer(uint32_t currentFrame) {
         UniformBufferObject ubo{};
 
-        // Model matrix: rotate around Z axis
+        // Model matrix
         static auto startTime = std::chrono::high_resolution_clock::now();
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f) , glm::vec3(0.0f, 0.0f, 1.0f)) *
-            glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f) , glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::rotate(glm::mat4(1.0f), 1.3f * time * glm::radians(45.0f) , glm::vec3(0.0f, 1.0f, 0.0f)) *
+            glm::rotate(glm::mat4(1.0f), glm::radians(45.0f) , glm::vec3(1.0f, 0.0f, 0.0f));
 
         // View matrix: look at the scene from above
         ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -239,6 +271,9 @@ private:
 
         // Clean up descriptor set layout
         m_renderAPI.destroyDescriptorSetLayout(m_descriptorSetLayout);
+
+        // Clean up texture
+        m_renderAPI.destroyTexture(m_texture);
 
         m_renderAPI.destroyBuffer(m_vertexBuffer);
         m_renderAPI.destroyBuffer(m_indexBuffer);

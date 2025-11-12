@@ -10,10 +10,10 @@ find_package(Vulkan REQUIRED)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/glfw)
 
-# Add GLM library from third_party
+add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glm)
+add_subdirectory(third_party/stb_image)
 
 # Add executable
 add_executable(ailo
@@ -23,7 +23,7 @@ add_executable(ailo
 )
 
 # Link libraries
-target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm)
+target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm stb_image)
 
 # Include directories
 target_include_directories(ailo PRIVATE
