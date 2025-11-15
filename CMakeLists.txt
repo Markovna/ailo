@@ -14,6 +14,7 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
+add_subdirectory(third_party/vkmemalloc)
 
 # Add executable
 add_executable(ailo
@@ -23,7 +24,7 @@ add_executable(ailo
 )
 
 # Link libraries
-target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm stb_image)
+target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm stb_image GPUOpen::VulkanMemoryAllocator)
 
 # Include directories
 target_include_directories(ailo PRIVATE

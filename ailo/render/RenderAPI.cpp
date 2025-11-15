@@ -1,3 +1,4 @@
+#define VMA_IMPLEMENTATION
 #include "RenderAPI.h"
 #include <iostream>
 #include <fstream>
@@ -67,6 +68,7 @@ void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     createCommandBuffers();
     createSyncObjects();
     createDescriptorPool();
+    createAllocator();
 }
 
 void RenderAPI::shutdown() {
@@ -165,7 +167,7 @@ void RenderAPI::waitIdle() {
 
 // Buffer management
 
-BufferHandle RenderAPI::createVertexBuffer(const void* data, vk::DeviceSize size) {
+BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
     auto stagingBuffer = createBuffer(size,
                                       vk::BufferUsageFlagBits::eTransferSrc,
@@ -190,7 +192,7 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, vk::DeviceSize size
     return vertexBuffer;
 }
 
-BufferHandle RenderAPI::createIndexBuffer(const void* data, vk::DeviceSize size) {
+BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
     auto stagingBuffer = createBuffer(size,
                                       vk::BufferUsageFlagBits::eTransferSrc,
@@ -215,7 +217,85 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, vk::DeviceSize size)
     return indexBuffer;
 }
 
-BufferHandle RenderAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
+VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
+  VmaAllocator allocator;
+  VmaVulkanFunctions const funcs {
+#if VMA_DYNAMIC_VULKAN_FUNCTIONS
+      .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
+      .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
+#else
+      .vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties,
+      .vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties,
+      .vkAllocateMemory = vkAllocateMemory,
+      .vkFreeMemory = vkFreeMemory,
+      .vkMapMemory = vkMapMemory,
+      .vkUnmapMemory = vkUnmapMemory,
+      .vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges,
+      .vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges,
+      .vkBindBufferMemory = vkBindBufferMemory,
+      .vkBindImageMemory = vkBindImageMemory,
+      .vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements,
+      .vkGetImageMemoryRequirements = vkGetImageMemoryRequirements,
+      .vkCreateBuffer = vkCreateBuffer,
+      .vkDestroyBuffer = vkDestroyBuffer,
+      .vkCreateImage = vkCreateImage,
+      .vkDestroyImage = vkDestroyImage,
+      .vkCmdCopyBuffer = vkCmdCopyBuffer,
+      .vkGetBufferMemoryRequirements2KHR = vkGetBufferMemoryRequirements2KHR,
+      .vkGetImageMemoryRequirements2KHR = vkGetImageMemoryRequirements2KHR
+#endif
+  };
+  VmaAllocatorCreateInfo const allocatorInfo {
+      // Disable the internal VMA synchronization because the backend is singled threaded.
+      // Improve CPU performance when using VMA functions. The backend will guarantee that all
+      // access to VMA is done in a thread safe way.
+      .flags = VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT,
+      .physicalDevice = physicalDevice,
+      .device = device,
+      .pVulkanFunctions = &funcs,
+      .instance = instance,
+  };
+  vmaCreateAllocator(&allocatorInfo, &allocator);
+  return allocator;
+}
+
+BufferHandle RenderAPI::allocateBuffer(VkBufferUsageFlags usageFlags, uint32_t numBytes) {
+    VkBufferCreateInfo const bufferInfo {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = numBytes,
+        .usage = usageFlags | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+    };
+
+    VmaAllocationCreateFlags vmaFlags = 0;
+
+    // TODO: In the case of UMA, the buffers will always be mappable
+    // if(isUMA()) {
+    //  vmaFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    // }
+
+    BufferHandle bufferHandle;
+    bufferHandle.size = numBytes;
+
+    VmaAllocationCreateInfo const allocInfo {
+        .flags = vmaFlags,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+    };
+
+    VkBuffer vkBuffer;
+    VkResult result = vmaCreateBuffer(
+        m_Allocator, &bufferInfo, &allocInfo, &vkBuffer, &bufferHandle.vmaAllocation, &bufferHandle.allocationInfo);
+
+    bufferHandle.buffer = vkBuffer;
+
+    return bufferHandle;
+}
+
+void RenderAPI::deallocateBuffer(BufferHandle& bufferHandle) {
+  vmaDestroyBuffer(m_Allocator, bufferHandle.buffer, bufferHandle.vmaAllocation);
+}
+
+BufferHandle RenderAPI::createBuffer(uint64_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
     BufferHandle handle;
     handle.size = size;
 
@@ -1385,6 +1465,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(
 
     std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
+}
+
+void RenderAPI::createAllocator() {
+  m_Allocator = ailo::createAllocator(m_instance, m_physicalDevice, m_device);
 }
 
 } // namespace ailo

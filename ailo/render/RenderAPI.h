@@ -3,6 +3,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.hpp>
+#include <vk_mem_alloc.h>
 
 #include <glm/glm.hpp>
 #include <vector>
@@ -14,7 +15,9 @@ namespace ailo {
 struct BufferHandle {
     vk::Buffer buffer;
     vk::DeviceMemory memory;
-    vk::DeviceSize size;
+    uint64_t size;
+    VmaAllocation vmaAllocation;
+    VmaAllocationInfo allocationInfo;
 };
 
 struct PipelineHandle {
@@ -57,9 +60,9 @@ public:
     void waitIdle();
 
     // Buffer management
-    BufferHandle createVertexBuffer(const void* data, vk::DeviceSize size);
-    BufferHandle createIndexBuffer(const void* data, vk::DeviceSize size);
-    BufferHandle createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+    BufferHandle createVertexBuffer(const void* data, uint64_t size);
+    BufferHandle createIndexBuffer(const void* data, uint64_t size);
+    BufferHandle createBuffer(uint64_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
     void destroyBuffer(const BufferHandle& handle);
     void updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size);
 
@@ -115,6 +118,7 @@ private:
     void createCommandBuffers();
     void createSyncObjects();
     void createDescriptorPool();
+    void createAllocator();
 
     // Internal cleanup
     void cleanupSwapchain();
@@ -146,6 +150,8 @@ private:
 
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    BufferHandle allocateBuffer(VkBufferUsageFlags usageFlags, uint32_t numBytes);
+    void deallocateBuffer(BufferHandle&);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
     vk::Format findDepthFormat();
@@ -196,6 +202,8 @@ private:
 
     // Descriptor pool
     vk::DescriptorPool m_descriptorPool;
+
+    VmaAllocator m_Allocator = nullptr;
 
     // Synchronization
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
