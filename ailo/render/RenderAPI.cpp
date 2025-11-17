@@ -69,6 +69,8 @@ void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     createSyncObjects();
     createDescriptorPool();
     createAllocator();
+
+    flushCommandBuffer();
 }
 
 void RenderAPI::shutdown() {
@@ -80,7 +82,10 @@ void RenderAPI::shutdown() {
         m_device.destroySemaphore(m_renderFinishedSemaphores[i]);
         m_device.destroySemaphore(m_imageAvailableSemaphores[i]);
         m_device.destroyFence(m_inFlightFences[i]);
+        destroyStageBuffers(i);
     }
+
+    vmaDestroyAllocator(m_Allocator);
 
     m_device.destroyDescriptorPool(m_descriptorPool);
     m_device.destroyCommandPool(m_commandPool);
@@ -97,11 +102,8 @@ void RenderAPI::shutdown() {
 // Frame lifecycle
 
 bool RenderAPI::beginFrame(uint32_t& outImageIndex) {
-    (void)m_device.waitForFences(1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
-
     auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX,
-                                                m_imageAvailableSemaphores[m_currentFrame],
-                                                nullptr);
+                                                m_imageAvailableSemaphores[m_currentFrame], nullptr);
 
     if (result.result == vk::Result::eErrorOutOfDateKHR) {
         recreateSwapchain();
@@ -111,13 +113,6 @@ bool RenderAPI::beginFrame(uint32_t& outImageIndex) {
     }
 
     outImageIndex = result.value;
-    (void)m_device.resetFences(1, &m_inFlightFences[m_currentFrame]);
-
-    m_currentCommandBuffer = m_commandBuffers[m_currentFrame];
-    m_currentCommandBuffer.reset();
-
-    vk::CommandBufferBeginInfo beginInfo{};
-    m_currentCommandBuffer.begin(beginInfo);
 
     return true;
 }
@@ -138,7 +133,7 @@ void RenderAPI::endFrame(uint32_t imageIndex) {
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    m_graphicsQueue.submit(submitInfo, m_inFlightFences[m_currentFrame]);
+    m_graphicsQueue.submit(submitInfo, m_inFlightFences[m_currentCommandBufferIndex]);
 
     vk::PresentInfoKHR presentInfo{};
     presentInfo.waitSemaphoreCount = 1;
@@ -159,6 +154,7 @@ void RenderAPI::endFrame(uint32_t imageIndex) {
     }
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    flushCommandBuffer();
 }
 
 void RenderAPI::waitIdle() {
@@ -168,52 +164,17 @@ void RenderAPI::waitIdle() {
 // Buffer management
 
 BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
-    // Create staging buffer
-    auto stagingBuffer = createBuffer(size,
-                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    // Copy data to staging buffer
-    void* mappedData = m_device.mapMemory(stagingBuffer.memory, 0, size);
-    memcpy(mappedData, data, (size_t)size);
-    m_device.unmapMemory(stagingBuffer.memory);
-
-    // Create device local buffer
-    auto vertexBuffer = createBuffer(size,
-                                     vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-                                     vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    // Copy from staging to device local
-    copyBuffer(stagingBuffer.buffer, vertexBuffer.buffer, size);
-
-    // Cleanup staging buffer
-    destroyBuffer(stagingBuffer);
-
+    auto vertexBuffer = allocateBuffer(vk::BufferUsageFlagBits::eVertexBuffer, size);
+    vertexBuffer.binding = BufferBinding::VERTEX;
+    loadFromCpu(m_currentCommandBuffer, vertexBuffer, data, 0, size);
     return vertexBuffer;
 }
 
 BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
-    auto stagingBuffer = createBuffer(size,
-                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-    // Copy data to staging buffer
-    void* mappedData = m_device.mapMemory(stagingBuffer.memory, 0, size);
-    memcpy(mappedData, data, (size_t)size);
-    m_device.unmapMemory(stagingBuffer.memory);
-
-    // Create device local buffer
-    auto indexBuffer = createBuffer(size,
-                                    vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-                                    vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    // Copy from staging to device local
-    copyBuffer(stagingBuffer.buffer, indexBuffer.buffer, size);
-
-    // Cleanup staging buffer
-    destroyBuffer(stagingBuffer);
-
+    auto indexBuffer = allocateBuffer(vk::BufferUsageFlagBits::eIndexBuffer, size);
+    indexBuffer.binding = BufferBinding::INDEX;
+    loadFromCpu(m_currentCommandBuffer, indexBuffer, data, 0, size);
     return indexBuffer;
 }
 
@@ -259,18 +220,18 @@ VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevic
   return allocator;
 }
 
-BufferHandle RenderAPI::allocateBuffer(VkBufferUsageFlags usageFlags, uint32_t numBytes) {
+BufferHandle RenderAPI::allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t numBytes) {
     VkBufferCreateInfo const bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = numBytes,
-        .usage = usageFlags | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        .usage = (VkBufferUsageFlags) (usageFlags | vk::BufferUsageFlagBits::eTransferDst),
     };
 
     VmaAllocationCreateFlags vmaFlags = 0;
 
     // TODO: In the case of UMA, the buffers will always be mappable
     // if(isUMA()) {
-    //  vmaFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    //     vmaFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     // }
 
     BufferHandle bufferHandle;
@@ -291,42 +252,18 @@ BufferHandle RenderAPI::allocateBuffer(VkBufferUsageFlags usageFlags, uint32_t n
     return bufferHandle;
 }
 
-void RenderAPI::deallocateBuffer(BufferHandle& bufferHandle) {
+BufferHandle RenderAPI::createBuffer(uint64_t size) {
+  auto buffer = allocateBuffer(vk::BufferUsageFlagBits::eUniformBuffer, size);
+  buffer.binding = BufferBinding::UNIFORM;
+  return buffer;
+}
+
+void RenderAPI::destroyBuffer(const BufferHandle& bufferHandle) {
   vmaDestroyBuffer(m_Allocator, bufferHandle.buffer, bufferHandle.vmaAllocation);
 }
 
-BufferHandle RenderAPI::createBuffer(uint64_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties) {
-    BufferHandle handle;
-    handle.size = size;
-
-    vk::BufferCreateInfo bufferInfo{};
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = vk::SharingMode::eExclusive;
-
-    handle.buffer = m_device.createBuffer(bufferInfo);
-
-    vk::MemoryRequirements memRequirements = m_device.getBufferMemoryRequirements(handle.buffer);
-
-    vk::MemoryAllocateInfo allocInfo{};
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    handle.memory = m_device.allocateMemory(allocInfo);
-    m_device.bindBufferMemory(handle.buffer, handle.memory, 0);
-
-    return handle;
-}
-
-void RenderAPI::destroyBuffer(const BufferHandle& handle) {
-    m_device.destroyBuffer(handle.buffer);
-    m_device.freeMemory(handle.memory);
-}
-
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size) {
-    void* mappedData = m_device.mapMemory(handle.memory, 0, size);
-    memcpy(mappedData, data, (size_t)size);
-    m_device.unmapMemory(handle.memory);
+    loadFromCpu(m_currentCommandBuffer, handle, data, 0, size);
 }
 
 // Texture management
@@ -380,28 +317,23 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize) {
     // Create staging buffer
-    auto stagingBuffer = createBuffer(dataSize,
-                                      vk::BufferUsageFlagBits::eTransferSrc,
-                                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    // allocate stage buffer
+    StageBuffer stageBuffer = allocateStageBuffer(dataSize);
 
-    // Copy data to staging buffer
-    void* mappedData = m_device.mapMemory(stagingBuffer.memory, 0, dataSize);
-    memcpy(mappedData, data, dataSize);
-    m_device.unmapMemory(stagingBuffer.memory);
+    // mem copy to stage buffer
+    memcpy(stageBuffer.mapping, data, dataSize);
+    vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
     // Transition image layout to transfer destination
     transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
                          vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
     // Copy buffer to image
-    copyBufferToImage(stagingBuffer.buffer, handle.image, handle.width, handle.height);
+    copyBufferToImage(stageBuffer.buffer, handle.image, handle.width, handle.height);
 
     // Transition image layout to shader read
     transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
                          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    // Cleanup staging buffer
-    destroyBuffer(stagingBuffer);
 }
 
 // Descriptor set management
@@ -1002,6 +934,7 @@ void RenderAPI::createCommandPool() {
 
 void RenderAPI::createCommandBuffers() {
     m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    m_stageBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.commandPool = m_commandPool;
@@ -1264,7 +1197,8 @@ uint32_t RenderAPI::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags 
 }
 
 void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
-    vk::CommandBufferAllocateInfo allocInfo{};
+
+  vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.level = vk::CommandBufferLevel::ePrimary;
     allocInfo.commandPool = m_commandPool;
     allocInfo.commandBufferCount = 1;
@@ -1469,6 +1403,125 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(
 
 void RenderAPI::createAllocator() {
   m_Allocator = ailo::createAllocator(m_instance, m_physicalDevice, m_device);
+}
+
+StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
+    VkBufferCreateInfo bufferInfo {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = capacity,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    };
+    VmaAllocationCreateInfo allocInfo { .usage = VMA_MEMORY_USAGE_CPU_ONLY };
+    VkBuffer buffer;
+    VmaAllocation memory;
+    VkResult result = vmaCreateBuffer(m_Allocator, &bufferInfo, &allocInfo, &buffer, &memory, nullptr);
+
+    void* pMapping = nullptr;
+    if(result == VK_SUCCESS) {
+        result = vmaMapMemory(m_Allocator, memory, &pMapping);
+    }
+    StageBuffer stageBuffer {
+      .buffer = buffer,
+      .size = capacity,
+      .vmaAllocation = memory,
+      .mapping = pMapping
+    };
+    m_stageBuffers[m_currentCommandBufferIndex].push_back(stageBuffer);
+    return stageBuffer;
+}
+
+void RenderAPI::destroyStageBuffers(uint32_t index) {
+  for(auto& stage : m_stageBuffers[index]) {
+    vmaUnmapMemory(m_Allocator, stage.vmaAllocation);
+    vmaDestroyBuffer(m_Allocator, stage.buffer, stage.vmaAllocation);
+  }
+  m_stageBuffers[index].clear();
+}
+
+void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& access, VkPipelineStageFlags& stage) {
+  if (bufferBinding == BufferBinding::UNIFORM) {
+    access = VK_ACCESS_SHADER_READ_BIT;
+    stage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  } else if (bufferBinding == BufferBinding::VERTEX) {
+    access = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    stage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+  } else if (bufferBinding == BufferBinding::INDEX) {
+    access = VK_ACCESS_INDEX_READ_BIT;
+    stage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+  }
+
+}
+
+void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const BufferHandle& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
+  // allocate stage buffer
+  StageBuffer stageBuffer = allocateStageBuffer(numBytes);
+
+  // mem copy to stage buffer
+  memcpy(stageBuffer.mapping, data, numBytes);
+  vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, numBytes);
+
+  VkAccessFlags srcAccess = 0;
+  VkPipelineStageFlags srcStage = 0;
+  getReadBarrierAccessAndStage(bufferHandle.binding, srcAccess, srcStage);
+
+  // TODO: we might want to skip this barrier in some cases, e.g if buffer is static
+  {
+    VkBufferMemoryBarrier barrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+        .srcAccessMask = srcAccess,
+        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .buffer = bufferHandle.buffer,
+        .offset = byteOffset,
+        .size = numBytes,
+    };
+    vkCmdPipelineBarrier(commandBuffer, srcStage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
+                         nullptr, 1, &barrier, 0, nullptr);
+  }
+
+  VkBufferCopy region = {
+      .srcOffset = 0,
+      .dstOffset = byteOffset,
+      .size = numBytes,
+  };
+  vkCmdCopyBuffer(commandBuffer, stageBuffer.buffer, bufferHandle.buffer, 1, &region);
+
+  VkAccessFlags dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | srcAccess;
+  VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | srcStage;
+
+  VkBufferMemoryBarrier barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = dstAccessMask,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .buffer = bufferHandle.buffer,
+      .offset = byteOffset,
+      .size = numBytes,
+  };
+
+  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStageMask, 0, 0,
+                       nullptr, 1, &barrier, 0, nullptr);
+}
+
+void RenderAPI::flushCommandBuffer() {
+  m_currentCommandBufferIndex = (m_currentCommandBufferIndex + 1) % m_commandBuffers.size();
+
+  auto& fence = m_inFlightFences[m_currentCommandBufferIndex];
+
+  (void)m_device.waitForFences(1, &fence, VK_TRUE, UINT64_MAX);
+
+  // free resources acquired by command buffer
+  destroyStageBuffers(m_currentCommandBufferIndex);
+
+  (void)m_device.resetFences(1, &fence);
+
+  m_currentCommandBuffer = m_commandBuffers[m_currentCommandBufferIndex];
+  m_currentCommandBuffer.reset();
+
+  vk::CommandBufferBeginInfo beginInfo{};
+  m_currentCommandBuffer.begin(beginInfo);
 }
 
 } // namespace ailo

@@ -12,12 +12,26 @@
 
 namespace ailo {
 
+enum class BufferBinding : uint8_t {
+  UNKNOWN,
+  VERTEX,
+  INDEX,
+  UNIFORM,
+};
+
 struct BufferHandle {
     vk::Buffer buffer;
-    vk::DeviceMemory memory;
     uint64_t size;
     VmaAllocation vmaAllocation;
     VmaAllocationInfo allocationInfo;
+    BufferBinding binding;
+};
+
+struct StageBuffer {
+  vk::Buffer buffer;
+  uint64_t size;
+  VmaAllocation vmaAllocation;
+  void* mapping;
 };
 
 struct PipelineHandle {
@@ -62,7 +76,7 @@ public:
     // Buffer management
     BufferHandle createVertexBuffer(const void* data, uint64_t size);
     BufferHandle createIndexBuffer(const void* data, uint64_t size);
-    BufferHandle createBuffer(uint64_t size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties);
+    BufferHandle createBuffer(uint64_t size);
     void destroyBuffer(const BufferHandle& handle);
     void updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size);
 
@@ -124,6 +138,8 @@ private:
     void cleanupSwapchain();
     void recreateSwapchain();
 
+    void flushCommandBuffer();
+
     // Helper functions
     bool checkValidationLayerSupport();
     std::vector<const char*> getRequiredExtensions();
@@ -150,8 +166,10 @@ private:
 
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
-    BufferHandle allocateBuffer(VkBufferUsageFlags usageFlags, uint32_t numBytes);
-    void deallocateBuffer(BufferHandle&);
+    BufferHandle allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t numBytes);
+    StageBuffer allocateStageBuffer(uint32_t capacity);
+    void destroyStageBuffers(uint32_t index);
+    void loadFromCpu(vk::CommandBuffer& commandBuffer, const BufferHandle& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
     vk::Format findDepthFormat();
@@ -218,8 +236,10 @@ private:
     std::vector<const char*> m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     // Current render state
+    uint32_t m_currentCommandBufferIndex = 0;
     vk::CommandBuffer m_currentCommandBuffer;
     PipelineHandle m_currentPipeline;
+    std::vector<std::vector<StageBuffer>> m_stageBuffers;
 };
 
 } // namespace ailo

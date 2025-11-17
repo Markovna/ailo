@@ -164,11 +164,7 @@ private:
         // Create uniform buffers (one for each frame in flight)
         m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_uniformBuffers[i] = m_renderAPI.createBuffer(
-                sizeof(UniformBufferObject),
-                vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
-            );
+            m_uniformBuffers[i] = m_renderAPI.createBuffer(sizeof(UniformBufferObject));
         }
 
         // Create descriptor sets
