@@ -105,11 +105,9 @@ private:
     ailo::PipelineHandle m_pipeline;
     ailo::TextureHandle m_texture;
 
-    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-    std::vector<ailo::BufferHandle> m_uniformBuffers;
+    ailo::BufferHandle m_uniformBuffer;
     vk::DescriptorSetLayout m_descriptorSetLayout;
-    std::vector<ailo::DescriptorSetHandle> m_descriptorSets;
-    uint32_t m_currentFrame = 0;
+    ailo::DescriptorSetHandle m_descriptorSet;
 
     void initWindow() {
         glfwInit();
@@ -161,19 +159,13 @@ private:
         std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
         m_descriptorSetLayout = m_renderAPI.createDescriptorSetLayout(bindings);
 
-        // Create uniform buffers (one for each frame in flight)
-        m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_uniformBuffers[i] = m_renderAPI.createBuffer(sizeof(UniformBufferObject));
-        }
+        // Create uniform buffer
+        m_uniformBuffer = m_renderAPI.createBuffer(sizeof(UniformBufferObject));
 
-        // Create descriptor sets
-        m_descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_descriptorSets[i] = m_renderAPI.createDescriptorSet(m_descriptorSetLayout);
-            m_renderAPI.updateDescriptorSetBuffer(m_descriptorSets[i], m_uniformBuffers[i], 0);
-            m_renderAPI.updateDescriptorSetTexture(m_descriptorSets[i], m_texture, 1);
-        }
+        // Create descriptor set
+        m_descriptorSet = m_renderAPI.createDescriptorSet(m_descriptorSetLayout);
+        m_renderAPI.updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
+        m_renderAPI.updateDescriptorSetTexture(m_descriptorSet, m_texture, 1);
 
         // Create graphics pipeline
         ailo::VertexInputDescription vertexInput;
@@ -201,7 +193,7 @@ private:
         m_renderAPI.waitIdle();
     }
 
-    void updateUniformBuffer(uint32_t currentFrame) {
+    void updateUniformBuffer() {
         UniformBufferObject ubo{};
 
         // Model matrix
@@ -222,7 +214,7 @@ private:
         ubo.proj[1][1] *= -1; // Flip Y for Vulkan
 
         // Update the uniform buffer
-        m_renderAPI.updateBuffer(m_uniformBuffers[currentFrame], &ubo, sizeof(ubo));
+        m_renderAPI.updateBuffer(m_uniformBuffer, &ubo, sizeof(ubo));
     }
 
     void drawFrame() {
@@ -232,14 +224,14 @@ private:
         }
 
         // Update uniform buffer for current frame
-        updateUniformBuffer(m_currentFrame);
+        updateUniformBuffer();
 
         // Bind pipeline and begin render pass
         m_renderAPI.bindPipeline(m_pipeline);
         m_renderAPI.beginRenderPass(imageIndex);
 
         // Bind descriptor set
-        m_renderAPI.bindDescriptorSet(m_descriptorSets[m_currentFrame], m_pipeline.layout);
+        m_renderAPI.bindDescriptorSet(m_descriptorSet, m_pipeline.layout);
 
         // Bind buffers and draw
         m_renderAPI.bindVertexBuffer(m_vertexBuffer);
@@ -249,21 +241,14 @@ private:
         // End render pass and frame
         m_renderAPI.endRenderPass();
         m_renderAPI.endFrame(imageIndex);
-
-        // Advance to next frame
-        m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void cleanup() {
-        // Clean up uniform buffers
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_renderAPI.destroyBuffer(m_uniformBuffers[i]);
-        }
+        // Clean up uniform buffer
+        m_renderAPI.destroyBuffer(m_uniformBuffer);
 
-        // Clean up descriptor sets
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            m_renderAPI.destroyDescriptorSet(m_descriptorSets[i]);
-        }
+        // Clean up descriptor set
+        m_renderAPI.destroyDescriptorSet(m_descriptorSet);
 
         // Clean up descriptor set layout
         m_renderAPI.destroyDescriptorSetLayout(m_descriptorSetLayout);
