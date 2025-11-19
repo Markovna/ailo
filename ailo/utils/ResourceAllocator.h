@@ -2,14 +2,70 @@
 
 #include <vector>
 
+namespace ailo {
+
+template<typename T>
+class Handle {
+ public:
+  using HandleId = uint32_t;
+
+  Handle() noexcept = default;
+
+  Handle(const Handle&) noexcept = default;
+  Handle& operator=(const Handle&) noexcept = default;
+
+  Handle(Handle&& rhs) noexcept
+      : id(rhs.id) {
+    rhs.id = INVALID_ID;
+  }
+
+  explicit Handle(HandleId id) noexcept: id(id) {}
+
+  Handle& operator=(Handle&& rhs) noexcept {
+    if (this != &rhs) {
+      id = rhs.id;
+      rhs.id = INVALID_ID;
+    }
+    return *this;
+  }
+
+  bool operator==(Handle other) const noexcept { return id == other.id; }
+  bool operator!=(Handle other) const noexcept { return id != other.id; }
+
+  explicit constexpr operator bool() const noexcept { return id != INVALID_ID; }
+
+  template<typename D, typename = std::enable_if_t<std::is_base_of<T, D>::value> >
+  Handle(const Handle<D>& derived) noexcept : Handle(derived.id) {}
+
+  HandleId getId() const noexcept { return id; }
+
+  template<typename B>
+  static typename std::enable_if_t<
+      std::is_base_of_v<B, T>, Handle>
+  cast(Handle<B>& from) {
+    return Handle<T>(from.getId());
+  }
+
+ private:
+  static constexpr HandleId INVALID_ID = HandleId { std::numeric_limits<uint32_t>::max() };
+
+  template<class U> friend
+  class Handle;
+
+ private:
+  HandleId id = INVALID_ID;
+};
+
 template<class T>
 class ResourceAllocator {
  public:
+  using Handle = Handle<T>;
+
   template<class...Args>
-  uint32_t allocate(Args&&... args) {
+  Handle allocate(Args&& ... args) {
     uint32_t handle;
 
-    if(m_numHandles >= m_dense.size()) {
+    if (m_numHandles >= m_dense.size()) {
       uint32_t index = m_dense.size();
       m_dense.push_back(index);
       m_sparse.push_back(index);
@@ -24,28 +80,31 @@ class ResourceAllocator {
 
     ++m_numHandles;
 
-    return handle;
+    return Handle(handle);
   }
 
-  T& get(uint32_t handle) {
-    return m_resources[handle];
+  T& get(Handle handle) {
+    int id = handle.getId();
+    return m_resources[id];
   }
 
-  void free(uint32_t handle) {
-    uint16_t index = m_sparse[handle];
+  void free(Handle handle) {
+    uint16_t index = m_sparse[handle.getId()];
 
     --m_numHandles;
 
     uint16_t temp = m_dense[m_numHandles];
-    m_dense[m_numHandles] = handle;
+    m_dense[m_numHandles] = handle.getId();
 
     m_sparse[temp] = index;
     m_dense[index] = temp;
   }
 
-private:
+ private:
   std::vector<uint32_t> m_dense;
   std::vector<uint32_t> m_sparse;
   std::vector<T> m_resources;
   uint32_t m_numHandles = 0;
 };
+
+}

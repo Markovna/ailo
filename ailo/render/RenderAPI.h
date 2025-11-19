@@ -10,6 +10,8 @@
 #include <optional>
 #include <string>
 
+#include "utils/ResourceAllocator.h"
+
 namespace ailo {
 
 enum class BufferBinding : uint8_t {
@@ -34,7 +36,7 @@ struct StageBuffer {
   void* mapping;
 };
 
-struct PipelineHandle {
+struct Pipeline {
     vk::Pipeline pipeline;
     vk::PipelineLayout layout;
     vk::RenderPass renderPass;
@@ -43,6 +45,7 @@ struct PipelineHandle {
 
 struct DescriptorSetHandle {
     vk::DescriptorSet descriptorSet;
+    vk::PipelineLayout layout;
 };
 
 struct TextureHandle {
@@ -58,6 +61,8 @@ struct VertexInputDescription {
     std::vector<vk::VertexInputBindingDescription> bindings;
     std::vector<vk::VertexInputAttributeDescription> attributes;
 };
+
+using PipelineHandle = Handle<Pipeline>;
 
 class RenderAPI {
 public:
@@ -92,7 +97,7 @@ public:
     void destroyDescriptorSet(const DescriptorSetHandle& handle);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding = 0);
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
-    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, vk::PipelineLayout pipelineLayout, uint32_t firstSet = 0);
+    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t firstSet = 0);
 
     // Pipeline management
     PipelineHandle createGraphicsPipeline(
@@ -240,6 +245,7 @@ private:
     vk::CommandBuffer m_currentCommandBuffer;
     PipelineHandle m_currentPipeline;
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
+    ResourceAllocator<Pipeline> pipelines;
 };
 
 } // namespace ailo

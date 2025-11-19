@@ -404,10 +404,12 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 }
 
-void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSet, vk::PipelineLayout pipelineLayout, uint32_t firstSet) {
-    m_currentCommandBuffer.bindDescriptorSets(
+void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t firstSet) {
+  auto& currentPipeline = pipelines.get(m_currentPipeline);
+
+  m_currentCommandBuffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
-        pipelineLayout,
+        currentPipeline.layout,
         firstSet,
         1,
         &descriptorSet.descriptorSet,
@@ -425,8 +427,10 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     vk::PrimitiveTopology topology,
     vk::DescriptorSetLayout descriptorSetLayout) {
 
-    PipelineHandle handle;
-    handle.descriptorSetLayout = descriptorSetLayout;
+    PipelineHandle handle = pipelines.allocate();
+
+    Pipeline& pipeline = pipelines.get(handle);
+    pipeline.descriptorSetLayout = descriptorSetLayout;
 
     // Create render pass
     vk::AttachmentDescription colorAttachment{};
@@ -480,7 +484,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    handle.renderPass = m_device.createRenderPass(renderPassInfo);
+    pipeline.renderPass = m_device.createRenderPass(renderPassInfo);
 
     // Load shaders
     auto vertShaderCode = readFile(vertShaderPath);
@@ -567,7 +571,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     }
-    handle.layout = m_device.createPipelineLayout(pipelineLayoutInfo);
+    pipeline.layout = m_device.createPipelineLayout(pipelineLayoutInfo);
 
     // Create graphics pipeline
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -581,15 +585,15 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     pipelineInfo.pDepthStencilState = &depthStencil;
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = handle.layout;
-    pipelineInfo.renderPass = handle.renderPass;
+    pipelineInfo.layout = pipeline.layout;
+    pipelineInfo.renderPass = pipeline.renderPass;
     pipelineInfo.subpass = 0;
 
     auto result = m_device.createGraphicsPipeline(nullptr, pipelineInfo);
     if (result.result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
-    handle.pipeline = result.value;
+    pipeline.pipeline = result.value;
 
     // Cleanup shader modules
     m_device.destroyShaderModule(vertShaderModule);
@@ -604,7 +608,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
         };
 
         vk::FramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.renderPass = handle.renderPass;
+        framebufferInfo.renderPass = pipeline.renderPass;
         framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
         framebufferInfo.pAttachments = attachments.data();
         framebufferInfo.width = m_swapchainExtent.width;
@@ -618,22 +622,28 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 }
 
 void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
+    Pipeline& pipeline = pipelines.get(handle);
+
     // Clean up framebuffers first
     for (auto framebuffer : m_swapchainFramebuffers) {
         m_device.destroyFramebuffer(framebuffer);
     }
     m_swapchainFramebuffers.clear();
 
-    m_device.destroyPipeline(handle.pipeline);
-    m_device.destroyPipelineLayout(handle.layout);
-    m_device.destroyRenderPass(handle.renderPass);
+    m_device.destroyPipeline(pipeline.pipeline);
+    m_device.destroyPipelineLayout(pipeline.layout);
+    m_device.destroyRenderPass(pipeline.renderPass);
+
+    pipelines.free(handle);
 }
 
 // Command recording
 
 void RenderAPI::beginRenderPass(uint32_t imageIndex, vk::ClearColorValue clearColor) {
+    auto& currentPipeline = pipelines.get(m_currentPipeline);
+
     vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = m_currentPipeline.renderPass;
+    renderPassInfo.renderPass = currentPipeline.renderPass;
     renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
     renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
     renderPassInfo.renderArea.extent = m_swapchainExtent;
@@ -668,8 +678,9 @@ void RenderAPI::endRenderPass() {
 }
 
 void RenderAPI::bindPipeline(const PipelineHandle& handle) {
+    auto& currentPipeline = pipelines.get(handle);
+    m_currentCommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
     m_currentPipeline = handle;
-    m_currentCommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, handle.pipeline);
 }
 
 void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
@@ -1010,24 +1021,31 @@ void RenderAPI::recreateSwapchain() {
     createDepthResources();
 
     // Recreate framebuffers if we have a current pipeline
-    if (m_currentPipeline.renderPass) {
-        m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
-        for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
-            std::array<vk::ImageView, 2> attachments = {
-                m_swapchainImageViews[i],
-                m_depthImageView
-            };
+    if (!m_currentPipeline) {
+      return;
+    }
 
-            vk::FramebufferCreateInfo framebufferInfo{};
-            framebufferInfo.renderPass = m_currentPipeline.renderPass;
-            framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
-            framebufferInfo.width = m_swapchainExtent.width;
-            framebufferInfo.height = m_swapchainExtent.height;
-            framebufferInfo.layers = 1;
+    auto& currentPipeline = pipelines.get(m_currentPipeline);
+    if(!currentPipeline.renderPass) {
+      return;
+    }
 
-            m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
-        }
+    m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
+    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+        std::array<vk::ImageView, 2> attachments = {
+            m_swapchainImageViews[i],
+            m_depthImageView
+        };
+
+        vk::FramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.renderPass = currentPipeline.renderPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
+        framebufferInfo.width = m_swapchainExtent.width;
+        framebufferInfo.height = m_swapchainExtent.height;
+        framebufferInfo.layers = 1;
+
+        m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
     }
 }
 

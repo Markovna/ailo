@@ -231,7 +231,7 @@ private:
         m_renderAPI.beginRenderPass(imageIndex);
 
         // Bind descriptor set
-        m_renderAPI.bindDescriptorSet(m_descriptorSet, m_pipeline.layout);
+        m_renderAPI.bindDescriptorSet(m_descriptorSet);
 
         // Bind buffers and draw
         m_renderAPI.bindVertexBuffer(m_vertexBuffer);
