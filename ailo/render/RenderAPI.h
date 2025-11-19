@@ -21,7 +21,7 @@ enum class BufferBinding : uint8_t {
   UNIFORM,
 };
 
-struct BufferHandle {
+struct Buffer {
     vk::Buffer buffer;
     uint64_t size;
     VmaAllocation vmaAllocation;
@@ -63,6 +63,7 @@ struct VertexInputDescription {
 };
 
 using PipelineHandle = Handle<Pipeline>;
+using BufferHandle = Handle<Buffer>;
 
 class RenderAPI {
 public:
@@ -171,10 +172,10 @@ private:
 
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
-    BufferHandle allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t numBytes);
+    void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     StageBuffer allocateStageBuffer(uint32_t capacity);
     void destroyStageBuffers(uint32_t index);
-    void loadFromCpu(vk::CommandBuffer& commandBuffer, const BufferHandle& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
+    void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
     vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
     vk::Format findDepthFormat();
@@ -246,6 +247,7 @@ private:
     PipelineHandle m_currentPipeline;
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
     ResourceAllocator<Pipeline> pipelines;
+    ResourceAllocator<Buffer> buffers;
 };
 
 } // namespace ailo

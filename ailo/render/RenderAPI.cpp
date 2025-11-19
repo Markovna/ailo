@@ -164,18 +164,22 @@ void RenderAPI::waitIdle() {
 // Buffer management
 
 BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
-    auto vertexBuffer = allocateBuffer(vk::BufferUsageFlagBits::eVertexBuffer, size);
+    BufferHandle handle = buffers.allocate();
+    Buffer& vertexBuffer = buffers.get(handle);
+    allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
     loadFromCpu(m_currentCommandBuffer, vertexBuffer, data, 0, size);
-    return vertexBuffer;
+    return handle;
 }
 
 BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
-    auto indexBuffer = allocateBuffer(vk::BufferUsageFlagBits::eIndexBuffer, size);
+    BufferHandle handle = buffers.allocate();
+    Buffer& indexBuffer = buffers.get(handle);
+    allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
     loadFromCpu(m_currentCommandBuffer, indexBuffer, data, 0, size);
-    return indexBuffer;
+    return handle;
 }
 
 VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
@@ -220,7 +224,7 @@ VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevic
   return allocator;
 }
 
-BufferHandle RenderAPI::allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t numBytes) {
+void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes) {
     VkBufferCreateInfo const bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = numBytes,
@@ -234,8 +238,7 @@ BufferHandle RenderAPI::allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t
     //     vmaFlags |= VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     // }
 
-    BufferHandle bufferHandle;
-    bufferHandle.size = numBytes;
+    buffer.size = numBytes;
 
     VmaAllocationCreateInfo const allocInfo {
         .flags = vmaFlags,
@@ -245,25 +248,28 @@ BufferHandle RenderAPI::allocateBuffer(vk::BufferUsageFlags usageFlags, uint32_t
 
     VkBuffer vkBuffer;
     VkResult result = vmaCreateBuffer(
-        m_Allocator, &bufferInfo, &allocInfo, &vkBuffer, &bufferHandle.vmaAllocation, &bufferHandle.allocationInfo);
+        m_Allocator, &bufferInfo, &allocInfo, &vkBuffer, &buffer.vmaAllocation, &buffer.allocationInfo);
 
-    bufferHandle.buffer = vkBuffer;
-
-    return bufferHandle;
+    buffer.buffer = vkBuffer;
 }
 
 BufferHandle RenderAPI::createBuffer(uint64_t size) {
-  auto buffer = allocateBuffer(vk::BufferUsageFlagBits::eUniformBuffer, size);
+  BufferHandle handle = buffers.allocate();
+  Buffer& buffer = buffers.get(handle);
+  allocateBuffer(buffer, vk::BufferUsageFlagBits::eUniformBuffer, size);
   buffer.binding = BufferBinding::UNIFORM;
-  return buffer;
+  return handle;
 }
 
-void RenderAPI::destroyBuffer(const BufferHandle& bufferHandle) {
-  vmaDestroyBuffer(m_Allocator, bufferHandle.buffer, bufferHandle.vmaAllocation);
+void RenderAPI::destroyBuffer(const BufferHandle& handle) {
+  Buffer& buffer = buffers.get(handle);
+  vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
+  buffers.free(handle);
 }
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size) {
-    loadFromCpu(m_currentCommandBuffer, handle, data, 0, size);
+    Buffer& buffer = buffers.get(handle);
+    loadFromCpu(m_currentCommandBuffer, buffer, data, 0, size);
 }
 
 // Texture management
@@ -370,7 +376,9 @@ void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     m_device.freeDescriptorSets(m_descriptorPool, 1, &handle.descriptorSet);
 }
 
-void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding) {
+void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& bufferHandle, uint32_t binding) {
+    Buffer& buffer = buffers.get(bufferHandle);
+
     vk::DescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer.buffer;
     bufferInfo.offset = 0;
@@ -684,13 +692,15 @@ void RenderAPI::bindPipeline(const PipelineHandle& handle) {
 }
 
 void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
-    vk::Buffer vertexBuffers[] = {handle.buffer};
+    Buffer& buffer = buffers.get(handle);
+    vk::Buffer vertexBuffers[] = {buffer.buffer};
     vk::DeviceSize offsets[] = {0};
     m_currentCommandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 }
 
 void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
-    m_currentCommandBuffer.bindIndexBuffer(handle.buffer, 0, indexType);
+    Buffer& buffer = buffers.get(handle);
+    m_currentCommandBuffer.bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 
 void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex) {
@@ -1470,7 +1480,7 @@ void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& ac
 
 }
 
-void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const BufferHandle& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
+void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
   // allocate stage buffer
   StageBuffer stageBuffer = allocateStageBuffer(numBytes);
 
