@@ -275,18 +275,20 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::D
 // Texture management
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
-    TextureHandle handle;
-    handle.width = width;
-    handle.height = height;
+    TextureHandle handle = textures.allocate();
+    Texture& texture = textures.get(handle);
+
+    texture.width = width;
+    texture.height = height;
 
     // Create image
     createImage(width, height, format, vk::ImageTiling::eOptimal,
                 vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 vk::MemoryPropertyFlagBits::eDeviceLocal,
-                handle.image, handle.memory);
+                texture.image, texture.memory);
 
     // Create image view
-    handle.imageView = createImageView(handle.image, format, vk::ImageAspectFlagBits::eColor);
+    texture.imageView = createImageView(texture.image, format, vk::ImageAspectFlagBits::eColor);
 
     // Create sampler
     vk::SamplerCreateInfo samplerInfo{};
@@ -309,19 +311,23 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
     samplerInfo.minLod = 0.0f;
     samplerInfo.maxLod = 0.0f;
 
-    handle.sampler = m_device.createSampler(samplerInfo);
+    texture.sampler = m_device.createSampler(samplerInfo);
 
     return handle;
 }
 
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
-    m_device.destroySampler(handle.sampler);
-    m_device.destroyImageView(handle.imageView);
-    m_device.destroyImage(handle.image);
-    m_device.freeMemory(handle.memory);
+    Texture& texture = textures.get(handle);
+    m_device.destroySampler(texture.sampler);
+    m_device.destroyImageView(texture.imageView);
+    m_device.destroyImage(texture.image);
+    m_device.freeMemory(texture.memory);
+    textures.free(handle);
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize) {
+    Texture& texture = textures.get(handle);
+
     // Create staging buffer
     // allocate stage buffer
     StageBuffer stageBuffer = allocateStageBuffer(dataSize);
@@ -331,14 +337,14 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
     // Transition image layout to transfer destination
-    transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
+    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Srgb,
                          vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
     // Copy buffer to image
-    copyBufferToImage(stageBuffer.buffer, handle.image, handle.width, handle.height);
+    copyBufferToImage(stageBuffer.buffer, texture.image, texture.width, texture.height);
 
     // Transition image layout to shader read
-    transitionImageLayout(handle.image, vk::Format::eR8G8B8A8Srgb,
+    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Srgb,
                          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -357,7 +363,8 @@ void RenderAPI::destroyDescriptorSetLayout(vk::DescriptorSetLayout layout) {
 }
 
 DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layout) {
-    DescriptorSetHandle handle;
+    DescriptorSetHandle handle = descriptorSets.allocate();
+    DescriptorSet& descriptorSet = descriptorSets.get(handle);
 
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = m_descriptorPool;
@@ -365,18 +372,22 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layou
     allocInfo.pSetLayouts = &layout;
 
     auto result = m_device.allocateDescriptorSets(allocInfo);
-    handle.descriptorSet = result[0];
+    descriptorSet.descriptorSet = result[0];
+    descriptorSet.layout = nullptr;
 
     return handle;
 }
 
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
+    DescriptorSet& descriptorSet = descriptorSets.get(handle);
     // Descriptor sets are automatically freed when the pool is destroyed
     // But we can explicitly free them if needed
-    m_device.freeDescriptorSets(m_descriptorPool, 1, &handle.descriptorSet);
+    m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+    descriptorSets.free(handle);
 }
 
-void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& bufferHandle, uint32_t binding) {
+void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding) {
+    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
     Buffer& buffer = buffers.get(bufferHandle);
 
     vk::DescriptorBufferInfo bufferInfo{};
@@ -395,7 +406,10 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 }
 
-void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding) {
+void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding) {
+    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
+    Texture& texture = textures.get(textureHandle);
+
     vk::DescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
     imageInfo.imageView = texture.imageView;
@@ -412,8 +426,9 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 }
 
-void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t firstSet) {
+void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t firstSet) {
   auto& currentPipeline = pipelines.get(m_currentPipeline);
+  DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
 
   m_currentCommandBuffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
@@ -432,7 +447,6 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     const std::string& vertShaderPath,
     const std::string& fragShaderPath,
     const VertexInputDescription& vertexInput,
-    vk::PrimitiveTopology topology,
     vk::DescriptorSetLayout descriptorSetLayout) {
 
     PipelineHandle handle = pipelines.allocate();
@@ -522,7 +536,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     // Input assembly
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.topology = topology;
+    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     // Viewport state

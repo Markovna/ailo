@@ -180,7 +180,6 @@ private:
             "shaders/shader.vert.spv",
             "shaders/shader.frag.spv",
             vertexInput,
-            vk::PrimitiveTopology::eTriangleList,
             m_descriptorSetLayout
         );
     }

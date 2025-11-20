@@ -43,12 +43,12 @@ struct Pipeline {
     vk::DescriptorSetLayout descriptorSetLayout;
 };
 
-struct DescriptorSetHandle {
+struct DescriptorSet {
     vk::DescriptorSet descriptorSet;
     vk::PipelineLayout layout;
 };
 
-struct TextureHandle {
+struct Texture {
     vk::Image image;
     vk::DeviceMemory memory;
     vk::ImageView imageView;
@@ -64,6 +64,8 @@ struct VertexInputDescription {
 
 using PipelineHandle = Handle<Pipeline>;
 using BufferHandle = Handle<Buffer>;
+using DescriptorSetHandle = Handle<DescriptorSet>;
+using TextureHandle = Handle<Texture>;
 
 class RenderAPI {
 public:
@@ -105,7 +107,6 @@ public:
         const std::string& vertShaderPath,
         const std::string& fragShaderPath,
         const VertexInputDescription& vertexInput,
-        vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList,
         vk::DescriptorSetLayout descriptorSetLayout = nullptr
     );
     void destroyPipeline(const PipelineHandle& handle);
@@ -248,6 +249,8 @@ private:
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
     ResourceAllocator<Pipeline> pipelines;
     ResourceAllocator<Buffer> buffers;
+    ResourceAllocator<DescriptorSet> descriptorSets;
+    ResourceAllocator<Texture> textures;
 };
 
 } // namespace ailo
