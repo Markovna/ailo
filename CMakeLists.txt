@@ -21,7 +21,10 @@ add_executable(ailo
     ailo/main.cpp
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
-        ailo/utils/ResourceAllocator.h)
+    ailo/input/InputSystem.cpp
+    ailo/input/InputSystem.h
+    ailo/input/InputTypes.h
+    ailo/utils/ResourceAllocator.h)
 
 # Link libraries
 target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm stb_image GPUOpen::VulkanMemoryAllocator)
