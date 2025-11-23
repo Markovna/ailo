@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22)
 project(ailo)
 
 set(CMAKE_CXX_STANDARD 23)
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
 
 # Find Vulkan package
 find_package(Vulkan REQUIRED)
@@ -22,6 +23,8 @@ add_executable(ailo
     ailo/main.cpp
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
+    ailo/render/ImGuiProcessor.cpp
+    ailo/render/ImGuiProcessor.h
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
@@ -76,6 +79,8 @@ endfunction()
 # Add shaders
 add_shader(ailo shaders/shader.vert)
 add_shader(ailo shaders/shader.frag)
+add_shader(ailo shaders/imgui.vert)
+add_shader(ailo shaders/imgui.frag)
 
 # Create shaders directory in build folder
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)

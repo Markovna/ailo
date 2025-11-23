@@ -69,6 +69,8 @@ void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
     createSyncObjects();
     createDescriptorPool();
     createAllocator();
+    createRenderPass();
+    createSwapchainFramebuffers();
 
     flushCommandBuffer();
 }
@@ -76,6 +78,7 @@ void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
 void RenderAPI::shutdown() {
     m_device.waitIdle();
 
+    cleanupSwpachainFramebuffer();
     cleanupSwapchain();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -87,6 +90,7 @@ void RenderAPI::shutdown() {
 
     vmaDestroyAllocator(m_Allocator);
 
+    m_device.destroyRenderPass(m_renderPass);
     m_device.destroyDescriptorPool(m_descriptorPool);
     m_device.destroyCommandPool(m_commandPool);
     m_device.destroy();
@@ -101,7 +105,7 @@ void RenderAPI::shutdown() {
 
 // Frame lifecycle
 
-bool RenderAPI::beginFrame(uint32_t& outImageIndex) {
+bool RenderAPI::beginFrame() {
     auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX,
                                                 m_imageAvailableSemaphores[m_currentFrame], nullptr);
 
@@ -112,12 +116,12 @@ bool RenderAPI::beginFrame(uint32_t& outImageIndex) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    outImageIndex = result.value;
+    m_swapChainImageIndex = result.value;
 
     return true;
 }
 
-void RenderAPI::endFrame(uint32_t imageIndex) {
+void RenderAPI::endFrame() {
     m_currentCommandBuffer.end();
 
     vk::SubmitInfo submitInfo{};
@@ -142,7 +146,7 @@ void RenderAPI::endFrame(uint32_t imageIndex) {
     vk::SwapchainKHR swapchains[] = {m_swapchain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
-    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pImageIndices = &m_swapChainImageIndex;
 
     auto result = m_presentQueue.presentKHR(presentInfo);
 
@@ -155,10 +159,29 @@ void RenderAPI::endFrame(uint32_t imageIndex) {
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     flushCommandBuffer();
+    m_swapChainImageIndex = -1;
 }
 
 void RenderAPI::waitIdle() {
     m_device.waitIdle();
+}
+
+void RenderAPI::submitCommandsImmediately() {
+    // End current command buffer
+    m_currentCommandBuffer.end();
+
+    // Submit to queue
+    vk::SubmitInfo submitInfo{};
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &m_currentCommandBuffer;
+
+    m_graphicsQueue.submit(1, &submitInfo, nullptr);
+    m_graphicsQueue.waitIdle();
+
+    // Start a new command buffer
+    m_currentCommandBuffer.reset();
+    vk::CommandBufferBeginInfo beginInfo{};
+    m_currentCommandBuffer.begin(beginInfo);
 }
 
 // Buffer management
@@ -168,7 +191,9 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     Buffer& vertexBuffer = buffers.get(handle);
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
-    loadFromCpu(m_currentCommandBuffer, vertexBuffer, data, 0, size);
+    if(data != nullptr) {
+        loadFromCpu(m_currentCommandBuffer, vertexBuffer, data, 0, size);
+    }
     return handle;
 }
 
@@ -178,7 +203,9 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     Buffer& indexBuffer = buffers.get(handle);
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
-    loadFromCpu(m_currentCommandBuffer, indexBuffer, data, 0, size);
+    if(data != nullptr) {
+        loadFromCpu(m_currentCommandBuffer, indexBuffer, data, 0, size);
+    }
     return handle;
 }
 
@@ -262,6 +289,8 @@ BufferHandle RenderAPI::createBuffer(uint64_t size) {
 }
 
 void RenderAPI::destroyBuffer(const BufferHandle& handle) {
+  if(!handle) { return; }
+
   Buffer& buffer = buffers.get(handle);
   vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
   buffers.free(handle);
@@ -278,6 +307,7 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
     TextureHandle handle = textures.allocate();
     Texture& texture = textures.get(handle);
 
+    texture.format = format;
     texture.width = width;
     texture.height = height;
 
@@ -317,6 +347,8 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
 }
 
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
+    if(!handle) { return; }
+
     Texture& texture = textures.get(handle);
     m_device.destroySampler(texture.sampler);
     m_device.destroyImageView(texture.imageView);
@@ -337,14 +369,14 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
     // Transition image layout to transfer destination
-    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Srgb,
+    transitionImageLayout(texture.image, texture.format,
                          vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
     // Copy buffer to image
     copyBufferToImage(stageBuffer.buffer, texture.image, texture.width, texture.height);
 
     // Transition image layout to shader read
-    transitionImageLayout(texture.image, vk::Format::eR8G8B8A8Srgb,
+    transitionImageLayout(texture.image, texture.format,
                          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -379,6 +411,8 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layou
 }
 
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
+    if(!handle) { return; }
+
     DescriptorSet& descriptorSet = descriptorSets.get(handle);
     // Descriptor sets are automatically freed when the pool is destroyed
     // But we can explicitly free them if needed
@@ -441,19 +475,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
     );
 }
 
-// Pipeline management
-
-PipelineHandle RenderAPI::createGraphicsPipeline(
-    const std::string& vertShaderPath,
-    const std::string& fragShaderPath,
-    const VertexInputDescription& vertexInput,
-    vk::DescriptorSetLayout descriptorSetLayout) {
-
-    PipelineHandle handle = pipelines.allocate();
-
-    Pipeline& pipeline = pipelines.get(handle);
-    pipeline.descriptorSetLayout = descriptorSetLayout;
-
+void RenderAPI::createRenderPass() {
     // Create render pass
     vk::AttachmentDescription colorAttachment{};
     colorAttachment.format = m_swapchainImageFormat;
@@ -493,9 +515,9 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
     dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
-    dependency.srcAccessMask = {};
-    dependency.dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
-    dependency.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+    dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+    dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
+    dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
 
     std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
     vk::RenderPassCreateInfo renderPassInfo{};
@@ -506,7 +528,21 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    pipeline.renderPass = m_device.createRenderPass(renderPassInfo);
+    m_renderPass = m_device.createRenderPass(renderPassInfo);
+}
+
+// Pipeline management
+
+PipelineHandle RenderAPI::createGraphicsPipeline(
+    const std::string& vertShaderPath,
+    const std::string& fragShaderPath,
+    const VertexInputDescription& vertexInput,
+    vk::DescriptorSetLayout descriptorSetLayout) {
+
+    PipelineHandle handle = pipelines.allocate();
+
+    Pipeline& pipeline = pipelines.get(handle);
+    pipeline.descriptorSetLayout = descriptorSetLayout;
 
     // Load shaders
     auto vertShaderCode = readFile(vertShaderPath);
@@ -608,7 +644,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = pipeline.layout;
-    pipelineInfo.renderPass = pipeline.renderPass;
+    pipelineInfo.renderPass = m_renderPass;
     pipelineInfo.subpass = 0;
 
     auto result = m_device.createGraphicsPipeline(nullptr, pipelineInfo);
@@ -621,52 +657,26 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     m_device.destroyShaderModule(vertShaderModule);
     m_device.destroyShaderModule(fragShaderModule);
 
-    // Create framebuffers for this render pass
-    m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
-    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
-        std::array<vk::ImageView, 2> attachments = {
-            m_swapchainImageViews[i],
-            m_depthImageView
-        };
-
-        vk::FramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.renderPass = pipeline.renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = m_swapchainExtent.width;
-        framebufferInfo.height = m_swapchainExtent.height;
-        framebufferInfo.layers = 1;
-
-        m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
-    }
-
     return handle;
 }
 
 void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
-    Pipeline& pipeline = pipelines.get(handle);
+    if(!handle) { return; }
 
-    // Clean up framebuffers first
-    for (auto framebuffer : m_swapchainFramebuffers) {
-        m_device.destroyFramebuffer(framebuffer);
-    }
-    m_swapchainFramebuffers.clear();
+    Pipeline& pipeline = pipelines.get(handle);
 
     m_device.destroyPipeline(pipeline.pipeline);
     m_device.destroyPipelineLayout(pipeline.layout);
-    m_device.destroyRenderPass(pipeline.renderPass);
 
     pipelines.free(handle);
 }
 
 // Command recording
 
-void RenderAPI::beginRenderPass(uint32_t imageIndex, vk::ClearColorValue clearColor) {
-    auto& currentPipeline = pipelines.get(m_currentPipeline);
-
+void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = currentPipeline.renderPass;
-    renderPassInfo.framebuffer = m_swapchainFramebuffers[imageIndex];
+    renderPassInfo.renderPass = m_renderPass;
+    renderPassInfo.framebuffer = m_swapchainFramebuffers[m_swapChainImageIndex];
     renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
     renderPassInfo.renderArea.extent = m_swapchainExtent;
 
@@ -717,8 +727,8 @@ void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexT
     m_currentCommandBuffer.bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 
-void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex) {
-    m_currentCommandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, 0, 0);
+void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset) {
+    m_currentCommandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
 }
 
 void RenderAPI::setViewport(float x, float y, float width, float height) {
@@ -1012,11 +1022,6 @@ void RenderAPI::createDescriptorPool() {
 }
 
 void RenderAPI::cleanupSwapchain() {
-    for (auto framebuffer : m_swapchainFramebuffers) {
-        m_device.destroyFramebuffer(framebuffer);
-    }
-    m_swapchainFramebuffers.clear();
-
     m_device.destroyImageView(m_depthImageView);
     m_device.destroyImage(m_depthImage);
     m_device.freeMemory(m_depthImageMemory);
@@ -1026,6 +1031,33 @@ void RenderAPI::cleanupSwapchain() {
     }
 
     m_device.destroySwapchainKHR(m_swapchain);
+}
+
+void RenderAPI::cleanupSwpachainFramebuffer() {
+    for(auto swapchainFramebuffer : m_swapchainFramebuffers) {
+        m_device.destroyFramebuffer(swapchainFramebuffer);
+    }
+    m_swapchainFramebuffers.clear();
+}
+
+void RenderAPI::createSwapchainFramebuffers() {
+    m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
+    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+        std::array<vk::ImageView, 2> attachments = {
+            m_swapchainImageViews[i],
+            m_depthImageView
+        };
+
+        vk::FramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.renderPass = m_renderPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
+        framebufferInfo.width = m_swapchainExtent.width;
+        framebufferInfo.height = m_swapchainExtent.height;
+        framebufferInfo.layers = 1;
+
+        m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
+    }
 }
 
 void RenderAPI::recreateSwapchain() {
@@ -1038,39 +1070,13 @@ void RenderAPI::recreateSwapchain() {
 
     m_device.waitIdle();
 
+    cleanupSwpachainFramebuffer();
     cleanupSwapchain();
 
     createSwapchain();
     createImageViews();
     createDepthResources();
-
-    // Recreate framebuffers if we have a current pipeline
-    if (!m_currentPipeline) {
-      return;
-    }
-
-    auto& currentPipeline = pipelines.get(m_currentPipeline);
-    if(!currentPipeline.renderPass) {
-      return;
-    }
-
-    m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
-    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
-        std::array<vk::ImageView, 2> attachments = {
-            m_swapchainImageViews[i],
-            m_depthImageView
-        };
-
-        vk::FramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.renderPass = currentPipeline.renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = m_swapchainExtent.width;
-        framebufferInfo.height = m_swapchainExtent.height;
-        framebufferInfo.layers = 1;
-
-        m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
-    }
+    createSwapchainFramebuffers();
 }
 
 // Helper functions
@@ -1439,7 +1445,15 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
 
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    std::ostream* out = nullptr;
+    auto errorMask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    if((pCallbackData->flags | errorMask) > 0) {
+        out = &std::cerr;
+    } else {
+        out = &std::cout;
+    }
+
+    *out << "validation layer: " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
 }
 

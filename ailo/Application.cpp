@@ -16,6 +16,7 @@
 #include "input/InputSystem.h"
 
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 #include <array>
@@ -130,6 +131,15 @@ void Application::initRender() {
   auto* renderAPI = m_engine.getRenderAPI();
   renderAPI->init(m_window, WIDTH, HEIGHT);
 
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO();
+  io.DisplaySize = ImVec2(WIDTH, HEIGHT);
+  io.DisplayFramebufferScale.x = 2;
+  io.DisplayFramebufferScale.y = 2;
+
+  m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
+  m_imguiProcessor->init();
+
   m_vertexBuffer = renderAPI->createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
   m_indexBuffer = renderAPI->createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
 
@@ -186,6 +196,7 @@ void Application::initRender() {
       vertexInput,
       m_descriptorSetLayout
   );
+
 }
 
 void Application::mainLoop() {
@@ -193,7 +204,8 @@ void Application::mainLoop() {
     glfwPollEvents();
     m_engine.getInputSystem()->processEvents();
     handleInput();
-    drawFrame();
+    //drawFrame();
+    drawImGui();
   }
   m_engine.getRenderAPI()->waitIdle();
 }
@@ -266,32 +278,57 @@ void Application::updateUniformBuffer() {
 
 void Application::drawFrame() {
   auto* renderAPI = m_engine.getRenderAPI();
-  uint32_t imageIndex;
-  if (!renderAPI->beginFrame(imageIndex)) {
+
+  if (!renderAPI->beginFrame()) {
     return; // Swapchain was recreated, try again next frame
   }
 
   // Update uniform buffer for current frame
   updateUniformBuffer();
 
-  // Bind pipeline and begin render pass
+  renderAPI->beginRenderPass();
+
   renderAPI->bindPipeline(m_pipeline);
-  renderAPI->beginRenderPass(imageIndex);
 
-  // Bind descriptor set
   renderAPI->bindDescriptorSet(m_descriptorSet);
-
-  // Bind buffers and draw
   renderAPI->bindVertexBuffer(m_vertexBuffer);
   renderAPI->bindIndexBuffer(m_indexBuffer);
+
   renderAPI->drawIndexed(static_cast<uint32_t>(indices.size()));
 
-  // End render pass and frame
   renderAPI->endRenderPass();
-  renderAPI->endFrame(imageIndex);
+
+  renderAPI->endFrame();
+}
+
+void Application::drawImGui() {
+  double now = glfwGetTime();
+  const float timeStep = m_time > 0 ? (float) ((double) (now - m_time)) :
+                         (float) (1.0f / 60.0f);
+  m_time = now;
+
+  ImGuiIO& io = ImGui::GetIO();
+  io.DeltaTime = timeStep;
+
+  ImGui::NewFrame();
+
+  // Create your ImGui widgets here
+  ImGui::ShowDemoWindow();
+
+  ImGui::Render();
+
+  auto* renderAPI = m_engine.getRenderAPI();
+  if (!renderAPI->beginFrame()) {
+    return; // Swapchain was recreated, try again next frame
+  }
+
+  m_imguiProcessor->processImGuiCommands(ImGui::GetDrawData(), ImGui::GetIO());
+  renderAPI->endFrame();
 }
 
 void Application::cleanup() {
+  m_imguiProcessor.reset();
+
   auto* renderAPI = m_engine.getRenderAPI();
   // Clean up uniform buffer
   renderAPI->destroyBuffer(m_uniformBuffer);
@@ -312,6 +349,7 @@ void Application::cleanup() {
   renderAPI->shutdown();
 
   glfwSetKeyCallback(m_window, nullptr);
+  glfwSetFramebufferSizeCallback(m_window, nullptr);
   glfwSetMouseButtonCallback(m_window, nullptr);
   glfwSetCursorPosCallback(m_window, nullptr);
   glfwSetScrollCallback(m_window, nullptr);

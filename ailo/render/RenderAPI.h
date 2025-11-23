@@ -39,7 +39,6 @@ struct StageBuffer {
 struct Pipeline {
     vk::Pipeline pipeline;
     vk::PipelineLayout layout;
-    vk::RenderPass renderPass;
     vk::DescriptorSetLayout descriptorSetLayout;
 };
 
@@ -53,6 +52,7 @@ struct Texture {
     vk::DeviceMemory memory;
     vk::ImageView imageView;
     vk::Sampler sampler;
+    vk::Format format;
     uint32_t width;
     uint32_t height;
 };
@@ -77,9 +77,10 @@ public:
     void shutdown();
 
     // Frame lifecycle
-    bool beginFrame(uint32_t& outImageIndex);
-    void endFrame(uint32_t imageIndex);
+    bool beginFrame();
+    void endFrame();
     void waitIdle();
+    void submitCommandsImmediately();
 
     // Buffer management
     BufferHandle createVertexBuffer(const void* data, uint64_t size);
@@ -112,12 +113,12 @@ public:
     void destroyPipeline(const PipelineHandle& handle);
 
     // Command recording (call between beginFrame and endFrame)
-    void beginRenderPass(uint32_t imageIndex, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    void beginRenderPass(vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
     void endRenderPass();
     void bindPipeline(const PipelineHandle& handle);
     void bindVertexBuffer(const BufferHandle& handle);
     void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
-    void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0);
+    void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0);
     void setViewport(float x, float y, float width, float height);
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
@@ -144,6 +145,8 @@ private:
     // Internal cleanup
     void cleanupSwapchain();
     void recreateSwapchain();
+    void cleanupSwpachainFramebuffer();
+    void createSwapchainFramebuffers();
 
     void flushCommandBuffer();
 
@@ -170,6 +173,7 @@ private:
     vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
     vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
     vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+    void createRenderPass();
 
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
@@ -215,6 +219,8 @@ private:
     vk::Extent2D m_swapchainExtent;
     std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
+    uint32_t m_swapChainImageIndex;
+    vk::RenderPass m_renderPass;
 
     // Depth buffering
     vk::Image m_depthImage;
