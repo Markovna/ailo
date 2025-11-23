@@ -4,30 +4,6 @@
 
 namespace ailo {
 
-// Helper structure to access InputSystem from window user pointer
-// This must match the structure defined in the main application
-struct WindowUserData {
-    void* app;
-    InputSystem* inputSystem;
-};
-
-void InputSystem::init() {
-    // Initialize mouse position
-    m_mouseX = 0;
-    m_mouseY = 0;
-
-    m_lastMouseX = m_mouseX;
-    m_lastMouseY = m_mouseY;
-
-    // Initialize key and button states
-    m_keyStates.fill(false);
-    m_mouseButtonStates.fill(false);
-}
-
-void InputSystem::shutdown() {
-    clearEvents();
-}
-
 void InputSystem::processEvents() {
     // Reset mouse delta each frame
     m_mouseDeltaX = 0.0;

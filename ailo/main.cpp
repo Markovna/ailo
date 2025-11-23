@@ -8,6 +8,7 @@
 
 #include <stb_image/stb_image.h>
 
+#include "Engine.h"
 #include "render/RenderAPI.h"
 #include "input/InputTypes.h"
 #include "input/InputSystem.h"
@@ -106,8 +107,7 @@ public:
 
 private:
     GLFWwindow* m_window = nullptr;
-    ailo::RenderAPI m_renderAPI;
-    ailo::InputSystem m_inputSystem;
+    ailo::Engine m_engine;
     ailo::BufferHandle m_vertexBuffer;
     ailo::BufferHandle m_indexBuffer;
     ailo::PipelineHandle m_pipeline;
@@ -137,20 +137,19 @@ private:
         glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
         glfwSetCursorPosCallback(m_window, cursorPosCallback);
         glfwSetScrollCallback(m_window, scrollCallback);
-
-        m_inputSystem.init();
     }
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height) {
         auto app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-        app->m_renderAPI.handleWindowResize();
+        app->m_engine.getRenderAPI()->handleWindowResize();
     }
 
     void initRender() {
-        m_renderAPI.init(m_window, WIDTH, HEIGHT);
+        auto* renderAPI = m_engine.getRenderAPI();
+        renderAPI->init(m_window, WIDTH, HEIGHT);
 
-        m_vertexBuffer = m_renderAPI.createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
-        m_indexBuffer = m_renderAPI.createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
+        m_vertexBuffer = renderAPI->createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
+        m_indexBuffer = renderAPI->createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
 
         // Load texture
         int texWidth, texHeight, texChannels;
@@ -161,8 +160,8 @@ private:
         vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
         // Create texture
-        m_texture = m_renderAPI.createTexture(vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
-        m_renderAPI.updateTextureImage(m_texture, pixels, imageSize);
+        m_texture = renderAPI->createTexture(vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
+        renderAPI->updateTextureImage(m_texture, pixels, imageSize);
 
         stbi_image_free(pixels);
 
@@ -180,15 +179,15 @@ private:
         samplerLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
-        m_descriptorSetLayout = m_renderAPI.createDescriptorSetLayout(bindings);
+        m_descriptorSetLayout = renderAPI->createDescriptorSetLayout(bindings);
 
         // Create uniform buffer
-        m_uniformBuffer = m_renderAPI.createBuffer(sizeof(UniformBufferObject));
+        m_uniformBuffer = renderAPI->createBuffer(sizeof(UniformBufferObject));
 
         // Create descriptor set
-        m_descriptorSet = m_renderAPI.createDescriptorSet(m_descriptorSetLayout);
-        m_renderAPI.updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
-        m_renderAPI.updateDescriptorSetTexture(m_descriptorSet, m_texture, 1);
+        m_descriptorSet = renderAPI->createDescriptorSet(m_descriptorSetLayout);
+        renderAPI->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
+        renderAPI->updateDescriptorSetTexture(m_descriptorSet, m_texture, 1);
 
         // Create graphics pipeline
         ailo::VertexInputDescription vertexInput;
@@ -199,7 +198,7 @@ private:
             attributeDescriptions.end()
         );
 
-        m_pipeline = m_renderAPI.createGraphicsPipeline(
+        m_pipeline = renderAPI->createGraphicsPipeline(
             "shaders/shader.vert.spv",
             "shaders/shader.frag.spv",
             vertexInput,
@@ -210,17 +209,18 @@ private:
     void mainLoop() {
         while (!glfwWindowShouldClose(m_window)) {
             glfwPollEvents();
-            m_inputSystem.processEvents();
+            m_engine.getInputSystem()->processEvents();
             handleInput();
             drawFrame();
         }
-        m_renderAPI.waitIdle();
+        m_engine.getRenderAPI()->waitIdle();
     }
 
     void handleInput() {
+        auto* inputSystem = m_engine.getInputSystem();
         // Process all input events from the queue
         ailo::Event event;
-        while (m_inputSystem.pollEvent(event)) {
+        while (inputSystem->pollEvent(event)) {
             std::visit([this](auto&& e) {
                 using T = std::decay_t<decltype(e)>;
 
@@ -260,6 +260,7 @@ private:
     void updateUniformBuffer() {
         UniformBufferObject ubo{};
 
+        auto* renderAPI = m_engine.getRenderAPI();
         // Model matrix
         static auto startTime = std::chrono::high_resolution_clock::now();
         auto currentTime = std::chrono::high_resolution_clock::now();
@@ -273,17 +274,18 @@ private:
         ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
         // Projection matrix: perspective projection
-        auto extent = m_renderAPI.getSwapchainExtent();
+        auto extent = renderAPI->getSwapchainExtent();
         ubo.proj = glm::perspective(glm::radians(45.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
         ubo.proj[1][1] *= -1; // Flip Y for Vulkan
 
         // Update the uniform buffer
-        m_renderAPI.updateBuffer(m_uniformBuffer, &ubo, sizeof(ubo));
+        renderAPI->updateBuffer(m_uniformBuffer, &ubo, sizeof(ubo));
     }
 
     void drawFrame() {
+        auto* renderAPI = m_engine.getRenderAPI();
         uint32_t imageIndex;
-        if (!m_renderAPI.beginFrame(imageIndex)) {
+        if (!renderAPI->beginFrame(imageIndex)) {
             return; // Swapchain was recreated, try again next frame
         }
 
@@ -291,43 +293,41 @@ private:
         updateUniformBuffer();
 
         // Bind pipeline and begin render pass
-        m_renderAPI.bindPipeline(m_pipeline);
-        m_renderAPI.beginRenderPass(imageIndex);
+        renderAPI->bindPipeline(m_pipeline);
+        renderAPI->beginRenderPass(imageIndex);
 
         // Bind descriptor set
-        m_renderAPI.bindDescriptorSet(m_descriptorSet);
+        renderAPI->bindDescriptorSet(m_descriptorSet);
 
         // Bind buffers and draw
-        m_renderAPI.bindVertexBuffer(m_vertexBuffer);
-        m_renderAPI.bindIndexBuffer(m_indexBuffer);
-        m_renderAPI.drawIndexed(static_cast<uint32_t>(indices.size()));
+        renderAPI->bindVertexBuffer(m_vertexBuffer);
+        renderAPI->bindIndexBuffer(m_indexBuffer);
+        renderAPI->drawIndexed(static_cast<uint32_t>(indices.size()));
 
         // End render pass and frame
-        m_renderAPI.endRenderPass();
-        m_renderAPI.endFrame(imageIndex);
+        renderAPI->endRenderPass();
+        renderAPI->endFrame(imageIndex);
     }
 
     void cleanup() {
+        auto* renderAPI = m_engine.getRenderAPI();
         // Clean up uniform buffer
-        m_renderAPI.destroyBuffer(m_uniformBuffer);
+        renderAPI->destroyBuffer(m_uniformBuffer);
 
         // Clean up descriptor set
-        m_renderAPI.destroyDescriptorSet(m_descriptorSet);
+        renderAPI->destroyDescriptorSet(m_descriptorSet);
 
         // Clean up descriptor set layout
-        m_renderAPI.destroyDescriptorSetLayout(m_descriptorSetLayout);
+        renderAPI->destroyDescriptorSetLayout(m_descriptorSetLayout);
 
         // Clean up texture
-        m_renderAPI.destroyTexture(m_texture);
+        renderAPI->destroyTexture(m_texture);
 
-        m_renderAPI.destroyBuffer(m_vertexBuffer);
-        m_renderAPI.destroyBuffer(m_indexBuffer);
-        m_renderAPI.destroyPipeline(m_pipeline);
+        renderAPI->destroyBuffer(m_vertexBuffer);
+        renderAPI->destroyBuffer(m_indexBuffer);
+        renderAPI->destroyPipeline(m_pipeline);
 
-        m_renderAPI.shutdown();
-
-        // Shutdown input system
-        m_inputSystem.shutdown();
+        renderAPI->shutdown();
 
         glfwSetKeyCallback(m_window, nullptr);
         glfwSetMouseButtonCallback(m_window, nullptr);
@@ -355,7 +355,7 @@ int main() {
 
 void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto inputSystem = &app->m_inputSystem;
+  auto inputSystem = app->m_engine.getInputSystem();
 
   ailo::KeyCode keyCode = glfwKeyToKeyCode(key);
   ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
@@ -381,7 +381,7 @@ void Application::keyCallback(GLFWwindow* window, int key, int scancode, int act
 
 void Application::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = &app->m_inputSystem;
+  auto* inputSystem = app->m_engine.getInputSystem();
 
   ailo::MouseButton mouseButton = glfwButtonToMouseButton(button);
   ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
@@ -409,7 +409,7 @@ void Application::mouseButtonCallback(GLFWwindow* window, int button, int action
 
 void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = &app->m_inputSystem;
+  auto* inputSystem = app->m_engine.getInputSystem();
 
   // Create and push event
   ailo::MouseMovedEvent event;
@@ -420,7 +420,7 @@ void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos
 
 void Application::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = &app->m_inputSystem;
+  auto* inputSystem = app->m_engine.getInputSystem();
 
   // Create and push event
   ailo::MouseScrolledEvent event;

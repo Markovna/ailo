@@ -15,6 +15,7 @@ add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)
+add_subdirectory(third_party/imgui)
 
 # Add executable
 add_executable(ailo
@@ -24,10 +25,16 @@ add_executable(ailo
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-    ailo/utils/ResourceAllocator.h)
+    ailo/utils/ResourceAllocator.h ailo/Engine.cpp ailo/Engine.h)
 
 # Link libraries
-target_link_libraries(ailo Vulkan::Vulkan glfw glm::glm stb_image GPUOpen::VulkanMemoryAllocator)
+target_link_libraries(ailo
+        Vulkan::Vulkan
+        glfw
+        glm::glm
+        stb_image
+        GPUOpen::VulkanMemoryAllocator
+        imgui)
 
 # Include directories
 target_include_directories(ailo PRIVATE

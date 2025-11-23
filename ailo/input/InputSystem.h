@@ -13,12 +13,6 @@ public:
     InputSystem() = default;
     ~InputSystem() = default;
 
-    // Initialize the input system with a GLFW window
-    void init();
-
-    // Shutdown and cleanup
-    void shutdown();
-
     // Process all queued events
     void processEvents();
 

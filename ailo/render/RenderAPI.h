@@ -224,6 +224,8 @@ private:
     // Command buffers
     vk::CommandPool m_commandPool;
     std::vector<vk::CommandBuffer> m_commandBuffers;
+    uint32_t m_currentCommandBufferIndex = 0;
+    vk::CommandBuffer m_currentCommandBuffer;
 
     // Descriptor pool
     vk::DescriptorPool m_descriptorPool;
@@ -243,10 +245,10 @@ private:
     std::vector<const char*> m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     // Current render state
-    uint32_t m_currentCommandBufferIndex = 0;
-    vk::CommandBuffer m_currentCommandBuffer;
     PipelineHandle m_currentPipeline;
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
+
+    // resources
     ResourceAllocator<Pipeline> pipelines;
     ResourceAllocator<Buffer> buffers;
     ResourceAllocator<DescriptorSet> descriptorSets;
