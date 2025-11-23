@@ -10,7 +10,7 @@ struct InputSystem;
 class Engine {
  public:
   Engine();
-  ~Engine() = default;
+  ~Engine();
 
   RenderAPI* getRenderAPI();
   InputSystem* getInputSystem();

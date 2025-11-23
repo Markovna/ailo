@@ -10,6 +10,11 @@ Engine::Engine() :
   m_renderAPI(std::make_unique<RenderAPI>())
 { }
 
+Engine::~Engine() {
+  m_renderAPI.reset();
+  m_inputSystem.reset();
+}
+
 RenderAPI* Engine::getRenderAPI() { return m_renderAPI.get(); }
 InputSystem* Engine::getInputSystem() { return m_inputSystem.get(); }
 
