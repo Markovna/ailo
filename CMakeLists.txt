@@ -28,7 +28,7 @@ add_executable(ailo
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-    ailo/utils/ResourceAllocator.h ailo/Engine.cpp ailo/Engine.h ailo/Application.cpp ailo/Application.h)
+    ailo/utils/ResourceAllocator.h ailo/Engine.cpp ailo/Engine.h ailo/Application.cpp ailo/Application.h ailo/render/vulkan/VulkanUtils.cpp ailo/render/vulkan/VulkanUtils.h)
 
 # Link libraries
 target_link_libraries(ailo

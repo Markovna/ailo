@@ -193,6 +193,14 @@ void Application::initRender() {
   m_pipeline = renderAPI->createGraphicsPipeline(
       "shaders/shader.vert.spv",
       "shaders/shader.frag.spv",
+      ailo::PipelineDescription {
+        .raster = ailo::RasterDescription {
+            .cullingMode = ailo::CullingMode::FRONT,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = ailo::CompareOp::LESS
+        }
+      },
       vertexInput,
       m_descriptorSetLayout
   );
@@ -313,7 +321,15 @@ void Application::drawImGui() {
   ImGui::NewFrame();
 
   // Create your ImGui widgets here
-  ImGui::ShowDemoWindow();
+  // ImGui::ShowDemoWindow();
+  if(ImGui::BeginMenu("Test Menu", true)) {
+    ImGui::BeginGroup();
+
+    ImGui::Button("Test Button");
+
+    ImGui::EndGroup();
+    ImGui::EndMenu();
+  }
 
   ImGui::Render();
 

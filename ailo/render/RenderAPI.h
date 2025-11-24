@@ -21,6 +21,46 @@ enum class BufferBinding : uint8_t {
   UNIFORM,
 };
 
+enum class CullingMode : uint8_t {
+  NONE,
+  FRONT,
+  BACK,
+  FRONT_AND_BACK
+};
+
+enum class BlendOperation : uint8_t {
+  ADD,
+  SUBTRACT,
+  REVERSE_SUBTRACT,
+  MIN,
+  MAX
+};
+
+enum class BlendFunction : uint8_t {
+  ZERO,
+  ONE,
+  SRC_COLOR,
+  ONE_MINUS_SRC_COLOR,
+  DST_COLOR,
+  ONE_MINUS_DST_COLOR,
+  SRC_ALPHA,
+  ONE_MINUS_SRC_ALPHA,
+  DST_ALPHA,
+  ONE_MINUS_DST_ALPHA,
+  SRC_ALPHA_SATURATE
+};
+
+enum class CompareOp : uint8_t {
+  NEVER = 0,
+  LESS,
+  EQUAL,
+  LESS_OR_EQUAL,
+  GREATER,
+  NOT_EQUAL,
+  GREATER_OR_EQUAL,
+  ALWAYS
+};
+
 struct Buffer {
     vk::Buffer buffer;
     uint64_t size;
@@ -60,6 +100,24 @@ struct Texture {
 struct VertexInputDescription {
     std::vector<vk::VertexInputBindingDescription> bindings;
     std::vector<vk::VertexInputAttributeDescription> attributes;
+};
+
+struct RasterDescription {
+  CullingMode cullingMode = CullingMode::FRONT;
+  bool inverseFrontFace = false;
+  bool blendEnable = false;
+  bool depthWriteEnable = true;
+  BlendOperation rgbBlendOp;
+  BlendOperation alphaBlendOp;
+  BlendFunction srcRgbBlendFunc;
+  BlendFunction srcAlphaBlendFunc;
+  BlendFunction dstRgbBlendFunc;
+  BlendFunction dstAlphaBlendFunc;
+  CompareOp depthCompareOp = CompareOp::LESS;
+};
+
+struct PipelineDescription {
+  RasterDescription raster;
 };
 
 using PipelineHandle = Handle<Pipeline>;
@@ -107,6 +165,7 @@ public:
     PipelineHandle createGraphicsPipeline(
         const std::string& vertShaderPath,
         const std::string& fragShaderPath,
+        const PipelineDescription& description,
         const VertexInputDescription& vertexInput,
         vk::DescriptorSetLayout descriptorSetLayout = nullptr
     );

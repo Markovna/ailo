@@ -7,6 +7,11 @@ namespace ailo {
 ImGuiProcessor::ImGuiProcessor(RenderAPI* renderAPI)
     : m_renderAPI(renderAPI)
 {
+  ImGuiIO& io = ImGui::GetIO();
+
+  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
+  io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
+
 }
 
 ImGuiProcessor::~ImGuiProcessor() {
@@ -116,6 +121,20 @@ void ImGuiProcessor::createPipeline() {
     m_pipeline = m_renderAPI->createGraphicsPipeline(
         "shaders/imgui.vert.spv",
         "shaders/imgui.frag.spv",
+        ailo::PipelineDescription {
+            .raster = ailo::RasterDescription {
+                .cullingMode = ailo::CullingMode::NONE,
+                .inverseFrontFace = false,
+                .blendEnable = true,
+                .depthWriteEnable = false,
+                .rgbBlendOp = BlendOperation::ADD,
+                .alphaBlendOp = BlendOperation::ADD,
+                .srcRgbBlendFunc = BlendFunction::SRC_ALPHA,
+                .srcAlphaBlendFunc = BlendFunction::ONE,
+                .dstRgbBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA,
+                .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
+            }
+        },
         vertexInput,
         m_descriptorSetLayout
     );
@@ -256,11 +275,6 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
                     static_cast<uint32_t>(clipMax.x - clipMin.x),
                     static_cast<uint32_t>(clipMax.y - clipMin.y)
                 );
-                std::cout << "scissors: "
-                  << clipMin.x
-                  << " " << clipMin.y
-                  << " " << (clipMax.x - clipMin.x)
-                  << " " << (clipMax.y - clipMin.y) << "\n";
 
                 // Draw
                 m_renderAPI->drawIndexed(

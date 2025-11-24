@@ -1,5 +1,6 @@
 #define VMA_IMPLEMENTATION
 #include "RenderAPI.h"
+#include "vulkan/VulkanUtils.h"
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -175,7 +176,7 @@ void RenderAPI::submitCommandsImmediately() {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_currentCommandBuffer;
 
-    m_graphicsQueue.submit(1, &submitInfo, nullptr);
+    (void)m_graphicsQueue.submit(1, &submitInfo, nullptr);
     m_graphicsQueue.waitIdle();
 
     // Start a new command buffer
@@ -536,6 +537,7 @@ void RenderAPI::createRenderPass() {
 PipelineHandle RenderAPI::createGraphicsPipeline(
     const std::string& vertShaderPath,
     const std::string& fragShaderPath,
+    const PipelineDescription& description,
     const VertexInputDescription& vertexInput,
     vk::DescriptorSetLayout descriptorSetLayout) {
 
@@ -580,14 +582,16 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
 
+    auto& raster = description.raster;
+
     // Rasterization
     vk::PipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.depthClampEnable = VK_FALSE;
     rasterizer.rasterizerDiscardEnable = VK_FALSE;
     rasterizer.polygonMode = vk::PolygonMode::eFill;
     rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = vk::CullModeFlagBits::eBack;
-    rasterizer.frontFace = vk::FrontFace::eClockwise;
+    rasterizer.cullMode = vkutils::getCullMode(raster.cullingMode);
+    rasterizer.frontFace = raster.inverseFrontFace ? vk::FrontFace::eClockwise : vk::FrontFace::eCounterClockwise;
     rasterizer.depthBiasEnable = VK_FALSE;
 
     // Multisampling
@@ -598,8 +602,8 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     // Depth and stencil testing
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = vk::CompareOp::eLess;
+    depthStencil.depthWriteEnable = raster.depthWriteEnable;
+    depthStencil.depthCompareOp = vkutils::getCompareOperation(raster.depthCompareOp);
     depthStencil.depthBoundsTestEnable = VK_FALSE;
     depthStencil.stencilTestEnable = VK_FALSE;
 
@@ -607,7 +611,13 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
     colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                                           vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    colorBlendAttachment.blendEnable = VK_FALSE;
+    colorBlendAttachment.blendEnable = raster.blendEnable;
+    colorBlendAttachment.colorBlendOp = vkutils::getBlendOp(raster.rgbBlendOp);
+    colorBlendAttachment.alphaBlendOp = vkutils::getBlendOp(raster.alphaBlendOp);
+    colorBlendAttachment.srcColorBlendFactor = vkutils::getBlendFunction(raster.srcRgbBlendFunc);
+    colorBlendAttachment.srcAlphaBlendFactor = vkutils::getBlendFunction(raster.srcAlphaBlendFunc);
+    colorBlendAttachment.dstColorBlendFactor = vkutils::getBlendFunction(raster.dstRgbBlendFunc);
+    colorBlendAttachment.dstAlphaBlendFactor = vkutils::getBlendFunction(raster.dstAlphaBlendFunc);
 
     vk::PipelineColorBlendStateCreateInfo colorBlending{};
     colorBlending.logicOpEnable = VK_FALSE;
