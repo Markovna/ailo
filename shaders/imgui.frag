@@ -1,7 +1,7 @@
 #version 450 core
 layout(location = 0) out vec4 fColor;
 
-layout(set=0, binding=1) uniform sampler2D sTexture;
+layout(binding = 1) uniform sampler2D sTexture;
 
 layout(location = 0) in struct {
     vec4 Color;
@@ -10,5 +10,7 @@ layout(location = 0) in struct {
 
 void main()
 {
-    fColor = In.Color * texture(sTexture, In.UV.st);
+    vec4 tex = texture(sTexture, In.UV.st);
+    tex = vec4(1, 1, 1, tex.r);
+    fColor = In.Color * tex;
 }

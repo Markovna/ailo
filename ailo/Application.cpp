@@ -218,21 +218,35 @@ void Application::mainLoop() {
   m_engine.getRenderAPI()->waitIdle();
 }
 
+void Application::handleImGuiEvent(ailo::Event& event) {
+  if(auto keyPressed = std::get_if<ailo::KeyPressedEvent>(&event)) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (keyPressed->modifiers | ailo::ModifierKey::Control) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (keyPressed->modifiers | ailo::ModifierKey::Shift) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Alt, (keyPressed->modifiers | ailo::ModifierKey::Alt) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Super, (keyPressed->modifiers | ailo::ModifierKey::Super) != ailo::ModifierKey::None);
+
+    //TODO: map ailo keys to imgui keys
+    return;
+  }
+}
+
 void Application::handleInput() {
   auto* inputSystem = m_engine.getInputSystem();
   // Process all input events from the queue
   ailo::Event event;
   while (inputSystem->pollEvent(event)) {
+    handleImGuiEvent(event);
+
     std::visit([this](auto&& e) {
       using T = std::decay_t<decltype(e)>;
 
       if constexpr (std::is_same_v<T, ailo::KeyPressedEvent>) {
-        // Example: Close window on Escape key
         if (e.keyCode == ailo::KeyCode::Escape) {
           glfwSetWindowShouldClose(m_window, GLFW_TRUE);
           std::cout << "Escape pressed - closing window\n";
         }
-          // Example: Print other key presses
+        // Example: Print other key presses
         else {
           std::cout << "Key pressed: " << static_cast<int>(e.keyCode) << "\n";
         }
@@ -321,15 +335,15 @@ void Application::drawImGui() {
   ImGui::NewFrame();
 
   // Create your ImGui widgets here
-  // ImGui::ShowDemoWindow();
-  if(ImGui::BeginMenu("Test Menu", true)) {
-    ImGui::BeginGroup();
-
-    ImGui::Button("Test Button");
-
-    ImGui::EndGroup();
-    ImGui::EndMenu();
-  }
+   ImGui::ShowDemoWindow();
+//  if(ImGui::BeginMenu("Test Menu", true)) {
+//    ImGui::BeginGroup();
+//
+//    ImGui::Button("Test Button");
+//
+//    ImGui::EndGroup();
+//    ImGui::EndMenu();
+//  }
 
   ImGui::Render();
 
@@ -409,6 +423,11 @@ void Application::mouseButtonCallback(GLFWwindow* window, int button, int action
   double mouseX, mouseY;
   glfwGetCursorPos(window, &mouseX, &mouseY);
 
+
+  ImGuiIO& io = ImGui::GetIO();
+  if (button >= 0 && button < ImGuiMouseButton_COUNT)
+    io.AddMouseButtonEvent(button, action == GLFW_PRESS);
+
   // Create and push event
   if (action == GLFW_PRESS) {
     ailo::MouseButtonPressedEvent event;
@@ -430,6 +449,9 @@ void Application::mouseButtonCallback(GLFWwindow* window, int button, int action
 void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
   auto* inputSystem = app->m_engine.getInputSystem();
+
+  ImGuiIO& io = ImGui::GetIO();
+  io.AddMousePosEvent((float)xpos, (float)ypos);
 
   // Create and push event
   ailo::MouseMovedEvent event;

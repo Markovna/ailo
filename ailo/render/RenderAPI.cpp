@@ -358,7 +358,7 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
     textures.free(handle);
 }
 
-void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize) {
+void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
     Texture& texture = textures.get(handle);
 
     // Create staging buffer
@@ -373,8 +373,10 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     transitionImageLayout(texture.image, texture.format,
                          vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
-    // Copy buffer to image
-    copyBufferToImage(stageBuffer.buffer, texture.image, texture.width, texture.height);
+    if(width == 0) width = texture.width;
+    if(height == 0) height = texture.height;
+
+    copyBufferToImage(stageBuffer.buffer, texture.image, width, height, xOffset, yOffset);
 
     // Transition image layout to shader read
     transitionImageLayout(texture.image, texture.format,
@@ -1412,7 +1414,7 @@ void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::Im
     m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
-void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
+void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
     vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.level = vk::CommandBufferLevel::ePrimary;
     allocInfo.commandPool = m_commandPool;
@@ -1432,7 +1434,7 @@ void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t w
     region.imageSubresource.mipLevel = 0;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
-    region.imageOffset = vk::Offset3D{0, 0, 0};
+    region.imageOffset = vk::Offset3D{static_cast<int32_t>(xOffset), static_cast<int32_t>(yOffset), 0};
     region.imageExtent = vk::Extent3D{width, height, 1};
 
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);

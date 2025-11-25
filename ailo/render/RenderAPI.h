@@ -150,7 +150,7 @@ public:
     // Texture management
     TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear);
     void destroyTexture(const TextureHandle& handle);
-    void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize);
+    void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0);
 
     // Descriptor set management
     vk::DescriptorSetLayout createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings);
@@ -246,7 +246,7 @@ private:
     void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
     vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags);
     void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-    void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
+    void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0);
 
     // Debug callback
     static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(

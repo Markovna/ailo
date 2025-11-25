@@ -16,9 +16,9 @@ public:
     void processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io);
 
 private:
-    void createFontTexture();
     void createPipeline();
     void setupRenderState(ImDrawData* drawData, const ImGuiIO& io, uint32_t fbWidth, uint32_t fbHeight);
+    void updateTexture(ImTextureData* tex);
 
     RenderAPI* m_renderAPI;
 

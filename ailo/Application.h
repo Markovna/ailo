@@ -5,6 +5,7 @@
 #include "render/RenderAPI.h"
 #include "render/RenderAPI.h"
 #include "render/ImGuiProcessor.h"
+#include "input/InputTypes.h"
 
 class Application {
   public:
@@ -39,4 +40,6 @@ class Application {
     void drawFrame();
     void cleanup();
     void drawImGui();
+
+    void handleImGuiEvent(ailo::Event&);
 };

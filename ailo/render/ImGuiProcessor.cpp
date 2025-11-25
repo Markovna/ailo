@@ -12,6 +12,7 @@ ImGuiProcessor::ImGuiProcessor(RenderAPI* renderAPI)
   io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
   io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
+  io.Fonts->TexDesiredFormat = ImTextureFormat_Alpha8;
 }
 
 ImGuiProcessor::~ImGuiProcessor() {
@@ -19,7 +20,6 @@ ImGuiProcessor::~ImGuiProcessor() {
 }
 
 void ImGuiProcessor::init() {
-    createFontTexture();
     createPipeline();
 }
 
@@ -33,31 +33,9 @@ void ImGuiProcessor::shutdown() {
     m_renderAPI->destroyPipeline(m_pipeline);
 }
 
-void ImGuiProcessor::createFontTexture() {
-    ImGuiIO& io = ImGui::GetIO();
-
-    unsigned char* pixels;
-    int width, height;
-    io.Fonts->GetTexDataAsRGBA32(&pixels, &width, &height);
-    size_t uploadSize = width * height * 4 * sizeof(unsigned char);
-
-    // Create texture
-    m_fontTexture = m_renderAPI->createTexture(
-        vk::Format::eR8G8B8A8Unorm,
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height),
-        vk::Filter::eLinear
-    );
-
-    // Upload texture data
-    m_renderAPI->updateTextureImage(m_fontTexture, pixels, uploadSize);
-
-    // Store the texture ID in ImGui
-    io.Fonts->SetTexID((ImTextureID)(intptr_t)m_fontTexture.getId());
-
+void ImGuiProcessor::createPipeline() {
     // Create uniform buffer for projection matrix (2 vec2s = 16 bytes)
-    // Align to 256 bytes for Metal/MoltenVK compatibility
-    m_uniformBuffer = m_renderAPI->createBuffer(256);
+    m_uniformBuffer = m_renderAPI->createBuffer(16);
 
     // Create descriptor set layout with two bindings (swapped for MoltenVK compatibility test)
     vk::DescriptorSetLayoutBinding uniformBinding{};
@@ -78,10 +56,7 @@ void ImGuiProcessor::createFontTexture() {
     // Create and update descriptor set
     m_descriptorSet = m_renderAPI->createDescriptorSet(m_descriptorSetLayout);
     m_renderAPI->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
-    m_renderAPI->updateDescriptorSetTexture(m_descriptorSet, m_fontTexture, 1);
-}
 
-void ImGuiProcessor::createPipeline() {
     // Define vertex input description matching ImDrawVert structure
     VertexInputDescription vertexInput{};
 
@@ -161,6 +136,52 @@ void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, u
     m_renderAPI->setViewport(0.0f, 0.0f, static_cast<float>(fbWidth), static_cast<float>(fbHeight));
 }
 
+void ImGuiProcessor::updateTexture(ImTextureData* tex) {
+  if (tex->Status == ImTextureStatus_OK)
+    return;
+
+  if (tex->Status == ImTextureStatus_WantCreate) {
+    // Create texture
+    auto textureHandle = m_renderAPI->createTexture(
+        vk::Format::eR8Unorm,
+        static_cast<uint32_t>(tex->Width),
+        static_cast<uint32_t>(tex->Height),
+        vk::Filter::eLinear
+    );
+
+    tex->SetTexID((ImTextureID) textureHandle.getId());
+    m_renderAPI->updateDescriptorSetTexture(m_descriptorSet, textureHandle, 1);
+  }
+
+  if (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates) {
+    const int upload_x = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.x;
+    const int upload_y = (tex->Status == ImTextureStatus_WantCreate) ? 0 : tex->UpdateRect.y;
+    const int upload_w = (tex->Status == ImTextureStatus_WantCreate) ? tex->Width : tex->UpdateRect.w;
+    const int upload_h = (tex->Status == ImTextureStatus_WantCreate) ? tex->Height : tex->UpdateRect.h;
+
+    void* pixels = tex->GetPixels();
+    auto uploadSize = tex->GetSizeInBytes();
+
+    auto texHandleId = tex->GetTexID();
+    ailo::TextureHandle texHandle(texHandleId);
+
+    // Upload texture data
+    m_renderAPI->updateTextureImage(texHandle, pixels, uploadSize);
+    tex->SetStatus(ImTextureStatus_OK);
+  }
+
+  if (tex->Status == ImTextureStatus_WantDestroy) {
+    auto texHandleId = tex->GetTexID();
+    ailo::TextureHandle texHandle(texHandleId);
+
+    m_renderAPI->destroyTexture(texHandle);
+
+    // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
+    tex->SetTexID(ImTextureID_Invalid);
+    tex->SetStatus(ImTextureStatus_Destroyed);
+  }
+}
+
 void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io) {
     // Avoid rendering when minimized
     if (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f) {
@@ -173,6 +194,11 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
     if (fbWidth <= 0 || fbHeight <= 0) {
         return;
     }
+
+    if (drawData->Textures != nullptr)
+      for (ImTextureData* tex : *drawData->Textures)
+        if (tex->Status != ImTextureStatus_OK)
+          updateTexture(tex);
 
     // Calculate total vertex and index buffer sizes
     uint64_t vertexSize = drawData->TotalVtxCount * sizeof(ImDrawVert);
