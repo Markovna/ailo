@@ -24,12 +24,21 @@ void ImGuiProcessor::init() {
 }
 
 void ImGuiProcessor::shutdown() {
+
+    // Destroy all textures
+    for (ImTextureData* tex : ImGui::GetPlatformIO().Textures) {
+      if (tex->RefCount == 1) {
+        auto texHandleId = tex->GetTexID();
+        ailo::TextureHandle texHandle(texHandleId);
+        m_renderAPI->destroyTexture(texHandle);
+      }
+    }
+
     m_renderAPI->destroyBuffer(m_vertexBuffer);
     m_renderAPI->destroyBuffer(m_indexBuffer);
     m_renderAPI->destroyBuffer(m_uniformBuffer);
     m_renderAPI->destroyDescriptorSet(m_descriptorSet);
     m_renderAPI->destroyDescriptorSetLayout(m_descriptorSetLayout);
-    m_renderAPI->destroyTexture(m_fontTexture);
     m_renderAPI->destroyPipeline(m_pipeline);
 }
 

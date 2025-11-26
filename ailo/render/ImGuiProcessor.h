@@ -23,7 +23,6 @@ private:
     RenderAPI* m_renderAPI;
 
     // Resources
-    TextureHandle m_fontTexture;
     PipelineHandle m_pipeline;
     DescriptorSetHandle m_descriptorSet;
     vk::DescriptorSetLayout m_descriptorSetLayout;
