@@ -297,9 +297,9 @@ void RenderAPI::destroyBuffer(const BufferHandle& handle) {
   buffers.free(handle);
 }
 
-void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, vk::DeviceSize size) {
+void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
     Buffer& buffer = buffers.get(handle);
-    loadFromCpu(m_currentCommandBuffer, buffer, data, 0, size);
+    loadFromCpu(m_currentCommandBuffer, buffer, data, byteOffset, size);
 }
 
 // Texture management
@@ -385,19 +385,36 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 
 // Descriptor set management
 
-vk::DescriptorSetLayout RenderAPI::createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings) {
+DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings) {
+    DescriptorSetLayoutHandle handle = descriptorSetLayouts.allocate();
+    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(handle);
+
     vk::DescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    return m_device.createDescriptorSetLayout(layoutInfo);
+    descriptorSetLayout.layout = m_device.createDescriptorSetLayout(layoutInfo);
+    for(auto& binding : bindings) {
+      if(binding.descriptorType == vk::DescriptorType::eUniformBufferDynamic) {
+        descriptorSetLayout.dynamicBindings.set(binding.binding, true);
+      }
+    }
+
+    return handle;
 }
 
-void RenderAPI::destroyDescriptorSetLayout(vk::DescriptorSetLayout layout) {
-    m_device.destroyDescriptorSetLayout(layout);
+void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
+  if(!handle) { return; }
+
+  DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(handle);
+  m_device.destroyDescriptorSetLayout(descriptorSetLayout.layout);
+  descriptorSetLayouts.free(handle);
 }
 
-DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layout) {
+DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle dslh) {
+    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(dslh);
+    auto& layout = descriptorSetLayout.layout;
+
     DescriptorSetHandle handle = descriptorSets.allocate();
     DescriptorSet& descriptorSet = descriptorSets.get(handle);
 
@@ -408,7 +425,7 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(vk::DescriptorSetLayout layou
 
     auto result = m_device.allocateDescriptorSets(allocInfo);
     descriptorSet.descriptorSet = result[0];
-    descriptorSet.layout = nullptr;
+    descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
 
     return handle;
 }
@@ -417,8 +434,6 @@ void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
     DescriptorSet& descriptorSet = descriptorSets.get(handle);
-    // Descriptor sets are automatically freed when the pool is destroyed
-    // But we can explicitly free them if needed
     m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
     descriptorSets.free(handle);
 }
@@ -432,11 +447,13 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     bufferInfo.offset = 0;
     bufferInfo.range = buffer.size;
 
+    bool isDynamic = descriptorSet.dynamicBindings[binding];
+
     vk::WriteDescriptorSet descriptorWrite{};
     descriptorWrite.dstSet = descriptorSet.descriptorSet;
     descriptorWrite.dstBinding = binding;
     descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+    descriptorWrite.descriptorType = isDynamic ? vk::DescriptorType::eUniformBufferDynamic : vk::DescriptorType::eUniformBuffer;
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pBufferInfo = &bufferInfo;
 
@@ -540,13 +557,11 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     const std::string& vertShaderPath,
     const std::string& fragShaderPath,
     const PipelineDescription& description,
-    const VertexInputDescription& vertexInput,
-    vk::DescriptorSetLayout descriptorSetLayout) {
+    const VertexInputDescription& vertexInput) {
 
     PipelineHandle handle = pipelines.allocate();
 
     Pipeline& pipeline = pipelines.get(handle);
-    pipeline.descriptorSetLayout = descriptorSetLayout;
 
     // Load shaders
     auto vertShaderCode = readFile(vertShaderPath);
@@ -637,7 +652,14 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     // Pipeline layout
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-    if (descriptorSetLayout) {
+    if (!description.uniformBindings.empty()) {
+        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.bindingCount = static_cast<uint32_t>(description.uniformBindings.size());
+        layoutInfo.pBindings = description.uniformBindings.data();
+
+        auto descriptorSetLayout = m_device.createDescriptorSetLayout(layoutInfo);
+        pipeline.descriptorSetLayout = descriptorSetLayout;
+
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
     }
@@ -678,6 +700,7 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     Pipeline& pipeline = pipelines.get(handle);
 
     m_device.destroyPipeline(pipeline.pipeline);
+    m_device.destroyDescriptorSetLayout(pipeline.descriptorSetLayout);
     m_device.destroyPipelineLayout(pipeline.layout);
 
     pipelines.free(handle);
@@ -1022,6 +1045,7 @@ void RenderAPI::createDescriptorPool() {
     // We'll allocate enough for a reasonable number of uniform buffers and textures
     std::vector<vk::DescriptorPoolSize> poolSizes{};
     poolSizes.push_back({vk::DescriptorType::eUniformBuffer, 100});
+    poolSizes.push_back({vk::DescriptorType::eUniformBufferDynamic, 100});
     poolSizes.push_back({vk::DescriptorType::eCombinedImageSampler, 100});
 
     vk::DescriptorPoolCreateInfo poolInfo{};

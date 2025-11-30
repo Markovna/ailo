@@ -66,13 +66,13 @@ class ResourceAllocator {
     uint32_t handle;
 
     if (m_numHandles >= m_dense.size()) {
-      uint32_t index = m_dense.size();
+      auto index = m_dense.size();
       m_dense.push_back(index);
       m_sparse.push_back(index);
       m_resources.emplace_back(std::forward<Args>(args)...);
       handle = index;
     } else {
-      uint32_t index = m_numHandles;
+      auto index = m_numHandles;
       handle = m_dense[index];
       m_sparse[handle] = index;
       m_resources[handle] = T(std::forward<Args>(args)...);
@@ -84,16 +84,16 @@ class ResourceAllocator {
   }
 
   T& get(Handle handle) {
-    int id = handle.getId();
+    auto id = handle.getId();
     return m_resources[id];
   }
 
   void free(Handle handle) {
-    uint16_t index = m_sparse[handle.getId()];
+    auto index = m_sparse[handle.getId()];
 
     --m_numHandles;
 
-    uint16_t temp = m_dense[m_numHandles];
+    auto temp = m_dense[m_numHandles];
     m_dense[m_numHandles] = handle.getId();
 
     m_sparse[temp] = index;

@@ -21,7 +21,7 @@ class Application {
     ailo::TextureHandle m_texture;
 
     ailo::BufferHandle m_uniformBuffer;
-    vk::DescriptorSetLayout m_descriptorSetLayout;
+    ailo::DescriptorSetLayoutHandle m_descriptorSetLayout;
     ailo::DescriptorSetHandle m_descriptorSet;
     float m_time;
 

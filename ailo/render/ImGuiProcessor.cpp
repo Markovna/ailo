@@ -117,10 +117,10 @@ void ImGuiProcessor::createPipeline() {
                 .srcAlphaBlendFunc = BlendFunction::ONE,
                 .dstRgbBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA,
                 .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
-            }
+            },
+            .uniformBindings = bindings
         },
-        vertexInput,
-        m_descriptorSetLayout
+        vertexInput
     );
 }
 

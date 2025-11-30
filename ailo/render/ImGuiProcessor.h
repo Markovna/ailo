@@ -25,7 +25,7 @@ private:
     // Resources
     PipelineHandle m_pipeline;
     DescriptorSetHandle m_descriptorSet;
-    vk::DescriptorSetLayout m_descriptorSetLayout;
+    DescriptorSetLayoutHandle m_descriptorSetLayout;
 
     // Uniform buffer for projection matrix
     BufferHandle m_uniformBuffer;

@@ -196,13 +196,13 @@ void Application::initRender() {
       ailo::PipelineDescription {
         .raster = ailo::RasterDescription {
             .cullingMode = ailo::CullingMode::FRONT,
-            .inverseFrontFace = true,
+            .inverseFrontFace = false,
             .depthWriteEnable = true,
             .depthCompareOp = ailo::CompareOp::LESS
-        }
+        },
+        .uniformBindings = bindings
       },
-      vertexInput,
-      m_descriptorSetLayout
+      vertexInput
   );
 
 }
@@ -212,8 +212,14 @@ void Application::mainLoop() {
     glfwPollEvents();
     m_engine.getInputSystem()->processEvents();
     handleInput();
-    //drawFrame();
-    drawImGui();
+    if (!m_engine.getRenderAPI()->beginFrame()) {
+      return; // Swapchain was recreated, try again next frame
+    }
+
+    drawFrame();
+    //drawImGui();
+
+    m_engine.getRenderAPI()->endFrame();
   }
   m_engine.getRenderAPI()->waitIdle();
 }
@@ -301,13 +307,8 @@ void Application::updateUniformBuffer() {
 void Application::drawFrame() {
   auto* renderAPI = m_engine.getRenderAPI();
 
-  if (!renderAPI->beginFrame()) {
-    return; // Swapchain was recreated, try again next frame
-  }
-
   // Update uniform buffer for current frame
   updateUniformBuffer();
-
   renderAPI->beginRenderPass();
 
   renderAPI->bindPipeline(m_pipeline);
@@ -319,8 +320,6 @@ void Application::drawFrame() {
   renderAPI->drawIndexed(static_cast<uint32_t>(indices.size()));
 
   renderAPI->endRenderPass();
-
-  renderAPI->endFrame();
 }
 
 void Application::drawImGui() {
@@ -334,26 +333,11 @@ void Application::drawImGui() {
 
   ImGui::NewFrame();
 
-  // Create your ImGui widgets here
-   ImGui::ShowDemoWindow();
-//  if(ImGui::BeginMenu("Test Menu", true)) {
-//    ImGui::BeginGroup();
-//
-//    ImGui::Button("Test Button");
-//
-//    ImGui::EndGroup();
-//    ImGui::EndMenu();
-//  }
+  ImGui::ShowDemoWindow();
 
   ImGui::Render();
 
-  auto* renderAPI = m_engine.getRenderAPI();
-  if (!renderAPI->beginFrame()) {
-    return; // Swapchain was recreated, try again next frame
-  }
-
   m_imguiProcessor->processImGuiCommands(ImGui::GetDrawData(), ImGui::GetIO());
-  renderAPI->endFrame();
 }
 
 void Application::cleanup() {
