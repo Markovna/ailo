@@ -100,6 +100,8 @@ class ResourceAllocator {
     m_dense[index] = temp;
   }
 
+  size_t size() { return m_numHandles; }
+
  private:
   std::vector<uint32_t> m_dense;
   std::vector<uint32_t> m_sparse;

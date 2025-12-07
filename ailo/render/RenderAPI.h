@@ -161,7 +161,6 @@ public:
     bool beginFrame();
     void endFrame();
     void waitIdle();
-    void submitCommandsImmediately();
 
     // Buffer management
     BufferHandle createVertexBuffer(const void* data, uint64_t size);
@@ -231,6 +230,7 @@ private:
     void createSwapchainFramebuffers();
 
     void flushCommandBuffer();
+    void cleanupDescriptorSets();
 
     // Helper functions
     bool checkValidationLayerSupport();

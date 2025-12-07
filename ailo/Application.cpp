@@ -160,7 +160,7 @@ void Application::initRender() {
   stbi_image_free(pixels);
   */
 
-  // Create descriptor set layout for uniform buffer and texture
+  // Create descriptor set layout for uniform buffers
   ailo::DescriptorSetLayoutBinding perViewLayoutBinding{};
   perViewLayoutBinding.binding = 0;
   perViewLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
@@ -245,48 +245,14 @@ void Application::handleImGuiEvent(ailo::Event& event) {
 
 void Application::handleInput() {
   auto* inputSystem = m_engine.getInputSystem();
-  // Process all input events from the queue
+
   ailo::Event event;
   while (inputSystem->pollEvent(event)) {
     handleImGuiEvent(event);
-
-    std::visit([this](auto&& e) {
-      using T = std::decay_t<decltype(e)>;
-
-      if constexpr (std::is_same_v<T, ailo::KeyPressedEvent>) {
-        if (e.keyCode == ailo::KeyCode::Escape) {
-          glfwSetWindowShouldClose(m_window, GLFW_TRUE);
-          std::cout << "Escape pressed - closing window\n";
-        }
-        // Example: Print other key presses
-        else {
-          std::cout << "Key pressed: " << static_cast<int>(e.keyCode) << "\n";
-        }
-      }
-      else if constexpr (std::is_same_v<T, ailo::KeyReleasedEvent>) {
-        std::cout << "Key released: " << static_cast<int>(e.keyCode) << "\n";
-      }
-      else if constexpr (std::is_same_v<T, ailo::MouseButtonPressedEvent>) {
-        std::cout << "Mouse button " << static_cast<int>(e.button)
-                  << " pressed at (" << e.x << ", " << e.y << ")\n";
-      }
-      else if constexpr (std::is_same_v<T, ailo::MouseButtonReleasedEvent>) {
-        std::cout << "Mouse button " << static_cast<int>(e.button) << " released\n";
-      }
-      else if constexpr (std::is_same_v<T, ailo::MouseMovedEvent>) {
-        // Mouse moved events are very frequent, so we don't print them by default
-        // Uncomment to see mouse movement:
-        // std::cout << "Mouse moved to (" << e.x << ", " << e.y << ")\n";
-      }
-      else if constexpr (std::is_same_v<T, ailo::MouseScrolledEvent>) {
-        std::cout << "Mouse scrolled: (" << e.xOffset << ", " << e.yOffset << ")\n";
-      }
-    }, event);
   }
 }
 
 void Application::updateUniformBuffer() {
-
   auto model = glm::rotate(glm::mat4(1.0f), m_time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
       glm::rotate(glm::mat4(1.0f), 1.3f * m_time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
       glm::rotate(glm::mat4(1.0f), glm::radians(45.0f) , glm::vec3(1.0f, 0.0f, 0.0f));
@@ -304,9 +270,7 @@ void Application::updateUniformBuffer() {
 void Application::drawFrame() {
   updateUniformBuffer();
 
-  auto renderer = m_engine.getRenderer();
-  renderer->render(m_engine, *m_scene, *m_camera);
-
+  m_engine.render(*m_scene, *m_camera);
 }
 
 void Application::drawImGui() {
@@ -349,7 +313,6 @@ void Application::keyCallback(GLFWwindow* window, int key, int scancode, int act
   ailo::KeyCode keyCode = glfwKeyToKeyCode(key);
   ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
 
-  // Create and push event
   if (action == GLFW_PRESS) {
     ailo::KeyPressedEvent event;
     event.keyCode = keyCode;
@@ -378,12 +341,10 @@ void Application::mouseButtonCallback(GLFWwindow* window, int button, int action
   double mouseX, mouseY;
   glfwGetCursorPos(window, &mouseX, &mouseY);
 
-
   ImGuiIO& io = ImGui::GetIO();
   if (button >= 0 && button < ImGuiMouseButton_COUNT)
     io.AddMouseButtonEvent(button, action == GLFW_PRESS);
 
-  // Create and push event
   if (action == GLFW_PRESS) {
     ailo::MouseButtonPressedEvent event;
     event.button = mouseButton;
@@ -408,7 +369,6 @@ void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos
   ImGuiIO& io = ImGui::GetIO();
   io.AddMousePosEvent((float)xpos, (float)ypos);
 
-  // Create and push event
   ailo::MouseMovedEvent event;
   event.x = xpos;
   event.y = ypos;
@@ -419,7 +379,6 @@ void Application::scrollCallback(GLFWwindow* window, double xoffset, double yoff
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
   auto* inputSystem = app->m_engine.getInputSystem();
 
-  // Create and push event
   ailo::MouseScrolledEvent event;
   event.xOffset = xoffset;
   event.yOffset = yoffset;

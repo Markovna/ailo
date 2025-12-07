@@ -21,7 +21,6 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   for(auto [entity, primitive] : primitivesView.each()) {
     auto indexBuffer = primitive.getIndexBuffer();
     auto vertexBuffer = primitive.getVertexBuffer();
-    auto descriptorSet = primitive.getDescriptorSet();
     auto pipeline = primitive.getPipeline();
 
     backend->bindPipeline(pipeline);
@@ -74,7 +73,6 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
     primitivesCount++;
   }
 
-  bool recreateDescriptorSets = false;
   // prepare per object buffer
   if(primitivesCount > perObjectUniformBufferData.size()) {
     perObjectUniformBufferData.resize(primitivesCount);
@@ -84,7 +82,6 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 
     backend.destroyDescriptorSet(m_objectDescriptorSet);
     m_objectDescriptorSet = { };
-    recreateDescriptorSets = true;
   }
 
   if(!m_objectDescriptorSet) {
@@ -95,18 +92,24 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   uint32_t index = 0;
   for(auto [entity, primitive] : primitivesView.each()) {
     perObjectUniformBufferData[index].model = primitive.getTransform();
-    auto& descriptorSet = primitive.getDescriptorSet();
-    if(!descriptorSet || recreateDescriptorSets) {
-      backend.destroyDescriptorSet(descriptorSet);
-      descriptorSet = backend.createDescriptorSet(m_objectDescriptorSetLayout);
-      backend.updateDescriptorSetBuffer(descriptorSet, m_objectsUniformBufferHandle, 0);
-    }
-
     index++;
   }
 
   backend.updateBuffer(m_viewUniformBufferHandle, &perViewUniformBufferData, sizeof(perViewUniformBufferData));
   backend.updateBuffer(m_objectsUniformBufferHandle, perObjectUniformBufferData.data(), perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
+}
+
+void Renderer::terminate(Engine& engine) {
+  RenderAPI& backend = *engine.getRenderAPI();
+
+  backend.destroyBuffer(m_viewUniformBufferHandle);
+  backend.destroyBuffer(m_objectsUniformBufferHandle);
+
+  backend.destroyDescriptorSet(m_viewDescriptorSet);
+  backend.destroyDescriptorSet(m_objectDescriptorSet);
+
+  backend.destroyDescriptorSetLayout(m_viewDescriptorSetLayout);
+  backend.destroyDescriptorSetLayout(m_objectDescriptorSetLayout);
 }
 
 }

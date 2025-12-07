@@ -89,6 +89,8 @@ void RenderAPI::shutdown() {
         destroyStageBuffers(i);
     }
 
+    cleanupDescriptorSets();
+
     vmaDestroyAllocator(m_Allocator);
 
     m_device.destroyRenderPass(m_renderPass);
@@ -102,6 +104,12 @@ void RenderAPI::shutdown() {
 
     m_instance.destroySurfaceKHR(m_surface);
     m_instance.destroy();
+
+    assert(pipelines.size() == 0);
+    assert(buffers.size() == 0);
+    assert(descriptorSetLayouts.size() == 0);
+    assert(descriptorSets.size() == 0);
+    assert(textures.size() == 0);
 }
 
 // Frame lifecycle
@@ -158,38 +166,24 @@ void RenderAPI::endFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
-      DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
-      m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
-      descriptorSets.free(descriptorSetHandle);
-    }
-    m_descriptorSetsToDestroy.clear();
+    cleanupDescriptorSets();
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     flushCommandBuffer();
     m_swapChainImageIndex = -1;
 }
 
-void RenderAPI::waitIdle() {
-    m_device.waitIdle();
+void RenderAPI::cleanupDescriptorSets() {
+  for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
+    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
+    m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+    descriptorSets.free(descriptorSetHandle);
+  }
+  m_descriptorSetsToDestroy.clear();
 }
 
-void RenderAPI::submitCommandsImmediately() {
-    // End current command buffer
-    m_currentCommandBuffer.end();
-
-    // Submit to queue
-    vk::SubmitInfo submitInfo{};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_currentCommandBuffer;
-
-    (void)m_graphicsQueue.submit(1, &submitInfo, nullptr);
-    m_graphicsQueue.waitIdle();
-
-    // Start a new command buffer
-    m_currentCommandBuffer.reset();
-    vk::CommandBufferBeginInfo beginInfo{};
-    m_currentCommandBuffer.begin(beginInfo);
+void RenderAPI::waitIdle() {
+    m_device.waitIdle();
 }
 
 // Buffer management
@@ -827,6 +821,8 @@ void RenderAPI::createInstance() {
     if (enableValidationLayers && !checkValidationLayerSupport()) {
         throw std::runtime_error("validation layers requested, but not available!");
     }
+
+    glfwInit();
 
     vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName = "Vulkan Application";
@@ -1522,13 +1518,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(
 
     std::ostream* out = nullptr;
     auto errorMask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    if((pCallbackData->flags | errorMask) > 0) {
+    if((pCallbackData->flags & errorMask) > 0) {
         out = &std::cerr;
     } else {
         out = &std::cout;
     }
 
-    *out << "validation layer: " << pCallbackData->pMessage << std::endl;
+    *out << "[Vulkan] " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
 }
 

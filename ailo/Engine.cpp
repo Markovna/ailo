@@ -13,9 +13,15 @@ Engine::Engine() :
 { }
 
 Engine::~Engine() {
+  m_renderer->terminate(*this);
+
   m_renderer.reset();
   m_renderAPI.reset();
   m_inputSystem.reset();
+}
+
+void Engine::render(Scene& scene, Camera& camera) {
+  m_renderer->render(*this, scene, camera);
 }
 
 Renderer* Engine::getRenderer() { return m_renderer.get(); }

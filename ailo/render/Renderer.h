@@ -29,6 +29,7 @@ class Scene;
 class Renderer {
  public:
   void render(Engine&, Scene& scene, const Camera&);
+  void terminate(Engine&);
 
  private:
   void prepare(RenderAPI& backend, Scene&);

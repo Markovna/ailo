@@ -40,7 +40,7 @@ add_executable(ailo
     ailo/render/Renderer.cpp
     ailo/render/Renderer.h
     ailo/ecs/ECS.h
-        ailo/ecs/Scene.cpp ailo/ecs/Scene.h)
+        ailo/ecs/Scene.cpp ailo/ecs/Scene.h ailo/utils/Utils.h)
 
 # Link libraries
 target_link_libraries(ailo

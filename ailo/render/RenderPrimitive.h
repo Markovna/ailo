@@ -42,9 +42,6 @@ class RenderPrimitive {
   auto getIndexCount() const { return m_indexCount; }
   auto getIndexOffset() const { return m_indexOffset; }
 
-  //TODO: remove from primitive, store in renderer
-  DescriptorSetHandle& getDescriptorSet() const { return m_dsh; }
-
   PipelineHandle getPipeline() { return m_pipeline; }
   void setPipeline(PipelineHandle handle) { m_pipeline = handle; }
 
@@ -57,7 +54,6 @@ class RenderPrimitive {
   size_t m_indexOffset;
   size_t m_indexCount;
 
-  mutable DescriptorSetHandle m_dsh;
   PipelineHandle m_pipeline;
 };
 

@@ -7,11 +7,15 @@ namespace ailo {
 struct RenderAPI;
 struct Renderer;
 struct InputSystem;
+struct Scene;
+struct Camera;
 
 class Engine {
  public:
   Engine();
   ~Engine();
+
+  void render(Scene&, Camera&);
 
   Renderer* getRenderer();
   RenderAPI* getRenderAPI();
