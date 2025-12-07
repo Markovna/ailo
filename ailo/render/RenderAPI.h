@@ -79,7 +79,7 @@ struct StageBuffer {
 struct Pipeline {
     vk::Pipeline pipeline;
     vk::PipelineLayout layout;
-    vk::DescriptorSetLayout descriptorSetLayout;
+    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
 };
 
 struct DescriptorSetLayout {
@@ -89,9 +89,12 @@ struct DescriptorSetLayout {
   bitmask_t dynamicBindings;
 };
 
+using DescriptorSetLayoutHandle = Handle<DescriptorSetLayout>;
+
 struct DescriptorSet {
     vk::DescriptorSet descriptorSet;
     DescriptorSetLayout::bitmask_t dynamicBindings;
+    DescriptorSetLayoutHandle layoutHandle;
 };
 
 struct Texture {
@@ -123,15 +126,25 @@ struct RasterDescription {
   CompareOp depthCompareOp = CompareOp::LESS;
 };
 
+struct DescriptorSetLayoutBinding {
+  uint32_t binding;
+  vk::DescriptorType descriptorType;
+  vk::ShaderStageFlagBits stageFlags;
+};
+
+struct PipelineLayout {
+  using SetLayout = std::vector<DescriptorSetLayoutBinding>;
+
+  std::vector<SetLayout> sets;
+};
+
 struct PipelineDescription {
   RasterDescription raster;
-  //FIXME: don't use internal vulkan structures here
-  std::vector<vk::DescriptorSetLayoutBinding> uniformBindings;
+  PipelineLayout layout;
 };
 
 using PipelineHandle = Handle<Pipeline>;
 using BufferHandle = Handle<Buffer>;
-using DescriptorSetLayoutHandle = Handle<DescriptorSetLayout>;
 using DescriptorSetHandle = Handle<DescriptorSet>;
 using TextureHandle = Handle<Texture>;
 
@@ -153,7 +166,7 @@ public:
     // Buffer management
     BufferHandle createVertexBuffer(const void* data, uint64_t size);
     BufferHandle createIndexBuffer(const void* data, uint64_t size);
-    BufferHandle createBuffer(uint64_t size);
+    BufferHandle createBuffer(BufferBinding, uint64_t size);
     void destroyBuffer(const BufferHandle& handle);
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
@@ -163,7 +176,7 @@ public:
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0);
 
     // Descriptor set management
-    DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings);
+    DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
     void destroyDescriptorSetLayout(DescriptorSetLayoutHandle& dslh);
     DescriptorSetHandle createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void destroyDescriptorSet(const DescriptorSetHandle& handle);
@@ -186,7 +199,7 @@ public:
     void bindVertexBuffer(const BufferHandle& handle);
     // FIXME: remove indexType from here, save it on creation instead
     void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
-    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t firstSet = 0);
+    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets = { });
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0);
     void setViewport(float x, float y, float width, float height);
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
@@ -323,6 +336,7 @@ private:
     PipelineHandle m_currentPipeline;
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
 
+    std::vector<DescriptorSetHandle> m_descriptorSetsToDestroy;
     // resources
     ResourceAllocator<Pipeline> pipelines;
     ResourceAllocator<Buffer> buffers;

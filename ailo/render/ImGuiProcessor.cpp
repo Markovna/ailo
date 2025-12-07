@@ -44,22 +44,20 @@ void ImGuiProcessor::shutdown() {
 
 void ImGuiProcessor::createPipeline() {
     // Create uniform buffer for projection matrix (2 vec2s = 16 bytes)
-    m_uniformBuffer = m_renderAPI->createBuffer(16);
+    m_uniformBuffer = m_renderAPI->createBuffer(ailo::BufferBinding::UNIFORM, 16);
 
     // Create descriptor set layout with two bindings (swapped for MoltenVK compatibility test)
-    vk::DescriptorSetLayoutBinding uniformBinding{};
+    ailo::DescriptorSetLayoutBinding uniformBinding{};
     uniformBinding.binding = 0;
     uniformBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
-    uniformBinding.descriptorCount = 1;
     uniformBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-    vk::DescriptorSetLayoutBinding samplerBinding{};
+    ailo::DescriptorSetLayoutBinding samplerBinding{};
     samplerBinding.binding = 1;
     samplerBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-    samplerBinding.descriptorCount = 1;
     samplerBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-    std::vector<vk::DescriptorSetLayoutBinding> bindings = { uniformBinding, samplerBinding };
+    std::vector<ailo::DescriptorSetLayoutBinding> bindings = { uniformBinding, samplerBinding };
     m_descriptorSetLayout = m_renderAPI->createDescriptorSetLayout(bindings);
 
     // Create and update descriptor set
@@ -118,7 +116,9 @@ void ImGuiProcessor::createPipeline() {
                 .dstRgbBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA,
                 .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
             },
-            .uniformBindings = bindings
+            .layout {
+              .sets = { { bindings} }
+            }
         },
         vertexInput
     );
@@ -129,7 +129,7 @@ void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, u
     m_renderAPI->bindPipeline(m_pipeline);
 
     // Bind descriptor set
-    m_renderAPI->bindDescriptorSet(m_descriptorSet);
+    m_renderAPI->bindDescriptorSet(m_descriptorSet, 0);
 
     // Bind vertex and index buffers
     m_renderAPI->bindVertexBuffer(m_vertexBuffer);
@@ -258,10 +258,19 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
     vertices.reserve(drawData->TotalVtxCount);
     indices.reserve(drawData->TotalIdxCount);
 
+    auto idxOffset = 0;
     for (int n = 0; n < drawData->CmdListsCount; n++) {
         const ImDrawList* cmdList = drawData->CmdLists[n];
         vertices.insert(vertices.end(), cmdList->VtxBuffer.Data, cmdList->VtxBuffer.Data + cmdList->VtxBuffer.Size);
         indices.insert(indices.end(), cmdList->IdxBuffer.Data, cmdList->IdxBuffer.Data + cmdList->IdxBuffer.Size);
+
+//        idxOffset += cmdList->IdxBuffer.Size;
+//        std::transform(
+//            cmdList->IdxBuffer.Data,
+//            cmdList->IdxBuffer.Data + cmdList->IdxBuffer.Size,
+//            std::back_inserter(indices),
+//            [&idxOffset](ImDrawIdx& idx){ return idx + idxOffset; }
+//          );
     }
 
     // Update buffers with collected data

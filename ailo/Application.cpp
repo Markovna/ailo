@@ -12,6 +12,8 @@
 
 #include "Engine.h"
 #include "render/RenderAPI.h"
+#include "render/Renderer.h"
+#include "render/RenderPrimitive.h"
 #include "input/InputTypes.h"
 #include "input/InputSystem.h"
 
@@ -131,6 +133,8 @@ void Application::initRender() {
   auto* renderAPI = m_engine.getRenderAPI();
   renderAPI->init(m_window, WIDTH, HEIGHT);
 
+  m_scene = std::make_unique<ailo::Scene>();
+
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   io.DisplaySize = ImVec2(WIDTH, HEIGHT);
@@ -140,9 +144,7 @@ void Application::initRender() {
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
 
-  m_vertexBuffer = renderAPI->createVertexBuffer(vertices.data(), sizeof(vertices[0]) * vertices.size());
-  m_indexBuffer = renderAPI->createIndexBuffer(indices.data(), sizeof(indices[0]) * indices.size());
-
+  /*
   // Load texture
   int texWidth, texHeight, texChannels;
   stbi_uc* pixels = stbi_load("textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -156,30 +158,18 @@ void Application::initRender() {
   renderAPI->updateTextureImage(m_texture, pixels, imageSize);
 
   stbi_image_free(pixels);
+  */
 
   // Create descriptor set layout for uniform buffer and texture
-  vk::DescriptorSetLayoutBinding uboLayoutBinding{};
-  uboLayoutBinding.binding = 0;
-  uboLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
-  uboLayoutBinding.descriptorCount = 1;
-  uboLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
+  ailo::DescriptorSetLayoutBinding perViewLayoutBinding{};
+  perViewLayoutBinding.binding = 0;
+  perViewLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
+  perViewLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-  vk::DescriptorSetLayoutBinding samplerLayoutBinding{};
-  samplerLayoutBinding.binding = 1;
-  samplerLayoutBinding.descriptorCount = 1;
-  samplerLayoutBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-  samplerLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-  std::vector<vk::DescriptorSetLayoutBinding> bindings = {uboLayoutBinding, samplerLayoutBinding};
-  m_descriptorSetLayout = renderAPI->createDescriptorSetLayout(bindings);
-
-  // Create uniform buffer
-  m_uniformBuffer = renderAPI->createBuffer(sizeof(UniformBufferObject));
-
-  // Create descriptor set
-  m_descriptorSet = renderAPI->createDescriptorSet(m_descriptorSetLayout);
-  renderAPI->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
-  renderAPI->updateDescriptorSetTexture(m_descriptorSet, m_texture, 1);
+  ailo::DescriptorSetLayoutBinding perObjectLayoutBinding{};
+  perObjectLayoutBinding.binding = 0;
+  perObjectLayoutBinding.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
+  perObjectLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
   // Create graphics pipeline
   ailo::VertexInputDescription vertexInput;
@@ -200,26 +190,42 @@ void Application::initRender() {
             .depthWriteEnable = true,
             .depthCompareOp = ailo::CompareOp::LESS
         },
-        .uniformBindings = bindings
+        .layout = {
+            .sets = {
+                { perViewLayoutBinding },
+                { perObjectLayoutBinding }
+            }
+        }
       },
       vertexInput
   );
 
+  m_indexBuffer = std::make_unique<ailo::BufferObject>(m_engine, ailo::BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
+  m_indexBuffer->updateBuffer(m_engine, indices.data(), sizeof(uint16_t) * indices.size());
+
+  m_vertexBuffer = std::make_unique<ailo::BufferObject>(m_engine, ailo::BufferBinding::VERTEX, sizeof(Vertex) * vertices.size());
+  m_vertexBuffer->updateBuffer(m_engine, vertices.data(), sizeof(Vertex) * vertices.size());
+
+  m_cubeEntity = m_scene->getRegistry().create();
+  auto& renderPrimitive = m_scene->getRegistry().add<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
+  renderPrimitive.setPipeline(m_pipeline);
+
+  m_camera = std::make_unique<ailo::Camera>();
 }
 
 void Application::mainLoop() {
   while (!glfwWindowShouldClose(m_window)) {
+    double now = glfwGetTime();
+    m_deltaTime = m_time > 0 ? (float) ((double) (now - m_time)) :
+                           (float) (1.0f / 60.0f);
+    m_time = now;
+
     glfwPollEvents();
     m_engine.getInputSystem()->processEvents();
     handleInput();
-    if (!m_engine.getRenderAPI()->beginFrame()) {
-      return; // Swapchain was recreated, try again next frame
-    }
 
     drawFrame();
     //drawImGui();
-
-    m_engine.getRenderAPI()->endFrame();
   }
   m_engine.getRenderAPI()->waitIdle();
 }
@@ -280,56 +286,33 @@ void Application::handleInput() {
 }
 
 void Application::updateUniformBuffer() {
-  UniformBufferObject ubo{};
 
-  auto* renderAPI = m_engine.getRenderAPI();
-  // Model matrix
-  static auto startTime = std::chrono::high_resolution_clock::now();
-  auto currentTime = std::chrono::high_resolution_clock::now();
-  float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
-  ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f) , glm::vec3(0.0f, 0.0f, 1.0f)) *
-      glm::rotate(glm::mat4(1.0f), 1.3f * time * glm::radians(45.0f) , glm::vec3(0.0f, 1.0f, 0.0f)) *
+  auto model = glm::rotate(glm::mat4(1.0f), m_time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
+      glm::rotate(glm::mat4(1.0f), 1.3f * m_time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
       glm::rotate(glm::mat4(1.0f), glm::radians(45.0f) , glm::vec3(1.0f, 0.0f, 0.0f));
 
+  auto& rp = m_scene->getRegistry().get<ailo::RenderPrimitive>(m_cubeEntity);
+  rp.setTransform(model);
+
   // View matrix: look at the scene from above
-  ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+  m_camera->view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-  // Projection matrix: perspective projection
-  auto extent = renderAPI->getSwapchainExtent();
-  ubo.proj = glm::perspective(glm::radians(45.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
-  ubo.proj[1][1] *= -1; // Flip Y for Vulkan
-
-  // Update the uniform buffer
-  renderAPI->updateBuffer(m_uniformBuffer, &ubo, sizeof(ubo));
+  m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 10.0f);
+  m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 
 void Application::drawFrame() {
-  auto* renderAPI = m_engine.getRenderAPI();
-
-  // Update uniform buffer for current frame
   updateUniformBuffer();
-  renderAPI->beginRenderPass();
 
-  renderAPI->bindPipeline(m_pipeline);
+  auto renderer = m_engine.getRenderer();
+  renderer->render(m_engine, *m_scene, *m_camera);
 
-  renderAPI->bindDescriptorSet(m_descriptorSet);
-  renderAPI->bindVertexBuffer(m_vertexBuffer);
-  renderAPI->bindIndexBuffer(m_indexBuffer);
-
-  renderAPI->drawIndexed(static_cast<uint32_t>(indices.size()));
-
-  renderAPI->endRenderPass();
 }
 
 void Application::drawImGui() {
-  double now = glfwGetTime();
-  const float timeStep = m_time > 0 ? (float) ((double) (now - m_time)) :
-                         (float) (1.0f / 60.0f);
-  m_time = now;
 
   ImGuiIO& io = ImGui::GetIO();
-  io.DeltaTime = timeStep;
+  io.DeltaTime = m_deltaTime;
 
   ImGui::NewFrame();
 
@@ -343,23 +326,11 @@ void Application::drawImGui() {
 void Application::cleanup() {
   m_imguiProcessor.reset();
 
-  auto* renderAPI = m_engine.getRenderAPI();
-  // Clean up uniform buffer
-  renderAPI->destroyBuffer(m_uniformBuffer);
+  m_vertexBuffer->destroy(m_engine);
+  m_indexBuffer->destroy(m_engine);
 
-  // Clean up descriptor set
-  renderAPI->destroyDescriptorSet(m_descriptorSet);
-
-  // Clean up descriptor set layout
-  renderAPI->destroyDescriptorSetLayout(m_descriptorSetLayout);
-
-  // Clean up texture
-  renderAPI->destroyTexture(m_texture);
-
-  renderAPI->destroyBuffer(m_vertexBuffer);
-  renderAPI->destroyBuffer(m_indexBuffer);
+  auto renderAPI = m_engine.getRenderAPI();
   renderAPI->destroyPipeline(m_pipeline);
-
   renderAPI->shutdown();
 
   glfwSetKeyCallback(m_window, nullptr);

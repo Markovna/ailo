@@ -9,5 +9,6 @@ vk::CullModeFlags getCullMode(CullingMode mode);
 vk::BlendOp getBlendOp(BlendOperation);
 vk::BlendFactor getBlendFunction(BlendFunction);
 vk::CompareOp getCompareOperation(CompareOp);
+vk::BufferUsageFlagBits getBufferUsage(BufferBinding);
 
 }

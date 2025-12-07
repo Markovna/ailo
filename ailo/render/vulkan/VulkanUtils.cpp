@@ -35,4 +35,14 @@ vk::CompareOp getCompareOperation(CompareOp compOp) {
   return static_cast<vk::CompareOp>(compOp);
 }
 
+vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
+  switch(binding) {
+    case BufferBinding::INDEX: return vk::BufferUsageFlagBits::eIndexBuffer;
+    case BufferBinding::VERTEX: return vk::BufferUsageFlagBits::eVertexBuffer;
+    case BufferBinding::UNIFORM: return vk::BufferUsageFlagBits::eUniformBuffer;
+    case BufferBinding::UNKNOWN: return static_cast<vk::BufferUsageFlagBits>(0);
+  }
+  return static_cast<vk::BufferUsageFlagBits>(0);
+}
+
 }

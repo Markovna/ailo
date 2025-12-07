@@ -3,9 +3,11 @@
 #include "GLFW/glfw3.h"
 #include "Engine.h"
 #include "render/RenderAPI.h"
-#include "render/RenderAPI.h"
+#include "render/RenderPrimitive.h"
 #include "render/ImGuiProcessor.h"
 #include "input/InputTypes.h"
+#include "ecs/Scene.h"
+#include "render/Renderer.h"
 
 class Application {
   public:
@@ -14,16 +16,16 @@ class Application {
   private:
     GLFWwindow* m_window = nullptr;
     ailo::Engine m_engine;
+    std::unique_ptr<ailo::Scene> m_scene;
     std::unique_ptr<ailo::ImGuiProcessor> m_imguiProcessor;
-    ailo::BufferHandle m_vertexBuffer;
-    ailo::BufferHandle m_indexBuffer;
+    std::unique_ptr<ailo::BufferObject> m_vertexBuffer;
+    std::unique_ptr<ailo::BufferObject> m_indexBuffer;
+    std::unique_ptr<ailo::Camera> m_camera;
     ailo::PipelineHandle m_pipeline;
-    ailo::TextureHandle m_texture;
-
-    ailo::BufferHandle m_uniformBuffer;
-    ailo::DescriptorSetLayoutHandle m_descriptorSetLayout;
-    ailo::DescriptorSetHandle m_descriptorSet;
+    ailo::Entity m_cubeEntity;
+//    ailo::TextureHandle m_texture;
     float m_time;
+    float m_deltaTime;
 
     // GLFW callback functions
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);

@@ -28,7 +28,19 @@ add_executable(ailo
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-    ailo/utils/ResourceAllocator.h ailo/Engine.cpp ailo/Engine.h ailo/Application.cpp ailo/Application.h ailo/render/vulkan/VulkanUtils.cpp ailo/render/vulkan/VulkanUtils.h)
+    ailo/utils/ResourceAllocator.h
+    ailo/Engine.cpp
+    ailo/Engine.h
+    ailo/Application.cpp
+    ailo/Application.h
+    ailo/render/vulkan/VulkanUtils.cpp
+    ailo/render/vulkan/VulkanUtils.h
+    ailo/render/RenderPrimitive.cpp
+    ailo/render/RenderPrimitive.h
+    ailo/render/Renderer.cpp
+    ailo/render/Renderer.h
+    ailo/ecs/ECS.h
+        ailo/ecs/Scene.cpp ailo/ecs/Scene.h)
 
 # Link libraries
 target_link_libraries(ailo
@@ -81,6 +93,3 @@ add_shader(ailo shaders/shader.vert)
 add_shader(ailo shaders/shader.frag)
 add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
-
-# Create shaders directory in build folder
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)

@@ -158,6 +158,13 @@ void RenderAPI::endFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
+    for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
+      DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
+      m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+      descriptorSets.free(descriptorSetHandle);
+    }
+    m_descriptorSetsToDestroy.clear();
+
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     flushCommandBuffer();
     m_swapChainImageIndex = -1;
@@ -281,11 +288,12 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
     buffer.buffer = vkBuffer;
 }
 
-BufferHandle RenderAPI::createBuffer(uint64_t size) {
+BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
   BufferHandle handle = buffers.allocate();
   Buffer& buffer = buffers.get(handle);
-  allocateBuffer(buffer, vk::BufferUsageFlagBits::eUniformBuffer, size);
-  buffer.binding = BufferBinding::UNIFORM;
+  auto usageFlags = vkutils::getBufferUsage(bufferBinding);
+  allocateBuffer(buffer, usageFlags, size);
+  buffer.binding = bufferBinding;
   return handle;
 }
 
@@ -385,13 +393,22 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 
 // Descriptor set management
 
-DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<vk::DescriptorSetLayoutBinding>& bindings) {
+DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
     DescriptorSetLayoutHandle handle = descriptorSetLayouts.allocate();
     DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(handle);
 
+    std::vector<vk::DescriptorSetLayoutBinding> vkBindings;
+    vkBindings.resize(bindings.size());
+    for(auto i = 0; i < bindings.size(); i++) {
+      vkBindings[i].binding = bindings[i].binding;
+      vkBindings[i].descriptorType = bindings[i].descriptorType;
+      vkBindings[i].stageFlags = bindings[i].stageFlags;
+      vkBindings[i].descriptorCount = 1;
+    }
+
     vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
+    layoutInfo.bindingCount = static_cast<uint32_t>(vkBindings.size());
+    layoutInfo.pBindings = vkBindings.data();
 
     descriptorSetLayout.layout = m_device.createDescriptorSetLayout(layoutInfo);
     for(auto& binding : bindings) {
@@ -411,8 +428,8 @@ void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
   descriptorSetLayouts.free(handle);
 }
 
-DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle dslh) {
-    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(dslh);
+DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
+    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(layoutHandle);
     auto& layout = descriptorSetLayout.layout;
 
     DescriptorSetHandle handle = descriptorSets.allocate();
@@ -426,6 +443,7 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle dsl
     auto result = m_device.allocateDescriptorSets(allocInfo);
     descriptorSet.descriptorSet = result[0];
     descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
+    descriptorSet.layoutHandle = layoutHandle;
 
     return handle;
 }
@@ -433,9 +451,7 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle dsl
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
-    DescriptorSet& descriptorSet = descriptorSets.get(handle);
-    m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
-    descriptorSets.free(handle);
+    m_descriptorSetsToDestroy.push_back(handle);
 }
 
 void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding) {
@@ -480,18 +496,24 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
 }
 
-void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t firstSet) {
-  auto& currentPipeline = pipelines.get(m_currentPipeline);
+void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets) {
+  Pipeline& currentPipeline = pipelines.get(m_currentPipeline);
+  assert(descriptorSetHandle);
   DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
+  DescriptorSetLayout& layout = descriptorSetLayouts.get(descriptorSet.layoutHandle);
+
+  std::array<uint32_t, 32> dynamicOffsetsArray { };
+  assert(dynamicOffsets.size() <= dynamicOffsetsArray.size());
+  std::copy(dynamicOffsets.begin(), dynamicOffsets.end(), dynamicOffsetsArray.begin());
 
   m_currentCommandBuffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         currentPipeline.layout,
-        firstSet,
+        setIndex,
         1,
         &descriptorSet.descriptorSet,
-        0,
-        nullptr
+        static_cast<uint32_t>(dynamicOffsets.size()),
+        dynamicOffsetsArray.data()
     );
 }
 
@@ -650,19 +672,34 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates = dynamicStates.data();
 
+    std::vector<vk::DescriptorSetLayout> setLayouts;
+    auto& layout = description.layout;
+    for(auto& set : layout.sets) {
+      std::vector<vk::DescriptorSetLayoutBinding> bindings;
+      for(auto& binding : set) {
+        vk::DescriptorSetLayoutBinding vkBinding;
+        vkBinding.binding = binding.binding;
+        vkBinding.descriptorType = binding.descriptorType;
+        vkBinding.stageFlags = binding.stageFlags;
+        vkBinding.descriptorCount = 1;
+        bindings.push_back(vkBinding);
+      }
+
+      vk::DescriptorSetLayoutCreateInfo layoutInfo {};
+      layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+      layoutInfo.pBindings = bindings.data();
+
+      auto descriptorSetLayout = m_device.createDescriptorSetLayout(layoutInfo);
+      setLayouts.push_back(descriptorSetLayout);
+    }
+
+    pipeline.descriptorSetLayouts = setLayouts;
+
     // Pipeline layout
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-    if (!description.uniformBindings.empty()) {
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.bindingCount = static_cast<uint32_t>(description.uniformBindings.size());
-        layoutInfo.pBindings = description.uniformBindings.data();
+    pipelineLayoutInfo.setLayoutCount = setLayouts.size();
+    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
 
-        auto descriptorSetLayout = m_device.createDescriptorSetLayout(layoutInfo);
-        pipeline.descriptorSetLayout = descriptorSetLayout;
-
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-    }
     pipeline.layout = m_device.createPipelineLayout(pipelineLayoutInfo);
 
     // Create graphics pipeline
@@ -700,7 +737,9 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     Pipeline& pipeline = pipelines.get(handle);
 
     m_device.destroyPipeline(pipeline.pipeline);
-    m_device.destroyDescriptorSetLayout(pipeline.descriptorSetLayout);
+    for(auto descriptorSetLayout : pipeline.descriptorSetLayouts) {
+      m_device.destroyDescriptorSetLayout(descriptorSetLayout);
+    }
     m_device.destroyPipelineLayout(pipeline.layout);
 
     pipelines.free(handle);
@@ -1139,10 +1178,10 @@ bool RenderAPI::checkValidationLayerSupport() {
 }
 
 std::vector<const char*> RenderAPI::getRequiredExtensions() {
-    uint32_t glfwExtensionCount = 0;
-    const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+    uint32_t extensionCount = 0;
+    const char** requiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
 
-    std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+    std::vector<const char*> extensions(requiredExtensions, requiredExtensions + extensionCount);
 
     if (enableValidationLayers) {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
