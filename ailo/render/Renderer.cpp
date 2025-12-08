@@ -77,7 +77,9 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   if(primitivesCount > perObjectUniformBufferData.size()) {
     perObjectUniformBufferData.resize(primitivesCount);
 
-    backend.destroyBuffer(m_objectsUniformBufferHandle);
+    if(m_objectsUniformBufferHandle) {
+      backend.destroyBuffer(m_objectsUniformBufferHandle);
+    }
     m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
     backend.destroyDescriptorSet(m_objectDescriptorSet);
@@ -102,14 +104,14 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 void Renderer::terminate(Engine& engine) {
   RenderAPI& backend = *engine.getRenderAPI();
 
-  backend.destroyBuffer(m_viewUniformBufferHandle);
-  backend.destroyBuffer(m_objectsUniformBufferHandle);
-
   backend.destroyDescriptorSet(m_viewDescriptorSet);
   backend.destroyDescriptorSet(m_objectDescriptorSet);
 
   backend.destroyDescriptorSetLayout(m_viewDescriptorSetLayout);
   backend.destroyDescriptorSetLayout(m_objectDescriptorSetLayout);
+
+  backend.destroyBuffer(m_viewUniformBufferHandle);
+  backend.destroyBuffer(m_objectsUniformBufferHandle);
 }
 
 }

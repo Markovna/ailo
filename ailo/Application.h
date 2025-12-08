@@ -15,7 +15,7 @@ class Application {
 
   private:
     GLFWwindow* m_window = nullptr;
-    ailo::Engine m_engine;
+    std::unique_ptr<ailo::Engine> m_engine;
     std::unique_ptr<ailo::Scene> m_scene;
     std::unique_ptr<ailo::ImGuiProcessor> m_imguiProcessor;
     std::unique_ptr<ailo::BufferObject> m_vertexBuffer;
@@ -34,8 +34,7 @@ class Application {
     static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
-    void initWindow();
-    void initRender();
+    void init();
     void mainLoop();
     void handleInput();
     void updateUniformBuffer();

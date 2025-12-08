@@ -14,10 +14,15 @@ Engine::Engine() :
 
 Engine::~Engine() {
   m_renderer->terminate(*this);
+  m_renderAPI->shutdown();
 
   m_renderer.reset();
   m_renderAPI.reset();
   m_inputSystem.reset();
+}
+
+void Engine::init(GLFWwindow* window) {
+  m_renderAPI->init(window);
 }
 
 void Engine::render(Scene& scene, Camera& camera) {

@@ -1,4 +1,5 @@
 #include "ImGuiProcessor.h"
+#include <OS.h>
 #include <cstring>
 #include <iostream>
 
@@ -101,8 +102,6 @@ void ImGuiProcessor::createPipeline() {
 
     // Create the graphics pipeline
     m_pipeline = m_renderAPI->createGraphicsPipeline(
-        "shaders/imgui.vert.spv",
-        "shaders/imgui.frag.spv",
         ailo::PipelineDescription {
             .raster = ailo::RasterDescription {
                 .cullingMode = ailo::CullingMode::NONE,
@@ -118,9 +117,11 @@ void ImGuiProcessor::createPipeline() {
             },
             .layout {
               .sets = { { bindings} }
-            }
-        },
-        vertexInput
+            },
+            .vertexInput = vertexInput,
+            .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
+            .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv")
+        }
     );
 }
 

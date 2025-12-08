@@ -16,13 +16,11 @@
 #include "render/RenderPrimitive.h"
 #include "input/InputTypes.h"
 #include "input/InputSystem.h"
+#include "OS.h"
 
-#include <iostream>
 #include <memory>
-#include <stdexcept>
 #include <vector>
 #include <array>
-#include <chrono>
 
 // Helper functions for GLFW to platform-agnostic conversion
 static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
@@ -95,20 +93,18 @@ const std::vector<uint16_t> indices = {
     3, 2, 6, 6, 7, 3
 };
 
-struct UniformBufferObject {
-  alignas(16) glm::mat4 model;
-  alignas(16) glm::mat4 view;
-  alignas(16) glm::mat4 proj;
-};
-
 void Application::run() {
-  initWindow();
-  initRender();
+  init();
   mainLoop();
   cleanup();
 }
 
-void Application::initWindow() {
+void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
+  auto app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+  app->m_engine->getRenderAPI()->handleWindowResize();
+}
+
+void Application::init() {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
@@ -122,16 +118,10 @@ void Application::initWindow() {
   glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
   glfwSetCursorPosCallback(m_window, cursorPosCallback);
   glfwSetScrollCallback(m_window, scrollCallback);
-}
 
-void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-  auto app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  app->m_engine.getRenderAPI()->handleWindowResize();
-}
-
-void Application::initRender() {
-  auto* renderAPI = m_engine.getRenderAPI();
-  renderAPI->init(m_window, WIDTH, HEIGHT);
+  m_engine = std::make_unique<ailo::Engine>();
+  m_engine->init(m_window);
+  auto* renderAPI = m_engine->getRenderAPI();
 
   m_scene = std::make_unique<ailo::Scene>();
 
@@ -181,8 +171,6 @@ void Application::initRender() {
   );
 
   m_pipeline = renderAPI->createGraphicsPipeline(
-      "shaders/shader.vert.spv",
-      "shaders/shader.frag.spv",
       ailo::PipelineDescription {
         .raster = ailo::RasterDescription {
             .cullingMode = ailo::CullingMode::FRONT,
@@ -195,16 +183,18 @@ void Application::initRender() {
                 { perViewLayoutBinding },
                 { perObjectLayoutBinding }
             }
-        }
-      },
-      vertexInput
+        },
+        .vertexInput = vertexInput,
+        .vertexShader = ailo::os::readFile("shaders/shader.vert.spv"),
+        .fragmentShader = ailo::os::readFile("shaders/shader.frag.spv")
+      }
   );
 
-  m_indexBuffer = std::make_unique<ailo::BufferObject>(m_engine, ailo::BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
-  m_indexBuffer->updateBuffer(m_engine, indices.data(), sizeof(uint16_t) * indices.size());
+  m_indexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
+  m_indexBuffer->updateBuffer(*m_engine, indices.data(), sizeof(uint16_t) * indices.size());
 
-  m_vertexBuffer = std::make_unique<ailo::BufferObject>(m_engine, ailo::BufferBinding::VERTEX, sizeof(Vertex) * vertices.size());
-  m_vertexBuffer->updateBuffer(m_engine, vertices.data(), sizeof(Vertex) * vertices.size());
+  m_vertexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::VERTEX, sizeof(Vertex) * vertices.size());
+  m_vertexBuffer->updateBuffer(*m_engine, vertices.data(), sizeof(Vertex) * vertices.size());
 
   m_cubeEntity = m_scene->getRegistry().create();
   auto& renderPrimitive = m_scene->getRegistry().add<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
@@ -221,13 +211,13 @@ void Application::mainLoop() {
     m_time = now;
 
     glfwPollEvents();
-    m_engine.getInputSystem()->processEvents();
+    m_engine->getInputSystem()->processEvents();
     handleInput();
 
     drawFrame();
     //drawImGui();
   }
-  m_engine.getRenderAPI()->waitIdle();
+  m_engine->getRenderAPI()->waitIdle();
 }
 
 void Application::handleImGuiEvent(ailo::Event& event) {
@@ -244,7 +234,7 @@ void Application::handleImGuiEvent(ailo::Event& event) {
 }
 
 void Application::handleInput() {
-  auto* inputSystem = m_engine.getInputSystem();
+  auto* inputSystem = m_engine->getInputSystem();
 
   ailo::Event event;
   while (inputSystem->pollEvent(event)) {
@@ -270,7 +260,7 @@ void Application::updateUniformBuffer() {
 void Application::drawFrame() {
   updateUniformBuffer();
 
-  m_engine.render(*m_scene, *m_camera);
+  m_engine->render(*m_scene, *m_camera);
 }
 
 void Application::drawImGui() {
@@ -290,12 +280,13 @@ void Application::drawImGui() {
 void Application::cleanup() {
   m_imguiProcessor.reset();
 
-  m_vertexBuffer->destroy(m_engine);
-  m_indexBuffer->destroy(m_engine);
+  m_vertexBuffer->destroy(*m_engine);
+  m_indexBuffer->destroy(*m_engine);
 
-  auto renderAPI = m_engine.getRenderAPI();
+  auto renderAPI = m_engine->getRenderAPI();
   renderAPI->destroyPipeline(m_pipeline);
-  renderAPI->shutdown();
+
+  m_engine.reset();
 
   glfwSetKeyCallback(m_window, nullptr);
   glfwSetFramebufferSizeCallback(m_window, nullptr);
@@ -308,7 +299,7 @@ void Application::cleanup() {
 
 void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto inputSystem = app->m_engine.getInputSystem();
+  auto inputSystem = app->m_engine->getInputSystem();
 
   ailo::KeyCode keyCode = glfwKeyToKeyCode(key);
   ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
@@ -333,7 +324,7 @@ void Application::keyCallback(GLFWwindow* window, int key, int scancode, int act
 
 void Application::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine.getInputSystem();
+  auto* inputSystem = app->m_engine->getInputSystem();
 
   ailo::MouseButton mouseButton = glfwButtonToMouseButton(button);
   ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
@@ -364,7 +355,7 @@ void Application::mouseButtonCallback(GLFWwindow* window, int button, int action
 
 void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine.getInputSystem();
+  auto* inputSystem = app->m_engine->getInputSystem();
 
   ImGuiIO& io = ImGui::GetIO();
   io.AddMousePosEvent((float)xpos, (float)ypos);
@@ -377,7 +368,7 @@ void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos
 
 void Application::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
   auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine.getInputSystem();
+  auto* inputSystem = app->m_engine->getInputSystem();
 
   ailo::MouseScrolledEvent event;
   event.xOffset = xoffset;

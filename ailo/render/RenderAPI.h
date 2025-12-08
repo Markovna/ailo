@@ -139,8 +139,13 @@ struct PipelineLayout {
 };
 
 struct PipelineDescription {
+  using ShaderCode = std::vector<char>;
+
   RasterDescription raster;
   PipelineLayout layout;
+  VertexInputDescription vertexInput;
+  ShaderCode vertexShader;
+  ShaderCode fragmentShader;
 };
 
 using PipelineHandle = Handle<Pipeline>;
@@ -154,7 +159,7 @@ public:
     ~RenderAPI() = default;
 
     // Initialization and shutdown
-    void init(GLFWwindow* window, uint32_t width, uint32_t height);
+    void init(GLFWwindow* window);
     void shutdown();
 
     // Frame lifecycle
@@ -184,10 +189,7 @@ public:
 
     // Pipeline management
     PipelineHandle createGraphicsPipeline(
-        const std::string& vertShaderPath,
-        const std::string& fragShaderPath,
-        const PipelineDescription& description,
-        const VertexInputDescription& vertexInput
+        const PipelineDescription& description
     );
     void destroyPipeline(const PipelineHandle& handle);
 
@@ -281,8 +283,6 @@ private:
 private:
     // Window
     GLFWwindow* m_window = nullptr;
-    uint32_t m_windowWidth = 0;
-    uint32_t m_windowHeight = 0;
     bool m_framebufferResized = false;
 
     // Core Vulkan objects

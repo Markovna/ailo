@@ -34,28 +34,10 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-static std::vector<char> readFile(const std::string& filename) {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file: " + filename);
-    }
-
-    size_t fileSize = (size_t) file.tellg();
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
 // Initialization and shutdown
 
-void RenderAPI::init(GLFWwindow* window, uint32_t width, uint32_t height) {
+void RenderAPI::init(GLFWwindow* window) {
     m_window = window;
-    m_windowWidth = width;
-    m_windowHeight = height;
 
     createInstance();
     setupDebugMessenger();
@@ -104,12 +86,6 @@ void RenderAPI::shutdown() {
 
     m_instance.destroySurfaceKHR(m_surface);
     m_instance.destroy();
-
-    assert(pipelines.size() == 0);
-    assert(buffers.size() == 0);
-    assert(descriptorSetLayouts.size() == 0);
-    assert(descriptorSets.size() == 0);
-    assert(textures.size() == 0);
 }
 
 // Frame lifecycle
@@ -570,18 +546,15 @@ void RenderAPI::createRenderPass() {
 // Pipeline management
 
 PipelineHandle RenderAPI::createGraphicsPipeline(
-    const std::string& vertShaderPath,
-    const std::string& fragShaderPath,
-    const PipelineDescription& description,
-    const VertexInputDescription& vertexInput) {
+    const PipelineDescription& description) {
 
     PipelineHandle handle = pipelines.allocate();
 
     Pipeline& pipeline = pipelines.get(handle);
 
     // Load shaders
-    auto vertShaderCode = readFile(vertShaderPath);
-    auto fragShaderCode = readFile(fragShaderPath);
+    auto vertShaderCode = description.vertexShader;
+    auto fragShaderCode = description.fragmentShader;
 
     vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -598,6 +571,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
+    auto vertexInput = description.vertexInput;
     // Vertex input
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInput.bindings.size());

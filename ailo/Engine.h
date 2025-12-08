@@ -2,6 +2,8 @@
 
 #include <memory>
 
+struct GLFWwindow;
+
 namespace ailo {
 
 struct RenderAPI;
@@ -15,6 +17,7 @@ class Engine {
   Engine();
   ~Engine();
 
+  void init(GLFWwindow*);
   void render(Scene&, Camera&);
 
   Renderer* getRenderer();
