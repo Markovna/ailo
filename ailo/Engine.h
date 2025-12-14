@@ -6,11 +6,11 @@ struct GLFWwindow;
 
 namespace ailo {
 
-struct RenderAPI;
-struct Renderer;
-struct InputSystem;
-struct Scene;
-struct Camera;
+class RenderAPI;
+class Renderer;
+class InputSystem;
+class Scene;
+class Camera;
 
 class Engine {
  public:
@@ -24,9 +24,11 @@ class Engine {
   RenderAPI* getRenderAPI();
   InputSystem* getInputSystem();
 
+  std::unique_ptr<Scene> createScene() const;
+
  private:
-  std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<RenderAPI> m_renderAPI;
+  std::unique_ptr<Renderer> m_renderer;
   std::unique_ptr<InputSystem> m_inputSystem;
 };
 

@@ -37,7 +37,7 @@ class Application {
     void init();
     void mainLoop();
     void handleInput();
-    void updateUniformBuffer();
+    void updateTransforms();
     void drawFrame();
     void cleanup();
     void drawImGui();

@@ -302,7 +302,7 @@ private:
     vk::Extent2D m_swapchainExtent;
     std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
-    int32_t m_swapChainImageIndex;
+    int32_t m_swapChainImageIndex{};
     vk::RenderPass m_renderPass;
 
     // Depth buffering
@@ -339,11 +339,11 @@ private:
 
     std::vector<DescriptorSetHandle> m_descriptorSetsToDestroy;
     // resources
-    ResourceAllocator<Pipeline> pipelines;
-    ResourceAllocator<Buffer> buffers;
-    ResourceAllocator<DescriptorSetLayout> descriptorSetLayouts;
-    ResourceAllocator<DescriptorSet> descriptorSets;
-    ResourceAllocator<Texture> textures;
+    ResourceAllocator<Pipeline> m_pipelines;
+    ResourceAllocator<Buffer> m_buffers;
+    ResourceAllocator<DescriptorSetLayout> m_descriptorSetLayouts;
+    ResourceAllocator<DescriptorSet> m_descriptorSets;
+    ResourceAllocator<Texture> m_textures;
 };
 
 } // namespace ailo

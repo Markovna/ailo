@@ -156,9 +156,9 @@ void RenderAPI::endFrame() {
 
 void RenderAPI::cleanupDescriptorSets() {
   for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
-    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
+    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     (void) m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
-    descriptorSets.free(descriptorSetHandle);
+    m_descriptorSets.free(descriptorSetHandle);
   }
   m_descriptorSetsToDestroy.clear();
 }
@@ -170,8 +170,8 @@ void RenderAPI::waitIdle() {
 // Buffer management
 
 BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
-    BufferHandle handle = buffers.allocate();
-    Buffer& vertexBuffer = buffers.get(handle);
+    BufferHandle handle = m_buffers.allocate();
+    Buffer& vertexBuffer = m_buffers.get(handle);
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
     if(data != nullptr) {
@@ -182,8 +182,8 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
 
 BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
-    BufferHandle handle = buffers.allocate();
-    Buffer& indexBuffer = buffers.get(handle);
+    BufferHandle handle = m_buffers.allocate();
+    Buffer& indexBuffer = m_buffers.get(handle);
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
     if(data != nullptr) {
@@ -264,8 +264,8 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
 }
 
 BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
-  BufferHandle handle = buffers.allocate();
-  Buffer& buffer = buffers.get(handle);
+  BufferHandle handle = m_buffers.allocate();
+  Buffer& buffer = m_buffers.get(handle);
   auto usageFlags = vkutils::getBufferUsage(bufferBinding);
   allocateBuffer(buffer, usageFlags, size);
   buffer.binding = bufferBinding;
@@ -275,21 +275,21 @@ BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size)
 void RenderAPI::destroyBuffer(const BufferHandle& handle) {
   if(!handle) { return; }
 
-  Buffer& buffer = buffers.get(handle);
+  Buffer& buffer = m_buffers.get(handle);
   vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
-  buffers.free(handle);
+  m_buffers.free(handle);
 }
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
-    Buffer& buffer = buffers.get(handle);
+    Buffer& buffer = m_buffers.get(handle);
     loadFromCpu(m_currentCommandBuffer, buffer, data, byteOffset, size);
 }
 
 // Texture management
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
-    TextureHandle handle = textures.allocate();
-    Texture& texture = textures.get(handle);
+    TextureHandle handle = m_textures.allocate();
+    Texture& texture = m_textures.get(handle);
 
     texture.format = format;
     texture.width = width;
@@ -333,16 +333,16 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
     if(!handle) { return; }
 
-    Texture& texture = textures.get(handle);
+    Texture& texture = m_textures.get(handle);
     m_device.destroySampler(texture.sampler);
     m_device.destroyImageView(texture.imageView);
     m_device.destroyImage(texture.image);
     m_device.freeMemory(texture.memory);
-    textures.free(handle);
+    m_textures.free(handle);
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
-    Texture& texture = textures.get(handle);
+    Texture& texture = m_textures.get(handle);
 
     // Create staging buffer
     // allocate stage buffer
@@ -369,8 +369,8 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 // Descriptor set management
 
 DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
-    DescriptorSetLayoutHandle handle = descriptorSetLayouts.allocate();
-    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(handle);
+    DescriptorSetLayoutHandle handle = m_descriptorSetLayouts.allocate();
+    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
 
     std::vector<vk::DescriptorSetLayoutBinding> vkBindings;
     vkBindings.resize(bindings.size());
@@ -398,17 +398,17 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
 void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
-  DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(handle);
+  DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
   m_device.destroyDescriptorSetLayout(descriptorSetLayout.layout);
-  descriptorSetLayouts.free(handle);
+  m_descriptorSetLayouts.free(handle);
 }
 
 DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
-    DescriptorSetLayout& descriptorSetLayout = descriptorSetLayouts.get(layoutHandle);
+    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(layoutHandle);
     auto& layout = descriptorSetLayout.layout;
 
-    DescriptorSetHandle handle = descriptorSets.allocate();
-    DescriptorSet& descriptorSet = descriptorSets.get(handle);
+    DescriptorSetHandle handle = m_descriptorSets.allocate();
+    DescriptorSet& descriptorSet = m_descriptorSets.get(handle);
 
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = m_descriptorPool;
@@ -430,8 +430,8 @@ void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
 }
 
 void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding) {
-    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
-    Buffer& buffer = buffers.get(bufferHandle);
+    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
+    Buffer& buffer = m_buffers.get(bufferHandle);
 
     vk::DescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer.buffer;
@@ -452,8 +452,8 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
 }
 
 void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding) {
-    DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
-    Texture& texture = textures.get(textureHandle);
+    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
+    Texture& texture = m_textures.get(textureHandle);
 
     vk::DescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -472,10 +472,9 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 }
 
 void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets) {
-  Pipeline& currentPipeline = pipelines.get(m_currentPipeline);
+  Pipeline& currentPipeline = m_pipelines.get(m_currentPipeline);
   assert(descriptorSetHandle);
-  DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
-  DescriptorSetLayout& layout = descriptorSetLayouts.get(descriptorSet.layoutHandle);
+  DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
 
   std::array<uint32_t, 32> dynamicOffsetsArray { };
   assert(dynamicOffsets.size() <= dynamicOffsetsArray.size());
@@ -553,9 +552,9 @@ void RenderAPI::createRenderPass() {
 PipelineHandle RenderAPI::createGraphicsPipeline(
     const PipelineDescription& description) {
 
-    PipelineHandle handle = pipelines.allocate();
+    PipelineHandle handle = m_pipelines.allocate();
 
-    Pipeline& pipeline = pipelines.get(handle);
+    Pipeline& pipeline = m_pipelines.get(handle);
 
     // Load shaders
     auto vertShaderCode = description.vertexShader;
@@ -707,7 +706,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     if(!handle) { return; }
 
-    Pipeline& pipeline = pipelines.get(handle);
+    Pipeline& pipeline = m_pipelines.get(handle);
 
     m_device.destroyPipeline(pipeline.pipeline);
     for(auto descriptorSetLayout : pipeline.descriptorSetLayouts) {
@@ -715,7 +714,7 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     }
     m_device.destroyPipelineLayout(pipeline.layout);
 
-    pipelines.free(handle);
+    m_pipelines.free(handle);
 }
 
 // Command recording
@@ -757,20 +756,20 @@ void RenderAPI::endRenderPass() {
 }
 
 void RenderAPI::bindPipeline(const PipelineHandle& handle) {
-    auto& currentPipeline = pipelines.get(handle);
+    auto& currentPipeline = m_pipelines.get(handle);
     m_currentCommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
     m_currentPipeline = handle;
 }
 
 void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
-    Buffer& buffer = buffers.get(handle);
+    Buffer& buffer = m_buffers.get(handle);
     vk::Buffer vertexBuffers[] = {buffer.buffer};
     vk::DeviceSize offsets[] = {0};
     m_currentCommandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 }
 
 void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
-    Buffer& buffer = buffers.get(handle);
+    Buffer& buffer = m_buffers.get(handle);
     m_currentCommandBuffer.bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 

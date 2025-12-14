@@ -123,7 +123,7 @@ void Application::init() {
   m_engine->init(m_window);
   auto* renderAPI = m_engine->getRenderAPI();
 
-  m_scene = std::make_unique<ailo::Scene>();
+  m_scene = m_engine->createScene();
 
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
@@ -165,7 +165,7 @@ void Application::init() {
   ailo::VertexInputDescription vertexInput;
   vertexInput.bindings.push_back(Vertex::getBindingDescription());
   auto attributeDescriptions = Vertex::getAttributeDescriptions();
-  vertexInput.attributes = std::vector<vk::VertexInputAttributeDescription>(
+  vertexInput.attributes = std::vector(
       attributeDescriptions.begin(),
       attributeDescriptions.end()
   );
@@ -196,8 +196,8 @@ void Application::init() {
   m_vertexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::VERTEX, sizeof(Vertex) * vertices.size());
   m_vertexBuffer->updateBuffer(*m_engine, vertices.data(), sizeof(Vertex) * vertices.size());
 
-  m_cubeEntity = m_scene->getRegistry().create();
-  auto& renderPrimitive = m_scene->getRegistry().add<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
+  m_cubeEntity = m_scene->addEntity();
+  auto& renderPrimitive = m_scene->addComponent<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
   renderPrimitive.setPipeline(m_pipeline);
 
   m_camera = std::make_unique<ailo::Camera>();
@@ -205,9 +205,8 @@ void Application::init() {
 
 void Application::mainLoop() {
   while (!glfwWindowShouldClose(m_window)) {
-    double now = glfwGetTime();
-    m_deltaTime = m_time > 0 ? (float) ((double) (now - m_time)) :
-                           (float) (1.0f / 60.0f);
+    const auto now = static_cast<float>(glfwGetTime());
+    m_deltaTime = now - m_time;
     m_time = now;
 
     glfwPollEvents();
@@ -242,13 +241,13 @@ void Application::handleInput() {
   }
 }
 
-void Application::updateUniformBuffer() {
+void Application::updateTransforms() {
   auto model = glm::rotate(glm::mat4(1.0f), m_time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
       glm::rotate(glm::mat4(1.0f), 1.3f * m_time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
       glm::rotate(glm::mat4(1.0f), glm::radians(45.0f) , glm::vec3(1.0f, 0.0f, 0.0f));
 
-  auto& rp = m_scene->getRegistry().get<ailo::RenderPrimitive>(m_cubeEntity);
-  rp.setTransform(model);
+  auto& rp = m_scene->get<ailo::RenderPrimitive>(m_cubeEntity);
+  rp.setTransform(std::move(model));
 
   // View matrix: look at the scene from above
   m_camera->view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -258,7 +257,7 @@ void Application::updateUniformBuffer() {
 }
 
 void Application::drawFrame() {
-  updateUniformBuffer();
+  updateTransforms();
 
   m_engine->render(*m_scene, *m_camera);
 }

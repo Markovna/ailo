@@ -17,7 +17,7 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   backend->beginRenderPass();
 
   uint32_t bufferOffset = 0;
-  auto primitivesView = scene.getRegistry().view<RenderPrimitive>();
+  auto primitivesView = scene.view<RenderPrimitive>();
   for(auto [entity, primitive] : primitivesView.each()) {
     auto indexBuffer = primitive.getIndexBuffer();
     auto vertexBuffer = primitive.getVertexBuffer();
@@ -67,11 +67,8 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
     m_objectDescriptorSetLayout = backend.createDescriptorSetLayout({ objectUboBinding });
   }
 
-  size_t primitivesCount = 0;
-  auto primitivesView = scene.getRegistry().view<RenderPrimitive>();
-  for(auto [entity, primitive] : primitivesView.each()) {
-    primitivesCount++;
-  }
+  auto primitivesView = scene.view<RenderPrimitive>();
+  size_t primitivesCount = primitivesView.size();
 
   // prepare per object buffer
   if(primitivesCount > perObjectUniformBufferData.size()) {
@@ -92,7 +89,7 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   }
 
   uint32_t index = 0;
-  for(auto [entity, primitive] : primitivesView.each()) {
+  for(const auto& [entity, primitive] : primitivesView.each()) {
     perObjectUniformBufferData[index].model = primitive.getTransform();
     index++;
   }

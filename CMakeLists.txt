@@ -16,6 +16,8 @@ add_subdirectory(third_party/glfw)
 add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)
+add_subdirectory(third_party/entt)
+
 add_subdirectory(third_party/imgui)
 
 # Add executable
@@ -39,10 +41,13 @@ add_executable(ailo
     ailo/render/RenderPrimitive.h
     ailo/render/Renderer.cpp
     ailo/render/Renderer.h
-    ailo/ecs/ECS.h
     ailo/ecs/Scene.cpp
     ailo/ecs/Scene.h
-    ailo/utils/Utils.h ailo/render/Shader.cpp ailo/render/Shader.h ailo/OS.cpp ailo/OS.h)
+    ailo/utils/Utils.h
+    ailo/render/Shader.cpp
+    ailo/render/Shader.h
+    ailo/OS.cpp
+    ailo/OS.h)
 
 # Link libraries
 target_link_libraries(ailo
@@ -51,6 +56,7 @@ target_link_libraries(ailo
         glm::glm
         stb_image
         GPUOpen::VulkanMemoryAllocator
+        EnTT::EnTT
         imgui)
 
 # Include directories
