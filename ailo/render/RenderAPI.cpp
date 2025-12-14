@@ -65,10 +65,13 @@ void RenderAPI::shutdown() {
     cleanupSwapchain();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        m_device.destroySemaphore(m_renderFinishedSemaphores[i]);
         m_device.destroySemaphore(m_imageAvailableSemaphores[i]);
         m_device.destroyFence(m_inFlightFences[i]);
         destroyStageBuffers(i);
+    }
+
+    for (auto renderFinishedSemaphore : m_renderFinishedSemaphores) {
+        m_device.destroySemaphore(renderFinishedSemaphore);
     }
 
     cleanupDescriptorSets();
@@ -91,6 +94,8 @@ void RenderAPI::shutdown() {
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
+    m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
     auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX,
                                                 m_imageAvailableSemaphores[m_currentFrame], nullptr);
 
@@ -118,7 +123,7 @@ void RenderAPI::endFrame() {
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_currentCommandBuffer;
 
-    vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_currentFrame]};
+    vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_swapChainImageIndex]};
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -128,10 +133,11 @@ void RenderAPI::endFrame() {
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 
+    uint32_t swapchainImageIndex = m_swapChainImageIndex;
     vk::SwapchainKHR swapchains[] = {m_swapchain};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
-    presentInfo.pImageIndices = &m_swapChainImageIndex;
+    presentInfo.pImageIndices = &swapchainImageIndex;
 
     auto result = m_presentQueue.presentKHR(presentInfo);
 
@@ -144,7 +150,6 @@ void RenderAPI::endFrame() {
 
     cleanupDescriptorSets();
 
-    m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     flushCommandBuffer();
     m_swapChainImageIndex = -1;
 }
@@ -152,7 +157,7 @@ void RenderAPI::endFrame() {
 void RenderAPI::cleanupDescriptorSets() {
   for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
     DescriptorSet& descriptorSet = descriptorSets.get(descriptorSetHandle);
-    m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+    (void) m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
     descriptorSets.free(descriptorSetHandle);
   }
   m_descriptorSetsToDestroy.clear();
@@ -1035,7 +1040,6 @@ void RenderAPI::createCommandBuffers() {
 
 void RenderAPI::createSyncObjects() {
     m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
     vk::SemaphoreCreateInfo semaphoreInfo{};
@@ -1044,9 +1048,14 @@ void RenderAPI::createSyncObjects() {
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         m_imageAvailableSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
-        m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
         m_inFlightFences[i] = m_device.createFence(fenceInfo);
     }
+
+    m_renderFinishedSemaphores.resize(m_swapchainImages.size());
+    for (size_t i = 0; i < m_swapchainImages.size(); i++) {
+        m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
+    }
+
 }
 
 void RenderAPI::createDescriptorPool() {

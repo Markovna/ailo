@@ -9,6 +9,7 @@
 #include <vector>
 #include <optional>
 #include <string>
+#include <bitset>
 
 #include "utils/ResourceAllocator.h"
 
@@ -301,7 +302,7 @@ private:
     vk::Extent2D m_swapchainExtent;
     std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
-    uint32_t m_swapChainImageIndex;
+    int32_t m_swapChainImageIndex;
     vk::RenderPass m_renderPass;
 
     // Depth buffering

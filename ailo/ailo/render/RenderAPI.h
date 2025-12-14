@@ -1,0 +1,348 @@
+#pragma once
+
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.hpp>
+#include <vk_mem_alloc.h>
+
+#include <glm/glm.hpp>
+#include <vector>
+#include <optional>
+#include <string>
+
+#include "utils/ResourceAllocator.h"
+
+namespace ailo {
+
+enum class BufferBinding : uint8_t {
+  UNKNOWN,
+  VERTEX,
+  INDEX,
+  UNIFORM,
+};
+
+enum class CullingMode : uint8_t {
+  NONE,
+  FRONT,
+  BACK,
+  FRONT_AND_BACK
+};
+
+enum class BlendOperation : uint8_t {
+  ADD,
+  SUBTRACT,
+  REVERSE_SUBTRACT,
+  MIN,
+  MAX
+};
+
+enum class BlendFunction : uint8_t {
+  ZERO,
+  ONE,
+  SRC_COLOR,
+  ONE_MINUS_SRC_COLOR,
+  DST_COLOR,
+  ONE_MINUS_DST_COLOR,
+  SRC_ALPHA,
+  ONE_MINUS_SRC_ALPHA,
+  DST_ALPHA,
+  ONE_MINUS_DST_ALPHA,
+  SRC_ALPHA_SATURATE
+};
+
+enum class CompareOp : uint8_t {
+  NEVER = 0,
+  LESS,
+  EQUAL,
+  LESS_OR_EQUAL,
+  GREATER,
+  NOT_EQUAL,
+  GREATER_OR_EQUAL,
+  ALWAYS
+};
+
+struct Buffer {
+    vk::Buffer buffer;
+    uint64_t size;
+    VmaAllocation vmaAllocation;
+    VmaAllocationInfo allocationInfo;
+    BufferBinding binding;
+};
+
+struct StageBuffer {
+  vk::Buffer buffer;
+  uint64_t size;
+  VmaAllocation vmaAllocation;
+  void* mapping;
+};
+
+struct Pipeline {
+    vk::Pipeline pipeline;
+    vk::PipelineLayout layout;
+    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+};
+
+struct DescriptorSetLayout {
+  using bitmask_t = std::bitset<64>;
+
+  vk::DescriptorSetLayout layout;
+  bitmask_t dynamicBindings;
+};
+
+using DescriptorSetLayoutHandle = Handle<DescriptorSetLayout>;
+
+struct DescriptorSet {
+    vk::DescriptorSet descriptorSet;
+    DescriptorSetLayout::bitmask_t dynamicBindings;
+    DescriptorSetLayoutHandle layoutHandle;
+};
+
+struct Texture {
+    vk::Image image;
+    vk::DeviceMemory memory;
+    vk::ImageView imageView;
+    vk::Sampler sampler;
+    vk::Format format;
+    uint32_t width;
+    uint32_t height;
+};
+
+struct VertexInputDescription {
+    std::vector<vk::VertexInputBindingDescription> bindings;
+    std::vector<vk::VertexInputAttributeDescription> attributes;
+};
+
+struct RasterDescription {
+  CullingMode cullingMode = CullingMode::FRONT;
+  bool inverseFrontFace = false;
+  bool blendEnable = false;
+  bool depthWriteEnable = true;
+  BlendOperation rgbBlendOp;
+  BlendOperation alphaBlendOp;
+  BlendFunction srcRgbBlendFunc;
+  BlendFunction srcAlphaBlendFunc;
+  BlendFunction dstRgbBlendFunc;
+  BlendFunction dstAlphaBlendFunc;
+  CompareOp depthCompareOp = CompareOp::LESS;
+};
+
+struct DescriptorSetLayoutBinding {
+  uint32_t binding;
+  vk::DescriptorType descriptorType;
+  vk::ShaderStageFlagBits stageFlags;
+};
+
+struct PipelineLayout {
+  using SetLayout = std::vector<DescriptorSetLayoutBinding>;
+
+  std::vector<SetLayout> sets;
+};
+
+struct PipelineDescription {
+  using ShaderCode = std::vector<char>;
+
+  RasterDescription raster;
+  PipelineLayout layout;
+  VertexInputDescription vertexInput;
+  ShaderCode vertexShader;
+  ShaderCode fragmentShader;
+};
+
+using PipelineHandle = Handle<Pipeline>;
+using BufferHandle = Handle<Buffer>;
+using DescriptorSetHandle = Handle<DescriptorSet>;
+using TextureHandle = Handle<Texture>;
+
+class RenderAPI {
+public:
+    RenderAPI() = default;
+    ~RenderAPI() = default;
+
+    // Initialization and shutdown
+    void init(GLFWwindow* window);
+    void shutdown();
+
+    // Frame lifecycle
+    bool beginFrame();
+    void endFrame();
+    void waitIdle();
+
+    // Buffer management
+    BufferHandle createVertexBuffer(const void* data, uint64_t size);
+    BufferHandle createIndexBuffer(const void* data, uint64_t size);
+    BufferHandle createBuffer(BufferBinding, uint64_t size);
+    void destroyBuffer(const BufferHandle& handle);
+    void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
+
+    // Texture management
+    TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear);
+    void destroyTexture(const TextureHandle& handle);
+    void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0);
+
+    // Descriptor set management
+    DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
+    void destroyDescriptorSetLayout(DescriptorSetLayoutHandle& dslh);
+    DescriptorSetHandle createDescriptorSet(DescriptorSetLayoutHandle dslh);
+    void destroyDescriptorSet(const DescriptorSetHandle& handle);
+    void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding = 0);
+    void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
+
+    // Pipeline management
+    PipelineHandle createGraphicsPipeline(
+        const PipelineDescription& description
+    );
+    void destroyPipeline(const PipelineHandle& handle);
+
+    // Command recording (call between beginFrame and endFrame)
+    void beginRenderPass(vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    void endRenderPass();
+    void bindPipeline(const PipelineHandle& handle);
+    void bindVertexBuffer(const BufferHandle& handle);
+    // FIXME: remove indexType from here, save it on creation instead
+    void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
+    void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets = { });
+    void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0);
+    void setViewport(float x, float y, float width, float height);
+    void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
+
+    // Swapchain management
+    void handleWindowResize();
+    vk::Extent2D getSwapchainExtent() const { return m_swapchainExtent; }
+
+private:
+    // Internal initialization
+    void createInstance();
+    void setupDebugMessenger();
+    void createSurface();
+    void pickPhysicalDevice();
+    void createLogicalDevice();
+    void createSwapchain();
+    void createImageViews();
+    void createDepthResources();
+    void createCommandPool();
+    void createCommandBuffers();
+    void createSyncObjects();
+    void createDescriptorPool();
+    void createAllocator();
+
+    // Internal cleanup
+    void cleanupSwapchain();
+    void recreateSwapchain();
+    void cleanupSwpachainFramebuffer();
+    void createSwapchainFramebuffers();
+
+    void flushCommandBuffer();
+    void cleanupDescriptorSets();
+
+    // Helper functions
+    bool checkValidationLayerSupport();
+    std::vector<const char*> getRequiredExtensions();
+    bool isDeviceSuitable(vk::PhysicalDevice device);
+    bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
+
+    struct QueueFamilyIndices {
+        std::optional<uint32_t> graphicsFamily;
+        std::optional<uint32_t> presentFamily;
+        bool isComplete() const { return graphicsFamily.has_value() && presentFamily.has_value(); }
+    };
+    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
+
+    struct SwapchainSupportDetails {
+        vk::SurfaceCapabilitiesKHR capabilities;
+        std::vector<vk::SurfaceFormatKHR> formats;
+        std::vector<vk::PresentModeKHR> presentModes;
+    };
+    SwapchainSupportDetails querySwapchainSupport(vk::PhysicalDevice device);
+
+    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+    void createRenderPass();
+
+    vk::ShaderModule createShaderModule(const std::vector<char>& code);
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
+    StageBuffer allocateStageBuffer(uint32_t capacity);
+    void destroyStageBuffers(uint32_t index);
+    void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
+    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+    vk::Format findDepthFormat();
+    void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+    vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags);
+    void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+    void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0);
+
+    // Debug callback
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        VkDebugUtilsMessageTypeFlagsEXT messageType,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+        void* pUserData);
+
+private:
+    // Window
+    GLFWwindow* m_window = nullptr;
+    bool m_framebufferResized = false;
+
+    // Core Vulkan objects
+    vk::Instance m_instance;
+    vk::DebugUtilsMessengerEXT m_debugMessenger;
+    vk::SurfaceKHR m_surface;
+    vk::PhysicalDevice m_physicalDevice;
+    vk::Device m_device;
+    vk::Queue m_graphicsQueue;
+    vk::Queue m_presentQueue;
+
+    // Swapchain
+    vk::SwapchainKHR m_swapchain;
+    std::vector<vk::Image> m_swapchainImages;
+    vk::Format m_swapchainImageFormat;
+    vk::Extent2D m_swapchainExtent;
+    std::vector<vk::ImageView> m_swapchainImageViews;
+    std::vector<vk::Framebuffer> m_swapchainFramebuffers;
+    uint32_t m_swapChainImageIndex;
+    vk::RenderPass m_renderPass;
+
+    // Depth buffering
+    vk::Image m_depthImage;
+    vk::DeviceMemory m_depthImageMemory;
+    vk::ImageView m_depthImageView;
+
+    // Command buffers
+    vk::CommandPool m_commandPool;
+    std::vector<vk::CommandBuffer> m_commandBuffers;
+    uint32_t m_currentCommandBufferIndex = 0;
+    vk::CommandBuffer m_currentCommandBuffer;
+
+    // Descriptor pool
+    vk::DescriptorPool m_descriptorPool;
+
+    VmaAllocator m_Allocator = nullptr;
+
+    // Synchronization
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+    std::vector<vk::Semaphore> m_imageAvailableSemaphores;
+    std::vector<vk::Semaphore> m_renderFinishedSemaphores;
+    std::vector<vk::Fence> m_inFlightFences;
+    uint32_t m_currentFrame = 0;
+
+    // Validation
+    bool m_enableValidationLayers = true;
+    std::vector<const char*> m_validationLayers = {"VK_LAYER_KHRONOS_validation"};
+    std::vector<const char*> m_deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+
+    // Current render state
+    PipelineHandle m_currentPipeline;
+    std::vector<std::vector<StageBuffer>> m_stageBuffers;
+
+    std::vector<DescriptorSetHandle> m_descriptorSetsToDestroy;
+    // resources
+    ResourceAllocator<Pipeline> pipelines;
+    ResourceAllocator<Buffer> buffers;
+    ResourceAllocator<DescriptorSetLayout> descriptorSetLayouts;
+    ResourceAllocator<DescriptorSet> descriptorSets;
+    ResourceAllocator<Texture> textures;
+};
+
+} // namespace ailo

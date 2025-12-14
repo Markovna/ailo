@@ -1,0 +1,25 @@
+#version 450 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aUV;
+layout(location = 2) in vec4 aColor;
+
+layout(binding = 0) uniform UniformBuffer {
+    vec2 uScale;
+    vec2 uTranslate;
+} ubo;
+
+out gl_PerVertex {
+    vec4 gl_Position;
+};
+
+layout(location = 0) out struct {
+    vec4 Color;
+    vec2 UV;
+} Out;
+
+void main()
+{
+    Out.Color = aColor;
+    Out.UV = aUV;
+    gl_Position = vec4(aPos * ubo.uScale + ubo.uTranslate, 0, 1);
+}

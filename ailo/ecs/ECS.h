@@ -10,6 +10,7 @@
 #include <ranges>
 #include <algorithm>
 #include <stdexcept>
+#include <limits>
 
 namespace ailo {
 
