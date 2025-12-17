@@ -148,19 +148,23 @@ void RenderAPI::endFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    cleanupDescriptorSets();
-
     flushCommandBuffer();
+
     m_swapChainImageIndex = -1;
 }
 
 void RenderAPI::cleanupDescriptorSets() {
-  for(auto descriptorSetHandle : m_descriptorSetsToDestroy) {
-    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    (void) m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
-    m_descriptorSets.free(descriptorSetHandle);
-  }
-  m_descriptorSetsToDestroy.clear();
+    const auto [first, last] =
+        std::ranges::remove_if(m_descriptorSetsToDestroy, [this](const DescriptorSet& descriptorSet) {
+            if (descriptorSet.boundFence && static_cast<bool>(*descriptorSet.boundFence) == false) {
+                return false;
+            }
+
+            (void) m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+            return true;
+        });
+
+    m_descriptorSetsToDestroy.erase(first, last);
 }
 
 void RenderAPI::waitIdle() {
@@ -289,7 +293,7 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
     TextureHandle handle = m_textures.allocate();
-    Texture& texture = m_textures.get(handle);
+    TextureVK& texture = m_textures.get(handle);
 
     texture.format = format;
     texture.width = width;
@@ -333,7 +337,7 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
     if(!handle) { return; }
 
-    Texture& texture = m_textures.get(handle);
+    TextureVK& texture = m_textures.get(handle);
     m_device.destroySampler(texture.sampler);
     m_device.destroyImageView(texture.imageView);
     m_device.destroyImage(texture.image);
@@ -342,7 +346,7 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
-    Texture& texture = m_textures.get(handle);
+    TextureVK& texture = m_textures.get(handle);
 
     // Create staging buffer
     // allocate stage buffer
@@ -404,11 +408,17 @@ void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
 }
 
 DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
-    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(layoutHandle);
-    auto& layout = descriptorSetLayout.layout;
-
     DescriptorSetHandle handle = m_descriptorSets.allocate();
     DescriptorSet& descriptorSet = m_descriptorSets.get(handle);
+
+    createDescriptorSet(descriptorSet, layoutHandle);
+
+    return handle;
+}
+
+void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetLayoutHandle layoutHandle) {
+    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(layoutHandle);
+    auto& layout = descriptorSetLayout.layout;
 
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = m_descriptorPool;
@@ -417,26 +427,32 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle lay
 
     auto result = m_device.allocateDescriptorSets(allocInfo);
     descriptorSet.descriptorSet = result[0];
+    descriptorSet.boundBindings.reset();
     descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
     descriptorSet.layoutHandle = layoutHandle;
-
-    return handle;
+    descriptorSet.boundFence = nullptr;
 }
 
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
-    m_descriptorSetsToDestroy.push_back(handle);
+    DescriptorSet& descriptorSet = m_descriptorSets.get(handle);
+    m_descriptorSetsToDestroy.push_back(descriptorSet);
+    m_descriptorSets.free(handle);
 }
 
-void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding) {
+void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding, uint64_t offset, uint64_t size) {
+    if (!descriptorSetHandle) {
+        return;
+    }
+
     DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     Buffer& buffer = m_buffers.get(bufferHandle);
 
     vk::DescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer.buffer;
-    bufferInfo.offset = 0;
-    bufferInfo.range = buffer.size;
+    bufferInfo.offset = offset;
+    bufferInfo.range = size == std::numeric_limits<decltype(size)>::max() ? buffer.size : size;
 
     bool isDynamic = descriptorSet.dynamicBindings[binding];
 
@@ -449,11 +465,44 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorWrite.pBufferInfo = &bufferInfo;
 
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    descriptorSet.boundBindings[binding] = true;
 }
 
 void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding) {
+    if(!descriptorSetHandle) {
+        return;
+    }
+
     DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    Texture& texture = m_textures.get(textureHandle);
+    TextureVK& texture = m_textures.get(textureHandle);
+
+    if (descriptorSet.boundFence && *descriptorSet.boundFence) {
+        // re-create descriptor set
+
+        m_descriptorSetsToDestroy.push_back(descriptorSet);
+
+        DescriptorSet newDescriptorSet;
+        createDescriptorSet(newDescriptorSet, descriptorSet.layoutHandle);
+
+        std::vector<vk::CopyDescriptorSet> copyDescriptors;
+        for(size_t i = 0; i < descriptorSet.boundBindings.size(); i++) {
+            if (!descriptorSet.boundBindings[i]) {
+                continue;
+            }
+            vk::CopyDescriptorSet copyDescriptorSet {};
+            copyDescriptorSet.srcSet = descriptorSet.descriptorSet;
+            copyDescriptorSet.srcBinding = i;
+            copyDescriptorSet.srcArrayElement = 0;
+            copyDescriptorSet.dstSet = newDescriptorSet.descriptorSet;
+            copyDescriptorSet.dstBinding = i;
+            copyDescriptorSet.dstArrayElement = 0;
+
+            copyDescriptors.push_back(copyDescriptorSet);
+        }
+        m_device.updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
+
+        std::swap(descriptorSet, newDescriptorSet);
+    }
 
     vk::DescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
@@ -469,6 +518,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     descriptorWrite.pImageInfo = &imageInfo;
 
     m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    descriptorSet.boundBindings[binding] = true;
 }
 
 void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets) {
@@ -489,6 +539,9 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
         static_cast<uint32_t>(dynamicOffsets.size()),
         dynamicOffsetsArray.data()
     );
+
+    auto& fence = m_inFlightFences[m_currentCommandBufferIndex];
+    descriptorSet.boundFence = &fence;
 }
 
 void RenderAPI::createRenderPass() {
@@ -646,7 +699,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     std::vector<vk::DescriptorSetLayout> setLayouts;
     auto& layout = description.layout;
-    for(auto& set : layout.sets) {
+    for(auto& set : layout) {
       std::vector<vk::DescriptorSetLayoutBinding> bindings;
       for(auto& binding : set) {
         vk::DescriptorSetLayoutBinding vkBinding;
@@ -1623,6 +1676,7 @@ void RenderAPI::flushCommandBuffer() {
 
   // free resources acquired by command buffer
   destroyStageBuffers(m_currentCommandBufferIndex);
+  cleanupDescriptorSets();
 
   (void)m_device.resetFences(1, &fence);
 

@@ -94,11 +94,13 @@ using DescriptorSetLayoutHandle = Handle<DescriptorSetLayout>;
 
 struct DescriptorSet {
     vk::DescriptorSet descriptorSet;
+    DescriptorSetLayout::bitmask_t boundBindings;
     DescriptorSetLayout::bitmask_t dynamicBindings;
     DescriptorSetLayoutHandle layoutHandle;
+    vk::Fence* boundFence;
 };
 
-struct Texture {
+struct TextureVK {
     vk::Image image;
     vk::DeviceMemory memory;
     vk::ImageView imageView;
@@ -133,26 +135,21 @@ struct DescriptorSetLayoutBinding {
   vk::ShaderStageFlagBits stageFlags;
 };
 
-struct PipelineLayout {
-  using SetLayout = std::vector<DescriptorSetLayoutBinding>;
-
-  std::vector<SetLayout> sets;
-};
-
 struct PipelineDescription {
   using ShaderCode = std::vector<char>;
+  using SetLayout = std::vector<DescriptorSetLayoutBinding>;
 
-  RasterDescription raster;
-  PipelineLayout layout;
-  VertexInputDescription vertexInput;
   ShaderCode vertexShader;
   ShaderCode fragmentShader;
+  RasterDescription raster;
+  std::vector<SetLayout> layout;
+  VertexInputDescription vertexInput;
 };
 
 using PipelineHandle = Handle<Pipeline>;
 using BufferHandle = Handle<Buffer>;
 using DescriptorSetHandle = Handle<DescriptorSet>;
-using TextureHandle = Handle<Texture>;
+using TextureHandle = Handle<TextureVK>;
 
 class RenderAPI {
 public:
@@ -185,7 +182,7 @@ public:
     void destroyDescriptorSetLayout(DescriptorSetLayoutHandle& dslh);
     DescriptorSetHandle createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void destroyDescriptorSet(const DescriptorSetHandle& handle);
-    void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding = 0);
+    void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
 
     // Pipeline management
@@ -260,6 +257,7 @@ private:
     vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
     void createRenderPass();
 
+    void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
@@ -337,13 +335,13 @@ private:
     PipelineHandle m_currentPipeline;
     std::vector<std::vector<StageBuffer>> m_stageBuffers;
 
-    std::vector<DescriptorSetHandle> m_descriptorSetsToDestroy;
+    std::vector<DescriptorSet> m_descriptorSetsToDestroy;
     // resources
     ResourceAllocator<Pipeline> m_pipelines;
     ResourceAllocator<Buffer> m_buffers;
     ResourceAllocator<DescriptorSetLayout> m_descriptorSetLayouts;
     ResourceAllocator<DescriptorSet> m_descriptorSets;
-    ResourceAllocator<Texture> m_textures;
+    ResourceAllocator<TextureVK> m_textures;
 };
 
 } // namespace ailo

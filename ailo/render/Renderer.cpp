@@ -1,6 +1,8 @@
 #include "Renderer.h"
 #include <ecs/Scene.h>
 
+#include "Shader.h"
+
 namespace ailo {
 
 void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
@@ -21,12 +23,14 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   for(auto [entity, primitive] : primitivesView.each()) {
     auto indexBuffer = primitive.getIndexBuffer();
     auto vertexBuffer = primitive.getVertexBuffer();
-    auto pipeline = primitive.getPipeline();
+    auto material = primitive.getMaterial();
+    auto shader = material->getShader();
 
-    backend->bindPipeline(pipeline);
+    backend->bindPipeline(shader->getPipeline());
 
-    backend->bindDescriptorSet(m_viewDescriptorSet, static_cast<uint32_t>(DescriptorSetBindingPoints::PER_VIEW));
-    backend->bindDescriptorSet(m_objectDescriptorSet, static_cast<uint32_t>(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
+    backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
+    material->bindDescriptorSet(*backend);
 
     backend->bindIndexBuffer(indexBuffer->getHandle());
     backend->bindVertexBuffer(vertexBuffer->getHandle());
@@ -45,12 +49,7 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   }
 
   if(!m_viewDescriptorSetLayout) {
-    DescriptorSetLayoutBinding viewUboBinding{};
-    viewUboBinding.binding = 0;
-    viewUboBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
-    viewUboBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
-
-    m_viewDescriptorSetLayout = backend.createDescriptorSetLayout({ viewUboBinding });
+    m_viewDescriptorSetLayout = backend.createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
   }
 
   if(!m_viewDescriptorSet) {
@@ -59,12 +58,7 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   }
 
   if(!m_objectDescriptorSetLayout) {
-    DescriptorSetLayoutBinding objectUboBinding{};
-    objectUboBinding.binding = 0;
-    objectUboBinding.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-    objectUboBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
-
-    m_objectDescriptorSetLayout = backend.createDescriptorSetLayout({ objectUboBinding });
+    m_objectDescriptorSetLayout = backend.createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
   }
 
   auto primitivesView = scene.view<RenderPrimitive>();
@@ -85,13 +79,17 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 
   if(!m_objectDescriptorSet) {
     m_objectDescriptorSet = backend.createDescriptorSet(m_objectDescriptorSetLayout);
-    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, 0);
+    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, 0, 0, sizeof(PerObjectUniforms));
   }
 
   uint32_t index = 0;
   for(const auto& [entity, primitive] : primitivesView.each()) {
     perObjectUniformBufferData[index].model = primitive.getTransform();
     index++;
+
+    auto material = primitive.getMaterial();
+    material->updateTextures(backend);
+    material->updateBuffers(backend);
   }
 
   backend.updateBuffer(m_viewUniformBufferHandle, &perViewUniformBufferData, sizeof(perViewUniformBufferData));

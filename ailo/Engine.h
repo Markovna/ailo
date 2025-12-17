@@ -10,7 +10,8 @@ class RenderAPI;
 class Renderer;
 class InputSystem;
 class Scene;
-class Camera;
+
+struct Camera;
 
 class Engine {
  public:

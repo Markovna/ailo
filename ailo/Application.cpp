@@ -22,6 +22,8 @@
 #include <vector>
 #include <array>
 
+#include "render/Shader.h"
+
 // Helper functions for GLFW to platform-agnostic conversion
 static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
 static ailo::MouseButton glfwButtonToMouseButton(int glfwButton);
@@ -134,32 +136,18 @@ void Application::init() {
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
 
-  /*
   // Load texture
   int texWidth, texHeight, texChannels;
   stbi_uc* pixels = stbi_load("textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
     throw std::runtime_error("failed to load texture image!");
   }
-  vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
   // Create texture
-  m_texture = renderAPI->createTexture(vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
-  renderAPI->updateTextureImage(m_texture, pixels, imageSize);
+  m_texture = std::make_unique<ailo::Texture>(*m_engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
+  m_texture->updateImage(*m_engine, pixels, texWidth * texHeight * 4);
 
   stbi_image_free(pixels);
-  */
-
-  // Create descriptor set layout for uniform buffers
-  ailo::DescriptorSetLayoutBinding perViewLayoutBinding{};
-  perViewLayoutBinding.binding = 0;
-  perViewLayoutBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
-  perViewLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
-
-  ailo::DescriptorSetLayoutBinding perObjectLayoutBinding{};
-  perObjectLayoutBinding.binding = 0;
-  perObjectLayoutBinding.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-  perObjectLayoutBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
   // Create graphics pipeline
   ailo::VertexInputDescription vertexInput;
@@ -170,8 +158,11 @@ void Application::init() {
       attributeDescriptions.end()
   );
 
-  m_pipeline = renderAPI->createGraphicsPipeline(
+  m_shader = std::make_unique<ailo::Shader>(
+    *m_engine,
       ailo::PipelineDescription {
+        .vertexShader = ailo::os::readFile("shaders/shader.vert.spv"),
+        .fragmentShader = ailo::os::readFile("shaders/shader.frag.spv"),
         .raster = ailo::RasterDescription {
             .cullingMode = ailo::CullingMode::FRONT,
             .inverseFrontFace = false,
@@ -179,16 +170,22 @@ void Application::init() {
             .depthCompareOp = ailo::CompareOp::LESS
         },
         .layout = {
-            .sets = {
-                { perViewLayoutBinding },
-                { perObjectLayoutBinding }
-            }
-        },
-        .vertexInput = vertexInput,
-        .vertexShader = ailo::os::readFile("shaders/shader.vert.spv"),
-        .fragmentShader = ailo::os::readFile("shaders/shader.frag.spv")
+            ailo::DescriptorSetLayoutBindings::perView(),
+            ailo::DescriptorSetLayoutBindings::perObject(),
+            {
+              {
+                .binding = 0,
+                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                .stageFlags = vk::ShaderStageFlagBits::eFragment,
+              }
+            },
+          },
+        .vertexInput = vertexInput
       }
   );
+  m_material = std::make_unique<ailo::Material>(*m_engine, *m_shader);
+  m_material->setTexture(0, m_texture.get());
+  m_material->updateTextures(*m_engine->getRenderAPI());
 
   m_indexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
   m_indexBuffer->updateBuffer(*m_engine, indices.data(), sizeof(uint16_t) * indices.size());
@@ -198,7 +195,7 @@ void Application::init() {
 
   m_cubeEntity = m_scene->addEntity();
   auto& renderPrimitive = m_scene->addComponent<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
-  renderPrimitive.setPipeline(m_pipeline);
+  renderPrimitive.setMaterial(m_material.get());
 
   m_camera = std::make_unique<ailo::Camera>();
 }
@@ -281,9 +278,8 @@ void Application::cleanup() {
 
   m_vertexBuffer->destroy(*m_engine);
   m_indexBuffer->destroy(*m_engine);
-
-  auto renderAPI = m_engine->getRenderAPI();
-  renderAPI->destroyPipeline(m_pipeline);
+  m_texture->destroy(*m_engine);
+  m_shader->destroy(*m_engine);
 
   m_engine.reset();
 

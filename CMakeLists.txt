@@ -47,7 +47,11 @@ add_executable(ailo
     ailo/render/Shader.cpp
     ailo/render/Shader.h
     ailo/OS.cpp
-    ailo/OS.h)
+    ailo/OS.h
+        ailo/render/Material.cpp
+        ailo/render/Material.h
+        ailo/render/Texture.cpp
+        ailo/render/Texture.h)
 
 # Link libraries
 target_link_libraries(ailo

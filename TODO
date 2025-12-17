@@ -1,5 +1,7 @@
 TODO:
 
+*  Add material class that contains shader and texture.
+
 *  Do not specify vertex input when creating a graphics pipeline. Instead,
    the vulkan pipeline object should be created and cached when calling
    draw function after binding the vertex buffer. Because descriptor set

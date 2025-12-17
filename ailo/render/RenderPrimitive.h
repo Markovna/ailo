@@ -1,9 +1,13 @@
 #pragma once
 
 #include <Engine.h>
+
+#include "Material.h"
 #include "RenderAPI.h"
 
 namespace ailo {
+
+class Shader;
 
 class BufferObject {
  public:
@@ -22,13 +26,7 @@ class RenderPrimitive {
         BufferObject* vertexBuffer = nullptr,
         BufferObject* indexBuffer = nullptr,
         size_t indexOffset = 0,
-        size_t indexCount = 0)
-      : m_vertexBuffer(vertexBuffer)
-      , m_indexBuffer(indexBuffer)
-      , m_indexOffset(indexOffset)
-      , m_indexCount(indexCount)
-      , m_transform(1)
-      { }
+        size_t indexCount = 0);
 
   const BufferObject* getVertexBuffer() const { return m_vertexBuffer; }
   const BufferObject* getIndexBuffer() const { return m_indexBuffer; }
@@ -42,19 +40,18 @@ class RenderPrimitive {
   auto getIndexCount() const { return m_indexCount; }
   auto getIndexOffset() const { return m_indexOffset; }
 
-  PipelineHandle getPipeline() { return m_pipeline; }
-  void setPipeline(PipelineHandle handle) { m_pipeline = handle; }
+  Material* getMaterial();
+  void setMaterial(Material* material);
 
  private:
   friend class Renderer;
 
   BufferObject* m_vertexBuffer;
   BufferObject* m_indexBuffer;
+  Material* m_material;
   glm::mat4 m_transform;
   size_t m_indexOffset;
   size_t m_indexCount;
-
-  PipelineHandle m_pipeline;
 };
 
 }

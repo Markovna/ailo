@@ -26,12 +26,10 @@ class Scene {
    return m_registry.emplace<Type, Args...>(entity, std::forward<Args>(args)...);
   }
 
- template<typename Type>
- decltype(auto) get(entt::entity entity) {
-   return m_registry.get<Type>(entity);
- }
-
-
+  template<typename Type>
+  decltype(auto) get(entt::entity entity) {
+    return m_registry.get<Type>(entity);
+  }
 
  private:
   entt::registry m_registry;

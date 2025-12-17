@@ -102,7 +102,9 @@ void ImGuiProcessor::createPipeline() {
 
     // Create the graphics pipeline
     m_pipeline = m_renderAPI->createGraphicsPipeline(
-        ailo::PipelineDescription {
+    ailo::PipelineDescription {
+        .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
+        .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv"),
             .raster = ailo::RasterDescription {
                 .cullingMode = ailo::CullingMode::NONE,
                 .inverseFrontFace = false,
@@ -116,11 +118,9 @@ void ImGuiProcessor::createPipeline() {
                 .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
             },
             .layout {
-              .sets = { { bindings} }
+               { bindings }
             },
-            .vertexInput = vertexInput,
-            .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
-            .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv")
+            .vertexInput = vertexInput
         }
     );
 }
