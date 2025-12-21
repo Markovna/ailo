@@ -35,69 +35,6 @@ static ailo::ModifierKey glfwModsToModifierKey(int glfwMods);
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
 
-struct Vertex {
-  glm::vec3 pos;
-  glm::vec3 color;
-  glm::vec2 texCoord;
-
-  static vk::VertexInputBindingDescription getBindingDescription() {
-    vk::VertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = vk::VertexInputRate::eVertex;
-    return bindingDescription;
-  }
-
-  static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions() {
-    std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions{};
-
-    attributeDescriptions[0].binding = 0;
-    attributeDescriptions[0].location = 0;
-    attributeDescriptions[0].format = vk::Format::eR32G32B32Sfloat;
-    attributeDescriptions[0].offset = offsetof(Vertex, pos);
-
-    attributeDescriptions[1].binding = 0;
-    attributeDescriptions[1].location = 1;
-    attributeDescriptions[1].format = vk::Format::eR32G32B32Sfloat;
-    attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-    attributeDescriptions[2].binding = 0;
-    attributeDescriptions[2].location = 2;
-    attributeDescriptions[2].format = vk::Format::eR32G32Sfloat;
-    attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-    return attributeDescriptions;
-  }
-};
-
-const std::vector<Vertex> vertices = {
-    // Back face
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
-    // Front face
-    {{-0.5f, -0.5f, 0.5f}, {1.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.5f}, {0.0f, 1.0f, 1.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f}, {0.0f, 1.0f}}
-};
-
-const std::vector<uint16_t> indices = {
-    // Back face
-    0, 1, 2, 2, 3, 0,
-    // Front face
-    5, 4, 7, 7, 6, 5,
-    // Left face
-    4, 0, 3, 3, 7, 4,
-    // Right face
-    1, 5, 6, 6, 2, 1,
-    // Bottom face
-    4, 5, 1, 1, 0, 4,
-    // Top face
-    3, 2, 6, 6, 7, 3
-};
-
 void Application::run() {
   init();
   mainLoop();
