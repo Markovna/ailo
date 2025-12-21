@@ -25,6 +25,7 @@ class RenderPrimitive {
   explicit RenderPrimitive(
         BufferObject* vertexBuffer = nullptr,
         BufferObject* indexBuffer = nullptr,
+        Material* material = nullptr,
         size_t indexOffset = 0,
         size_t indexCount = 0);
 
@@ -34,13 +35,11 @@ class RenderPrimitive {
   void setVertexBuffer(BufferObject* buffer) { m_vertexBuffer = buffer; }
   void setIndexBuffer(BufferObject* buffer, size_t offset, size_t count);
 
-  const glm::mat4& getTransform() const { return m_transform; }
-  void setTransform(const glm::mat4& tr) { m_transform = tr; }
-
   auto getIndexCount() const { return m_indexCount; }
   auto getIndexOffset() const { return m_indexOffset; }
 
   Material* getMaterial();
+  const Material* getMaterial() const;
   void setMaterial(Material* material);
 
  private:
@@ -49,7 +48,6 @@ class RenderPrimitive {
   BufferObject* m_vertexBuffer;
   BufferObject* m_indexBuffer;
   Material* m_material;
-  glm::mat4 m_transform;
   size_t m_indexOffset;
   size_t m_indexCount;
 };

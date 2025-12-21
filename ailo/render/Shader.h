@@ -21,6 +21,8 @@ class Shader {
 
   void destroy(Engine&);
 
+  static std::unique_ptr<Shader> createDefaultShader(Engine&, VertexInputDescription&);
+
  private:
   std::vector<DescriptorSetLayoutHandle> m_descriptorSetLayouts;
   PipelineHandle m_pipeline;

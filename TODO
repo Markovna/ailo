@@ -1,6 +1,8 @@
 TODO:
 
-*  Add material class that contains shader and texture.
+*  Loading models from obj files
+
+*  Add support for different types of indexes in index buffer (16/32 bits)
 
 *  Do not specify vertex input when creating a graphics pipeline. Instead,
    the vulkan pipeline object should be created and cached when calling

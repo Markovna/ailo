@@ -21,7 +21,10 @@
 #include <memory>
 #include <vector>
 #include <array>
+#include <iostream>
 
+#include "ecs/Transform.h"
+#include "render/Mesh.h"
 #include "render/Shader.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
@@ -138,7 +141,7 @@ void Application::init() {
 
   // Load texture
   int texWidth, texHeight, texChannels;
-  stbi_uc* pixels = stbi_load("textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  stbi_uc* pixels = stbi_load("assets/textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
     throw std::runtime_error("failed to load texture image!");
   }
@@ -149,55 +152,12 @@ void Application::init() {
 
   stbi_image_free(pixels);
 
-  // Create graphics pipeline
-  ailo::VertexInputDescription vertexInput;
-  vertexInput.bindings.push_back(Vertex::getBindingDescription());
-  auto attributeDescriptions = Vertex::getAttributeDescriptions();
-  vertexInput.attributes = std::vector(
-      attributeDescriptions.begin(),
-      attributeDescriptions.end()
-  );
-
-  m_shader = std::make_unique<ailo::Shader>(
-    *m_engine,
-      ailo::PipelineDescription {
-        .vertexShader = ailo::os::readFile("shaders/shader.vert.spv"),
-        .fragmentShader = ailo::os::readFile("shaders/shader.frag.spv"),
-        .raster = ailo::RasterDescription {
-            .cullingMode = ailo::CullingMode::FRONT,
-            .inverseFrontFace = false,
-            .depthWriteEnable = true,
-            .depthCompareOp = ailo::CompareOp::LESS
-        },
-        .layout = {
-            ailo::DescriptorSetLayoutBindings::perView(),
-            ailo::DescriptorSetLayoutBindings::perObject(),
-            {
-              {
-                .binding = 0,
-                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                .stageFlags = vk::ShaderStageFlagBits::eFragment,
-              }
-            },
-          },
-        .vertexInput = vertexInput
-      }
-  );
-  m_material = std::make_unique<ailo::Material>(*m_engine, *m_shader);
-  m_material->setTexture(0, m_texture.get());
-  m_material->updateTextures(*m_engine->getRenderAPI());
-
-  m_indexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
-  m_indexBuffer->updateBuffer(*m_engine, indices.data(), sizeof(uint16_t) * indices.size());
-
-  m_vertexBuffer = std::make_unique<ailo::BufferObject>(*m_engine, ailo::BufferBinding::VERTEX, sizeof(Vertex) * vertices.size());
-  m_vertexBuffer->updateBuffer(*m_engine, vertices.data(), sizeof(Vertex) * vertices.size());
-
-  m_cubeEntity = m_scene->addEntity();
-  auto& renderPrimitive = m_scene->addComponent<ailo::RenderPrimitive>(m_cubeEntity, m_vertexBuffer.get(), m_indexBuffer.get(), 0, indices.size());
-  renderPrimitive.setMaterial(m_material.get());
-
   m_camera = std::make_unique<ailo::Camera>();
+
+  ailo::MeshReader reader;
+
+  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
+  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
 }
 
 void Application::mainLoop() {
@@ -235,21 +195,58 @@ void Application::handleInput() {
   ailo::Event event;
   while (inputSystem->pollEvent(event)) {
     handleImGuiEvent(event);
+
+    // Handle camera rotation on mouse drag
+    if (auto mousePressedEvent = std::get_if<ailo::MouseButtonPressedEvent>(&event)) {
+      if (mousePressedEvent->button == ailo::MouseButton::Left) {
+        m_isDragging = true;
+        m_lastMouseX = mousePressedEvent->x;
+        m_lastMouseY = mousePressedEvent->y;
+      }
+    }
+    else if (auto mouseReleasedEvent = std::get_if<ailo::MouseButtonReleasedEvent>(&event)) {
+      if (mouseReleasedEvent->button == ailo::MouseButton::Left) {
+        m_isDragging = false;
+      }
+    }
+    else if (auto mouseMovedEvent = std::get_if<ailo::MouseMovedEvent>(&event)) {
+      if (m_isDragging) {
+        double deltaX = mouseMovedEvent->x - m_lastMouseX;
+        double deltaY = mouseMovedEvent->y - m_lastMouseY;
+
+        // Update camera rotation
+        m_cameraYaw += static_cast<float>(deltaX) * 0.005f;
+        m_cameraPitch += static_cast<float>(deltaY) * 0.005f;
+
+        // Clamp pitch to avoid gimbal lock
+        m_cameraPitch = glm::clamp(m_cameraPitch, -glm::pi<float>() / 2.0f + 0.1f, glm::pi<float>() / 2.0f - 0.1f);
+
+        m_lastMouseX = mouseMovedEvent->x;
+        m_lastMouseY = mouseMovedEvent->y;
+      }
+    }
+    // Handle camera zoom on scroll
+    else if (auto scrollEvent = std::get_if<ailo::MouseScrolledEvent>(&event)) {
+      m_cameraDistance -= static_cast<float>(scrollEvent->yOffset) * 0.5f;
+      // Clamp distance to reasonable values
+      m_cameraDistance = glm::clamp(m_cameraDistance, 1.0f, 1000.0f);
+    }
   }
 }
 
 void Application::updateTransforms() {
-  auto model = glm::rotate(glm::mat4(1.0f), m_time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)) *
-      glm::rotate(glm::mat4(1.0f), 1.3f * m_time * glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f)) *
-      glm::rotate(glm::mat4(1.0f), glm::radians(45.0f) , glm::vec3(1.0f, 0.0f, 0.0f));
+  // Calculate camera position using spherical coordinates
+  float camX = m_cameraDistance * cos(m_cameraPitch) * cos(m_cameraYaw);
+  float camY = m_cameraDistance * sin(m_cameraPitch);
+  float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
 
-  auto& rp = m_scene->get<ailo::RenderPrimitive>(m_cubeEntity);
-  rp.setTransform(std::move(model));
+  glm::vec3 cameraPos(camX, camY, camZ);
+  glm::vec3 target(0.0f, 0.0f, 0.0f);
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
 
-  // View matrix: look at the scene from above
-  m_camera->view = glm::lookAt(glm::vec3(0.0f, 0.0f, 4.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+  m_camera->view = glm::lookAt(cameraPos, target, up);
 
-  m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 10.0f);
+  m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 
@@ -276,10 +273,14 @@ void Application::drawImGui() {
 void Application::cleanup() {
   m_imguiProcessor.reset();
 
-  m_vertexBuffer->destroy(*m_engine);
-  m_indexBuffer->destroy(*m_engine);
+  for (const auto& [entity, mesh] : m_scene->view<ailo::Mesh>().each()) {
+    mesh.vertexBuffer->destroy(*m_engine);
+    mesh.indexBuffer->destroy(*m_engine);
+    for (auto& material : mesh.materials) {
+      material->destroy(*m_engine);
+    }
+  }
   m_texture->destroy(*m_engine);
-  m_shader->destroy(*m_engine);
 
   m_engine.reset();
 

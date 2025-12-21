@@ -21,16 +21,20 @@ class Application {
     std::unique_ptr<ailo::Engine> m_engine;
     std::unique_ptr<ailo::Scene> m_scene;
     std::unique_ptr<ailo::ImGuiProcessor> m_imguiProcessor;
-    std::unique_ptr<ailo::BufferObject> m_vertexBuffer;
-    std::unique_ptr<ailo::BufferObject> m_indexBuffer;
     std::unique_ptr<ailo::Camera> m_camera;
-    std::unique_ptr<ailo::Shader> m_shader;
-    std::unique_ptr<ailo::Material> m_material;
     std::unique_ptr<ailo::Texture> m_texture;
     ailo::Entity m_cubeEntity {};
 
     float m_time = 0;
     float m_deltaTime = 0;
+
+    // Camera control state
+    float m_cameraYaw = 0.0f;
+    float m_cameraPitch = 0.0f;
+    float m_cameraDistance = 10.0f;
+    bool m_isDragging = false;
+    double m_lastMouseX = 0.0;
+    double m_lastMouseY = 0.0;
 
     // GLFW callback functions
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);

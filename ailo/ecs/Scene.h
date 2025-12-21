@@ -31,6 +31,11 @@ class Scene {
     return m_registry.get<Type>(entity);
   }
 
+ template<typename Type>
+ decltype(auto) tryGet(entt::entity entity) {
+   return m_registry.try_get<Type>(entity);
+  }
+
  private:
   entt::registry m_registry;
 };

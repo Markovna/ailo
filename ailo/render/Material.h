@@ -15,7 +15,7 @@ public:
 
     void updateTextures(RenderAPI&);
     void updateBuffers(RenderAPI&);
-    void bindDescriptorSet(RenderAPI&);
+    void bindDescriptorSet(RenderAPI&) const;
 
     Shader* getShader() const { return m_shader; }
 

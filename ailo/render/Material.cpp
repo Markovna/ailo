@@ -40,7 +40,7 @@ void ailo::Material::updateBuffers(RenderAPI& renderAPI) {
     }
 }
 
-void ailo::Material::bindDescriptorSet(RenderAPI& renderAPI) {
+void ailo::Material::bindDescriptorSet(RenderAPI& renderAPI) const {
     if (m_descriptorSet) {
         renderAPI.bindDescriptorSet(m_descriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL));
     }

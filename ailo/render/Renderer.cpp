@@ -1,7 +1,9 @@
 #include "Renderer.h"
 #include <ecs/Scene.h>
 
+#include "Mesh.h"
 #include "Shader.h"
+#include "ecs/Transform.h"
 
 namespace ailo {
 
@@ -19,22 +21,25 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   backend->beginRenderPass();
 
   uint32_t bufferOffset = 0;
-  auto primitivesView = scene.view<RenderPrimitive>();
-  for(auto [entity, primitive] : primitivesView.each()) {
-    auto indexBuffer = primitive.getIndexBuffer();
-    auto vertexBuffer = primitive.getVertexBuffer();
-    auto material = primitive.getMaterial();
-    auto shader = material->getShader();
+  auto meshView = scene.view<Mesh>();
+  for(const auto& [entity, mesh] : meshView.each()) {
+    auto indexBuffer = mesh.indexBuffer.get();
+    auto vertexBuffer = mesh.vertexBuffer.get();
 
-    backend->bindPipeline(shader->getPipeline());
+    for(const auto& primitive : mesh.primitives) {
+      auto material = primitive.getMaterial();
+      auto shader = material->getShader();
 
-    backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
-    material->bindDescriptorSet(*backend);
+      backend->bindPipeline(shader->getPipeline());
 
-    backend->bindIndexBuffer(indexBuffer->getHandle());
-    backend->bindVertexBuffer(vertexBuffer->getHandle());
-    backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
+      backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+      backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
+      material->bindDescriptorSet(*backend);
+
+      backend->bindIndexBuffer(indexBuffer->getHandle());
+      backend->bindVertexBuffer(vertexBuffer->getHandle());
+      backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
+    }
 
     bufferOffset += sizeof(PerObjectUniforms);
   }
@@ -61,12 +66,12 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
     m_objectDescriptorSetLayout = backend.createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
   }
 
-  auto primitivesView = scene.view<RenderPrimitive>();
-  size_t primitivesCount = primitivesView.size();
+  auto meshView = scene.view<Mesh>();
+  size_t meshCount = meshView.size();
 
   // prepare per object buffer
-  if(primitivesCount > perObjectUniformBufferData.size()) {
-    perObjectUniformBufferData.resize(primitivesCount);
+  if(meshCount > perObjectUniformBufferData.size()) {
+    perObjectUniformBufferData.resize(meshCount);
 
     if(m_objectsUniformBufferHandle) {
       backend.destroyBuffer(m_objectsUniformBufferHandle);
@@ -83,13 +88,15 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   }
 
   uint32_t index = 0;
-  for(const auto& [entity, primitive] : primitivesView.each()) {
-    perObjectUniformBufferData[index].model = primitive.getTransform();
+  for(const auto& [entity, mesh] : meshView.each()) {
+    auto tr = scene.tryGet<Transform>(entity);
+    perObjectUniformBufferData[index].model = (tr ? tr->transform : glm::mat4(1.0f));
     index++;
 
-    auto material = primitive.getMaterial();
-    material->updateTextures(backend);
-    material->updateBuffers(backend);
+    for (auto& material : mesh.materials) {
+      material->updateTextures(backend);
+      material->updateBuffers(backend);
+    }
   }
 
   backend.updateBuffer(m_viewUniformBufferHandle, &perViewUniformBufferData, sizeof(perViewUniformBufferData));

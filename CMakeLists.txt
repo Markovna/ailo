@@ -17,6 +17,7 @@ add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)
 add_subdirectory(third_party/entt)
+add_subdirectory(third_party/assimp)
 
 add_subdirectory(third_party/imgui)
 
@@ -48,10 +49,15 @@ add_executable(ailo
     ailo/render/Shader.h
     ailo/OS.cpp
     ailo/OS.h
-        ailo/render/Material.cpp
-        ailo/render/Material.h
-        ailo/render/Texture.cpp
-        ailo/render/Texture.h)
+    ailo/render/Material.cpp
+    ailo/render/Material.h
+    ailo/render/Texture.cpp
+    ailo/render/Texture.h
+        ailo/render/Mesh.cpp
+        ailo/render/Mesh.h
+        ailo/ecs/Transform.h
+        ailo/ecs/Transform.cpp
+        ailo/ecs/Transform.h)
 
 # Link libraries
 target_link_libraries(ailo
@@ -61,7 +67,9 @@ target_link_libraries(ailo
         stb_image
         GPUOpen::VulkanMemoryAllocator
         EnTT::EnTT
-        imgui)
+        imgui
+        assimp::assimp
+)
 
 # Include directories
 target_include_directories(ailo PRIVATE
