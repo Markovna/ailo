@@ -38,13 +38,10 @@ class RenderPrimitive {
   auto getIndexCount() const { return m_indexCount; }
   auto getIndexOffset() const { return m_indexOffset; }
 
-  Material* getMaterial();
   const Material* getMaterial() const;
   void setMaterial(Material* material);
 
  private:
-  friend class Renderer;
-
   BufferObject* m_vertexBuffer;
   BufferObject* m_indexBuffer;
   Material* m_material;

@@ -12,31 +12,31 @@ ailo::Material::Material(Engine& engine, Shader& shader)
 
 void ailo::Material::setTexture(uint32_t binding, Texture* texture) {
     m_textures[binding] = texture;
-    pendingBindings[binding] = true;
+    m_pendingBindings[binding] = true;
 }
 
 void ailo::Material::setBuffer(uint32_t binding, BufferObject* buffer) {
     m_buffers[binding] = buffer;
-    pendingBindings[binding] = true;
+    m_pendingBindings[binding] = true;
 }
 
 void ailo::Material::updateTextures(RenderAPI& renderAPI) {
     for (auto& [binding, texture] : m_textures) {
-        if(!pendingBindings.test(binding)) {
+        if(!m_pendingBindings.test(binding)) {
             continue;
         }
         renderAPI.updateDescriptorSetTexture(m_descriptorSet, texture->getHandle(), binding);
-        pendingBindings.reset(binding);
+        m_pendingBindings.reset(binding);
     }
 }
 
 void ailo::Material::updateBuffers(RenderAPI& renderAPI) {
     for (auto& [binding, buffer] : m_buffers) {
-        if(!pendingBindings.test(binding)) {
+        if(!m_pendingBindings.test(binding)) {
             continue;
         }
         renderAPI.updateDescriptorSetBuffer(m_descriptorSet, buffer->getHandle(), binding);
-        pendingBindings.reset(binding);
+        m_pendingBindings.reset(binding);
     }
 }
 

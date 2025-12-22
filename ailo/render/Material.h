@@ -17,7 +17,7 @@ public:
     void updateBuffers(RenderAPI&);
     void bindDescriptorSet(RenderAPI&) const;
 
-    Shader* getShader() const { return m_shader; }
+    const Shader* getShader() const { return m_shader; }
 
     void destroy(Engine&);
 
@@ -25,7 +25,7 @@ private:
     DescriptorSetHandle m_descriptorSet;
     std::unordered_map<uint32_t, Texture*> m_textures;
     std::unordered_map<uint32_t, BufferObject*> m_buffers;
-    std::bitset<64> pendingBindings;
+    std::bitset<64> m_pendingBindings;
     Shader* m_shader;
 };
 

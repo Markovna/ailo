@@ -3,9 +3,12 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <assimp/material.h>
 #include <stdexcept>
 #include <iostream>
 #include <vector>
+#include <filesystem>
+#include <stb_image/stb_image.h>
 
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
@@ -33,7 +36,39 @@ struct MeshData {
     std::vector<Vertex> vertices;
     std::vector<uint16_t> indices;
     glm::mat4 transform;
+    unsigned int materialIndex;
 };
+
+// Helper function to load texture from file
+static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory) {
+    // Construct full texture path
+    std::filesystem::path fullPath;
+
+    // Check if the texture path is absolute
+    if (std::filesystem::path(texturePath).is_absolute()) {
+        fullPath = texturePath;
+    } else {
+        // Make it relative to the model directory
+        fullPath = std::filesystem::path(modelDirectory) / texturePath;
+    }
+
+    // Load image using stb_image
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(fullPath.string().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+    if (!pixels) {
+        std::cerr << "Warning: Failed to load texture: " << fullPath << std::endl;
+        return nullptr;
+    }
+
+    // Create texture
+    auto texture = std::make_unique<Texture>(engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
+    texture->updateImage(engine, pixels, texWidth * texHeight * 4);
+
+    stbi_image_free(pixels);
+
+    return texture;
+}
 
 // Recursive function to traverse scene hierarchy and extract meshes with transforms
 static void processNode(
@@ -52,6 +87,7 @@ static void processNode(
 
         MeshData meshData;
         meshData.transform = worldTransform;
+        meshData.materialIndex = aiMesh->mMaterialIndex;
 
         // Extract vertices
         for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
@@ -106,6 +142,9 @@ static void processNode(
 }
 
 std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::string& path) {
+    // Static container to keep textures alive
+    static std::vector<std::unique_ptr<Texture>> loadedTextures;
+
     Assimp::Importer importer;
 
     const aiScene* aiscene = importer.ReadFile(path,
@@ -116,6 +155,30 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
 
     if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode) {
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
+    }
+
+    // Get the directory of the model file for resolving texture paths
+    std::filesystem::path modelPath(path);
+    std::string modelDirectory = modelPath.parent_path().string();
+
+    // Process materials and load textures
+    std::vector<Texture*> textures;
+    textures.resize(aiscene->mNumMaterials, nullptr);
+
+    for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
+        aiMaterial* material = aiscene->mMaterials[i];
+
+        // Try to get the diffuse texture
+        if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
+            aiString texturePath;
+            if (material->GetTexture(aiTextureType_DIFFUSE, 0, &texturePath) == AI_SUCCESS) {
+                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
+                if (texture) {
+                    textures[i] = texture.get();
+                    loadedTextures.push_back(std::move(texture));
+                }
+            }
+        }
     }
 
     // Traverse the scene hierarchy and collect mesh data with transforms
@@ -154,8 +217,8 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     texCoordAttr.offset = offsetof(Vertex, texCoord);
     vertexInput.attributes.push_back(texCoordAttr);
 
-    // Create shader and material (shared by all meshes)
-    auto shader = Shader::createDefaultShader(engine, vertexInput);
+    // Create shader (shared by all meshes)
+    auto shader = std::make_unique<Shader>(engine, Shader::getDefaultShaderDescription());
 
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
@@ -186,6 +249,12 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         mesh.indexBuffer->updateBuffer(engine, meshData.indices.data(), sizeof(uint16_t) * meshData.indices.size());
 
         auto material = std::make_unique<Material>(engine, *shader);
+
+        // Assign texture to material if available
+        if (meshData.materialIndex < textures.size() && textures[meshData.materialIndex]) {
+            material->setTexture(0, textures[meshData.materialIndex]);
+        }
+
         // Create a single primitive for this mesh
         RenderPrimitive primitive;
         primitive.setVertexBuffer(mesh.vertexBuffer.get());
@@ -193,8 +262,8 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         primitive.setMaterial(material.get());
         mesh.primitives.push_back(primitive);
 
-        // Store material reference (all meshes share the same material for now)
         mesh.materials.push_back(std::move(material));
+        mesh.vertexInput = vertexInput;
     }
     // TODO: fix the leak
     shader.release();

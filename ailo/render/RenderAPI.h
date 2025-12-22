@@ -135,14 +135,18 @@ struct DescriptorSetLayoutBinding {
   vk::ShaderStageFlagBits stageFlags;
 };
 
-struct PipelineDescription {
-  using ShaderCode = std::vector<char>;
-  using SetLayout = std::vector<DescriptorSetLayoutBinding>;
+struct ShaderDescription {
+    using ShaderCode = std::vector<char>;
+    using SetLayout = std::vector<DescriptorSetLayoutBinding>;
 
-  ShaderCode vertexShader;
-  ShaderCode fragmentShader;
-  RasterDescription raster;
-  std::vector<SetLayout> layout;
+    ShaderCode vertexShader;
+    ShaderCode fragmentShader;
+    RasterDescription raster;
+    std::vector<SetLayout> layout;
+};
+
+struct PipelineDescription {
+  ShaderDescription shader;
   VertexInputDescription vertexInput;
 };
 

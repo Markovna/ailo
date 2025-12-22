@@ -93,8 +93,8 @@ void Application::init() {
 
   ailo::MeshReader reader;
 
-  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
-  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
+  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
+  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
 }
 
 void Application::mainLoop() {
@@ -177,11 +177,12 @@ void Application::updateTransforms() {
   float camY = m_cameraDistance * sin(m_cameraPitch);
   float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
 
+  glm::vec3 offset = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 cameraPos(camX, camY, camZ);
   glm::vec3 target(0.0f, 0.0f, 0.0f);
   glm::vec3 up(0.0f, 1.0f, 0.0f);
 
-  m_camera->view = glm::lookAt(cameraPos, target, up);
+  m_camera->view = glm::lookAt(offset + cameraPos, offset + target, up);
 
   m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan

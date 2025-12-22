@@ -11,6 +11,7 @@ namespace ailo {
 class Engine;
 
 struct Mesh {
+    VertexInputDescription vertexInput;
     std::unique_ptr<BufferObject> vertexBuffer;
     std::unique_ptr<BufferObject> indexBuffer;
     std::vector<std::unique_ptr<Material>> materials;

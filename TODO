@@ -1,8 +1,9 @@
 TODO:
 
-*  Loading models from obj files
-
 *  Add support for different types of indexes in index buffer (16/32 bits)
+
+*  Resource management: resource class to manage resource creation and
+   destruction (shaders, materials, textures)
 
 *  Do not specify vertex input when creating a graphics pipeline. Instead,
    the vulkan pipeline object should be created and cached when calling

@@ -53,11 +53,11 @@ add_executable(ailo
     ailo/render/Material.h
     ailo/render/Texture.cpp
     ailo/render/Texture.h
-        ailo/render/Mesh.cpp
-        ailo/render/Mesh.h
-        ailo/ecs/Transform.h
-        ailo/ecs/Transform.cpp
-        ailo/ecs/Transform.h)
+    ailo/render/Mesh.cpp
+    ailo/render/Mesh.h
+    ailo/ecs/Transform.h
+    ailo/ecs/Transform.cpp
+    )
 
 # Link libraries
 target_link_libraries(ailo

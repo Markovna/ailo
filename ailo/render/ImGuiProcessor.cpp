@@ -103,22 +103,24 @@ void ImGuiProcessor::createPipeline() {
     // Create the graphics pipeline
     m_pipeline = m_renderAPI->createGraphicsPipeline(
     ailo::PipelineDescription {
-        .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
-        .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv"),
-            .raster = ailo::RasterDescription {
-                .cullingMode = ailo::CullingMode::NONE,
-                .inverseFrontFace = false,
-                .blendEnable = true,
-                .depthWriteEnable = false,
-                .rgbBlendOp = BlendOperation::ADD,
-                .alphaBlendOp = BlendOperation::ADD,
-                .srcRgbBlendFunc = BlendFunction::SRC_ALPHA,
-                .srcAlphaBlendFunc = BlendFunction::ONE,
-                .dstRgbBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA,
-                .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
-            },
-            .layout {
-               { bindings }
+            .shader = {
+                .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
+                .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv"),
+                    .raster = ailo::RasterDescription {
+                        .cullingMode = ailo::CullingMode::NONE,
+                        .inverseFrontFace = false,
+                        .blendEnable = true,
+                        .depthWriteEnable = false,
+                        .rgbBlendOp = BlendOperation::ADD,
+                        .alphaBlendOp = BlendOperation::ADD,
+                        .srcRgbBlendFunc = BlendFunction::SRC_ALPHA,
+                        .srcAlphaBlendFunc = BlendFunction::ONE,
+                        .dstRgbBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA,
+                        .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
+                    },
+                    .layout {
+                       { bindings }
+                    },
             },
             .vertexInput = vertexInput
         }

@@ -30,7 +30,7 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
       auto material = primitive.getMaterial();
       auto shader = material->getShader();
 
-      backend->bindPipeline(shader->getPipeline());
+      shader->bindPipeline(engine, mesh.vertexInput);
 
       backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
       backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });

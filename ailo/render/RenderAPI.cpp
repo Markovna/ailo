@@ -608,10 +608,11 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     PipelineHandle handle = m_pipelines.allocate();
 
     Pipeline& pipeline = m_pipelines.get(handle);
+    const ShaderDescription& shader = description.shader;
 
     // Load shaders
-    auto vertShaderCode = description.vertexShader;
-    auto fragShaderCode = description.fragmentShader;
+    auto vertShaderCode = shader.vertexShader;
+    auto fragShaderCode = shader.fragmentShader;
 
     vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
     vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
@@ -646,7 +647,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     viewportState.viewportCount = 1;
     viewportState.scissorCount = 1;
 
-    auto& raster = description.raster;
+    auto& raster = shader.raster;
 
     // Rasterization
     vk::PipelineRasterizationStateCreateInfo rasterizer{};
@@ -689,7 +690,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     colorBlending.pAttachments = &colorBlendAttachment;
 
     // Dynamic state
-    std::vector<vk::DynamicState> dynamicStates = {
+    std::array dynamicStates = {
         vk::DynamicState::eViewport,
         vk::DynamicState::eScissor
     };
@@ -698,7 +699,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     dynamicState.pDynamicStates = dynamicStates.data();
 
     std::vector<vk::DescriptorSetLayout> setLayouts;
-    auto& layout = description.layout;
+    auto& layout = shader.layout;
     for(auto& set : layout) {
       std::vector<vk::DescriptorSetLayoutBinding> bindings;
       for(auto& binding : set) {

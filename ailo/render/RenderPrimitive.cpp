@@ -15,7 +15,7 @@ void BufferObject::destroy(Engine& engine) {
 }
 
 RenderPrimitive::RenderPrimitive(BufferObject* vertexBuffer, BufferObject* indexBuffer, Material* material, size_t indexOffset,
-  size_t indexCount): m_vertexBuffer(vertexBuffer)
+  size_t indexCount) : m_vertexBuffer(vertexBuffer)
                       , m_indexBuffer(indexBuffer)
                       , m_material(material)
                       , m_indexOffset(indexOffset)
@@ -26,8 +26,6 @@ void RenderPrimitive::setIndexBuffer(BufferObject* buffer, size_t offset, size_t
   m_indexCount = count;
   m_indexOffset = offset;
 }
-
-Material* RenderPrimitive::getMaterial() { return m_material; }
 
 const Material* RenderPrimitive::getMaterial() const {
   return m_material;

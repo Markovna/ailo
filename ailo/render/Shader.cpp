@@ -1,5 +1,7 @@
 #include "Shader.h"
 
+#include <ranges>
+
 #include "Engine.h"
 #include "OS.h"
 #include "Renderer.h"
@@ -7,18 +9,49 @@
 
 namespace ailo {
 
+void Shader::bindPipeline(Engine& engine, const VertexInputDescription& vertexInput) const {
+    PipelineCacheKey key;
+    for (auto& binding : vertexInput.bindings) {
+        key.vertexBindings[binding.binding] = binding;
+    }
+
+    for (auto& attribute : vertexInput.attributes) {
+        key.vertexAttributes[attribute.binding] = attribute;
+    }
+
+    auto backend = engine.getRenderAPI();
+
+    auto search = m_pipelines.find(key);
+    if (search == m_pipelines.end()) {
+        auto pipeline = backend->createGraphicsPipeline({.shader = m_description, .vertexInput = vertexInput});
+        auto [it, success] = m_pipelines.insert({key, pipeline});
+
+        search = it;
+    }
+
+    backend->bindPipeline(search->second);
+}
+
+DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) const {
+    if (setIndex >= m_descriptorSetLayouts.size()) {
+        return {};
+    }
+
+    return m_descriptorSetLayouts[setIndex];
+}
+
 void Shader::destroy(Engine& engine) {
     for (auto& layout : m_descriptorSetLayouts) {
         engine.getRenderAPI()->destroyDescriptorSetLayout(layout);
     }
 
-    engine.getRenderAPI()->destroyPipeline(m_pipeline);
+    for (auto& pipeline : m_pipelines | std::views::values) {
+        engine.getRenderAPI()->destroyPipeline(pipeline);
+    }
 }
 
-std::unique_ptr<Shader> Shader::createDefaultShader(Engine& engine, VertexInputDescription& vertexInput) {
-    return std::make_unique<Shader>(
-    engine,
-    PipelineDescription {
+ShaderDescription& Shader::getDefaultShaderDescription() {
+    static ShaderDescription shaderDescription {
         .vertexShader = os::readFile("shaders/shader.vert.spv"),
         .fragmentShader = os::readFile("shaders/shader.frag.spv"),
         .raster = RasterDescription {
@@ -31,25 +64,20 @@ std::unique_ptr<Shader> Shader::createDefaultShader(Engine& engine, VertexInputD
             DescriptorSetLayoutBindings::perView(),
             DescriptorSetLayoutBindings::perObject(),
             {
-              {
-                .binding = 0,
-                .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                .stageFlags = vk::ShaderStageFlagBits::eFragment,
-              }
+                  {
+                      .binding = 0,
+                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                      .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                    }
             },
-          },
-        .vertexInput = vertexInput
-      }
-  );
+          }
+    };
+    return shaderDescription;
 }
 
-Shader::Shader(Engine& engine, const PipelineDescription& description)
-    : m_pipeline(engine.getRenderAPI()->createGraphicsPipeline(description)) {
-    for (auto& bindings : description.layout) {
-        m_descriptorSetLayouts.push_back(engine.getRenderAPI()->createDescriptorSetLayout(bindings));
-    }
+Shader::Shader(Engine&, const ShaderDescription& description)
+    : m_description(description) {
+
 }
-
-
 
 }
