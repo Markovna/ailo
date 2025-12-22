@@ -16,16 +16,13 @@
 #include "render/RenderPrimitive.h"
 #include "input/InputTypes.h"
 #include "input/InputSystem.h"
-#include "OS.h"
 
 #include <memory>
 #include <vector>
-#include <array>
 #include <iostream>
 
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
-#include "render/Shader.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
 static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
@@ -136,18 +133,23 @@ void Application::handleInput() {
     // Handle camera rotation on mouse drag
     if (auto mousePressedEvent = std::get_if<ailo::MouseButtonPressedEvent>(&event)) {
       if (mousePressedEvent->button == ailo::MouseButton::Left) {
-        m_isDragging = true;
-        m_lastMouseX = mousePressedEvent->x;
-        m_lastMouseY = mousePressedEvent->y;
+        if (inputSystem->isKeyPressed(ailo::KeyCode::LeftAlt)) {
+          bool controlPressed = inputSystem->isKeyPressed(ailo::KeyCode::LeftControl);
+          m_isRotating = controlPressed == false;
+          m_isMoving = controlPressed;
+          m_lastMouseX = mousePressedEvent->x;
+          m_lastMouseY = mousePressedEvent->y;
+        }
       }
     }
     else if (auto mouseReleasedEvent = std::get_if<ailo::MouseButtonReleasedEvent>(&event)) {
       if (mouseReleasedEvent->button == ailo::MouseButton::Left) {
-        m_isDragging = false;
+        m_isRotating = false;
+        m_isMoving = false;
       }
     }
     else if (auto mouseMovedEvent = std::get_if<ailo::MouseMovedEvent>(&event)) {
-      if (m_isDragging) {
+      if (m_isRotating) {
         double deltaX = mouseMovedEvent->x - m_lastMouseX;
         double deltaY = mouseMovedEvent->y - m_lastMouseY;
 
@@ -157,6 +159,30 @@ void Application::handleInput() {
 
         // Clamp pitch to avoid gimbal lock
         m_cameraPitch = glm::clamp(m_cameraPitch, -glm::pi<float>() / 2.0f + 0.1f, glm::pi<float>() / 2.0f - 0.1f);
+
+        m_lastMouseX = mouseMovedEvent->x;
+        m_lastMouseY = mouseMovedEvent->y;
+      }
+      else if (m_isMoving) {
+        double deltaX = mouseMovedEvent->x - m_lastMouseX;
+        double deltaY = mouseMovedEvent->y - m_lastMouseY;
+
+        // Calculate camera direction vectors
+        float camX = m_cameraDistance * cos(m_cameraPitch) * cos(m_cameraYaw);
+        float camY = m_cameraDistance * sin(m_cameraPitch);
+        float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
+
+        glm::vec3 cameraPos = m_cameraTarget + glm::vec3(camX, camY, camZ);
+        glm::vec3 forward = glm::normalize(m_cameraTarget - cameraPos);
+        glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 up = glm::normalize(glm::cross(right, forward));
+
+        // Pan speed based on distance from target
+        float panSpeed = m_cameraDistance * 0.001f;
+
+        // Move camera target based on mouse delta
+        m_cameraTarget -= right * static_cast<float>(deltaX) * panSpeed;
+        m_cameraTarget += up * static_cast<float>(deltaY) * panSpeed;
 
         m_lastMouseX = mouseMovedEvent->x;
         m_lastMouseY = mouseMovedEvent->y;
@@ -177,12 +203,10 @@ void Application::updateTransforms() {
   float camY = m_cameraDistance * sin(m_cameraPitch);
   float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
 
-  glm::vec3 offset = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 cameraPos(camX, camY, camZ);
-  glm::vec3 target(0.0f, 0.0f, 0.0f);
   glm::vec3 up(0.0f, 1.0f, 0.0f);
 
-  m_camera->view = glm::lookAt(offset + cameraPos, offset + target, up);
+  m_camera->view = glm::lookAt(m_cameraTarget + cameraPos, m_cameraTarget, up);
 
   m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan

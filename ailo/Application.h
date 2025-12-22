@@ -32,7 +32,9 @@ class Application {
     float m_cameraYaw = 0.0f;
     float m_cameraPitch = 0.0f;
     float m_cameraDistance = 10.0f;
-    bool m_isDragging = false;
+    bool m_isRotating = false;
+    bool m_isMoving = false;
+    glm::vec3 m_cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
     double m_lastMouseX = 0.0;
     double m_lastMouseY = 0.0;
 

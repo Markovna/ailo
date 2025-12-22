@@ -11,6 +11,9 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   // prepare per view buffer
   perViewUniformBufferData.projection = camera.projection;
   perViewUniformBufferData.view = camera.view;
+  perViewUniformBufferData.viewInverse = inverse(camera.view);
+  perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.8f);
+  perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 3.0f, -1.0f));
 
   RenderAPI* backend = engine.getRenderAPI();
   backend->beginFrame();
@@ -89,8 +92,13 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 
   uint32_t index = 0;
   for(const auto& [entity, mesh] : meshView.each()) {
-    auto tr = scene.tryGet<Transform>(entity);
-    perObjectUniformBufferData[index].model = (tr ? tr->transform : glm::mat4(1.0f));
+    const auto tr = scene.tryGet<Transform>(entity);
+
+    auto& uniformBufferData = perObjectUniformBufferData[index];
+    uniformBufferData.model = tr ? tr->transform : glm::mat4(1.0f);
+    uniformBufferData.modelInverse = inverse(uniformBufferData.model);
+    uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
+
     index++;
 
     for (auto& material : mesh.materials) {

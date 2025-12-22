@@ -19,6 +19,7 @@ struct Vertex {
     glm::vec3 pos;
     glm::vec3 color;
     glm::vec2 texCoord;
+    glm::vec3 normal;
 };
 
 // Helper function to convert aiMatrix4x4 to glm::mat4
@@ -110,15 +111,24 @@ static void processNode(
                 vertex.texCoord = glm::vec2(0.0f, 0.0f);
             }
 
-            // Color (use normal as color if available, otherwise white)
-            if (aiMesh->mNormals) {
+            if (aiMesh->mColors[0]) {
                 vertex.color = glm::vec3(
+                    aiMesh->mColors[v]->r,
+                    aiMesh->mColors[v]->r,
+                    aiMesh->mColors[v]->b
+                );
+            } else {
+                vertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+
+            if (aiMesh->mNormals) {
+                vertex.normal = glm::vec3(
                     (aiMesh->mNormals[v].x + 1.0f) * 0.5f,
                     (aiMesh->mNormals[v].y + 1.0f) * 0.5f,
                     (aiMesh->mNormals[v].z + 1.0f) * 0.5f
                 );
             } else {
-                vertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
+                vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
             }
 
             meshData.vertices.push_back(vertex);
@@ -216,6 +226,13 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     texCoordAttr.format = vk::Format::eR32G32Sfloat;
     texCoordAttr.offset = offsetof(Vertex, texCoord);
     vertexInput.attributes.push_back(texCoordAttr);
+
+    vk::VertexInputAttributeDescription normalAttr{};
+    normalAttr.binding = 0;
+    normalAttr.location = 3;
+    normalAttr.format = vk::Format::eR32G32B32Sfloat;
+    normalAttr.offset = offsetof(Vertex, normal);
+    vertexInput.attributes.push_back(normalAttr);
 
     // Create shader (shared by all meshes)
     auto shader = std::make_unique<Shader>(engine, Shader::getDefaultShaderDescription());

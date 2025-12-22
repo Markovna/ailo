@@ -8,10 +8,17 @@ namespace ailo {
 struct PerViewUniforms {
   alignas(16) glm::mat4 projection;
   alignas(16) glm::mat4 view;
+  alignas(16) glm::mat4 viewInverse;
+
+  glm::vec3 lightDirection;
+  float _0;
+  glm::vec4 lightColorIntensity;
 };
 
 struct PerObjectUniforms {
   alignas(16) glm::mat4 model = glm::mat4(1);
+  alignas(16) glm::mat4 modelInverse = glm::mat4(1);
+  alignas(16) glm::mat4 modelInverseTranspose = glm::mat4(1);
 };
 
 struct Camera {
