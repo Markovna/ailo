@@ -29,8 +29,8 @@ static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
 static ailo::MouseButton glfwButtonToMouseButton(int glfwButton);
 static ailo::ModifierKey glfwModsToModifierKey(int glfwMods);
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t WIDTH = 1200;
+const uint32_t HEIGHT = 900;
 
 void Application::run() {
   init();
@@ -92,6 +92,7 @@ void Application::init() {
 
   //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
   auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
+  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
 }
 
 void Application::mainLoop() {

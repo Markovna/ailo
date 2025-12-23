@@ -68,9 +68,9 @@ ShaderDescription& Shader::getDefaultShaderDescription() {
                       .binding = 0,
                       .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                       .stageFlags = vk::ShaderStageFlagBits::eFragment,
-                    }
+                  }
             },
-          }
+        }
     };
     return shaderDescription;
 }

@@ -132,7 +132,7 @@ struct RasterDescription {
 struct DescriptorSetLayoutBinding {
   uint32_t binding;
   vk::DescriptorType descriptorType;
-  vk::ShaderStageFlagBits stageFlags;
+  vk::ShaderStageFlags stageFlags;
 };
 
 struct ShaderDescription {

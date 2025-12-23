@@ -9,11 +9,16 @@ namespace ailo {
 
 void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   // prepare per view buffer
-  perViewUniformBufferData.projection = camera.projection;
-  perViewUniformBufferData.view = camera.view;
-  perViewUniformBufferData.viewInverse = inverse(camera.view);
-  perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.8f);
-  perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 3.0f, -1.0f));
+  m_perViewUniformBufferData.projection = camera.projection;
+  m_perViewUniformBufferData.view = camera.view;
+  m_perViewUniformBufferData.viewInverse = inverse(camera.view);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.5f);
+  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 5.0f, -3.0f));
+  m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
+
+  // prepare lights data
+  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(40.0f, 100.0f, 0.0f, 50);
+  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
 
   RenderAPI* backend = engine.getRenderAPI();
   backend->beginFrame();
@@ -53,7 +58,10 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
 
 void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   if(!m_viewUniformBufferHandle) {
-    m_viewUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(perViewUniformBufferData));
+    m_viewUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
+  }
+  if(!m_lightsUniformBufferHandle) {
+    m_lightsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(m_lightUniformsBufferData));
   }
 
   if(!m_viewDescriptorSetLayout) {
@@ -62,7 +70,8 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 
   if(!m_viewDescriptorSet) {
     m_viewDescriptorSet = backend.createDescriptorSet(m_viewDescriptorSetLayout);
-    backend.updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, 0);
+    backend.updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
+    backend.updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
   }
 
   if(!m_objectDescriptorSetLayout) {
@@ -73,13 +82,13 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   size_t meshCount = meshView.size();
 
   // prepare per object buffer
-  if(meshCount > perObjectUniformBufferData.size()) {
-    perObjectUniformBufferData.resize(meshCount);
+  if(meshCount > m_perObjectUniformBufferData.size()) {
+    m_perObjectUniformBufferData.resize(meshCount);
 
     if(m_objectsUniformBufferHandle) {
       backend.destroyBuffer(m_objectsUniformBufferHandle);
     }
-    m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
+    m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
     backend.destroyDescriptorSet(m_objectDescriptorSet);
     m_objectDescriptorSet = { };
@@ -94,7 +103,7 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   for(const auto& [entity, mesh] : meshView.each()) {
     const auto tr = scene.tryGet<Transform>(entity);
 
-    auto& uniformBufferData = perObjectUniformBufferData[index];
+    auto& uniformBufferData = m_perObjectUniformBufferData[index];
     uniformBufferData.model = tr ? tr->transform : glm::mat4(1.0f);
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
@@ -107,8 +116,9 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
     }
   }
 
-  backend.updateBuffer(m_viewUniformBufferHandle, &perViewUniformBufferData, sizeof(perViewUniformBufferData));
-  backend.updateBuffer(m_objectsUniformBufferHandle, perObjectUniformBufferData.data(), perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
+  backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
+  backend.updateBuffer(m_lightsUniformBufferHandle, &m_lightUniformsBufferData, sizeof(m_lightUniformsBufferData));
+  backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 }
 
 void Renderer::terminate(Engine& engine) {
@@ -121,6 +131,7 @@ void Renderer::terminate(Engine& engine) {
   backend.destroyDescriptorSetLayout(m_objectDescriptorSetLayout);
 
   backend.destroyBuffer(m_viewUniformBufferHandle);
+  backend.destroyBuffer(m_lightsUniformBufferHandle);
   backend.destroyBuffer(m_objectsUniformBufferHandle);
 }
 

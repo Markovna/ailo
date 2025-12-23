@@ -11,7 +11,13 @@ struct PerViewUniforms {
   alignas(16) glm::mat4 viewInverse;
 
   glm::vec3 lightDirection;
-  float _0;
+  float __padding0;
+  glm::vec4 lightColorIntensity;
+  glm::vec4 ambientLightColorIntensity;
+};
+
+struct LightUniform {
+  glm::vec4 lightPositionRadius;
   glm::vec4 lightColorIntensity;
 };
 
@@ -32,14 +38,24 @@ enum class DescriptorSetBindingPoints : uint8_t {
   PER_MATERIAL    = 2
 };
 
+enum class PerViewDescriptorBindings {
+  FRAME_UNIFORMS = 0,
+  LIGHTS = 1
+};
+
 class DescriptorSetLayoutBindings {
 public:
   static const std::vector<DescriptorSetLayoutBinding>& perView() {
     static std::vector<DescriptorSetLayoutBinding> bindings {
       {
-        .binding = 0,
+        .binding = std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS),
         .descriptorType = vk::DescriptorType::eUniformBuffer,
-        .stageFlags = vk::ShaderStageFlagBits::eVertex
+        .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
+      },
+    {
+        .binding = std::to_underlying(PerViewDescriptorBindings::LIGHTS),
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
       }
     };
     return bindings;
@@ -69,11 +85,13 @@ class Renderer {
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
-  PerObjectUniformBufferData perObjectUniformBufferData;
-  PerViewUniforms perViewUniformBufferData;
+  PerObjectUniformBufferData m_perObjectUniformBufferData;
+  PerViewUniforms m_perViewUniformBufferData {};
+  LightUniform m_lightUniformsBufferData {};
 
   BufferHandle m_objectsUniformBufferHandle;
   BufferHandle m_viewUniformBufferHandle;
+  BufferHandle m_lightsUniformBufferHandle;
   DescriptorSetHandle m_viewDescriptorSet;
   DescriptorSetHandle m_objectDescriptorSet;
   DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
