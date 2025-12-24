@@ -1,5 +1,13 @@
 #version 450
 
+struct LightUniform {
+    vec4 positionRadius;
+    vec4 colorIntensity;
+    vec3 direction;
+    uint type;
+    vec2 scaleOffset;
+};
+
 layout (set = 0, binding = 0, std140) uniform perView {
    mat4 projection;
    mat4 view;
@@ -10,9 +18,8 @@ layout (set = 0, binding = 0, std140) uniform perView {
 } view;
 
 layout (set = 0, binding = 1, std140) uniform perLight {
-    vec4 positionRadius;
-    vec4 colorIntensity;
-} lights;
+    LightUniform light;
+};
 
 layout (set = 1, binding = 0, std140) uniform perObject {
    mat4 model;

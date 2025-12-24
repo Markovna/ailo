@@ -1,5 +1,13 @@
 #version 450
 
+struct LightUniform {
+    vec4 positionRadius;
+    vec4 colorIntensity;
+    vec3 direction;
+    uint type;
+    vec2 scaleOffset;
+};
+
 layout (set = 0, binding = 0, std140) uniform perView {
    mat4 projection;
    mat4 view;
@@ -10,9 +18,8 @@ layout (set = 0, binding = 0, std140) uniform perView {
 } view;
 
 layout (set = 0, binding = 1, std140) uniform perLight {
-    vec4 positionRadius;
-    vec4 colorIntensity;
-} lights;
+    LightUniform light;
+};
 
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
 
@@ -23,13 +30,31 @@ layout(location = 3) in vec3 fragNormalWorld;
 
 layout(location = 0) out vec4 outColor;
 
+// TODO: make this a uniform
 const float blinnPhongExponent = 512.0;
 
-vec3 pointLight(vec3 lightPos, float radius, vec4 color, vec3 surfaceNormal, vec3 viewDir) {
+const int POINT_LIGHT_TYPE = 0;
+const int SPOT_LIGHT_TYPE = 1;
+
+float getAngleAttenuation(vec3 lightDir, vec3 posToLight, vec2 scaleOffset) {
+    float cd = dot(lightDir, normalize(posToLight));
+    float attenuation = clamp(cd * scaleOffset.x + scaleOffset.y, 0, 1);
+    return attenuation * attenuation;
+}
+
+vec3 pointLight(LightUniform light, vec3 surfaceNormal, vec3 viewDir) {
+    vec3 lightPos = light.positionRadius.xyz;
+    float radius = light.positionRadius.w;
+
     vec3 directionToLight = lightPos - fragPosWorld;
     float attenuation = radius / dot(directionToLight, directionToLight);
+
+    if(light.type == SPOT_LIGHT_TYPE) {
+        attenuation *= getAngleAttenuation(light.direction, directionToLight, light.scaleOffset);
+    }
+
     directionToLight = normalize(directionToLight);
-    vec3 lightColor = color.rgb * color.w * attenuation;
+    vec3 lightColor = light.colorIntensity.rgb * light.colorIntensity.w * attenuation;
     vec3 diffuseLight = lightColor * max(dot(surfaceNormal, directionToLight), 0.0);
     vec3 halfAngle = normalize(directionToLight + viewDir);
     float blinnTerm = pow(clamp(dot(surfaceNormal, halfAngle), 0, 1), blinnPhongExponent);
@@ -53,7 +78,7 @@ void main() {
     vec3 viewDir = normalize(cameraPosWorld - fragPosWorld);
 
     vec3 directionalLight = directionalLight(view.lightDirection, view.lightColorIntensity, surfaceNormal, viewDir);
-    vec3 pointLight = pointLight(lights.positionRadius.xyz, lights.positionRadius.w, lights.colorIntensity, surfaceNormal, viewDir);
+    vec3 pointLight = pointLight(light, surfaceNormal, viewDir);
 
     vec3 ambientLight = view.ambientLightColorIntensity.rgb * view.ambientLightColorIntensity.w;
 

@@ -19,6 +19,11 @@ struct PerViewUniforms {
 struct LightUniform {
   glm::vec4 lightPositionRadius;
   glm::vec4 lightColorIntensity;
+  glm::vec3 direction;
+  uint32_t type; // 0-point, 1-spot
+  glm::vec2 scaleOffset; // spot light only
+  float __padding0;
+  float __padding1;
 };
 
 struct PerObjectUniforms {

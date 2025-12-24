@@ -4,8 +4,22 @@
 #include "Mesh.h"
 #include "Shader.h"
 #include "ecs/Transform.h"
+#include "glm/gtc/constants.hpp"
 
 namespace ailo {
+
+static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
+  float const outerClamped = std::clamp(std::abs(outer), glm::radians(0.5f), glm::half_pi<float>());
+  float innerClamped = std::clamp(std::abs(inner), glm::radians(0.5f), glm::half_pi<float>());
+  innerClamped = std::min(innerClamped, outerClamped);
+
+  float const cosOuter = glm::cos(outerClamped);
+  float const cosInner = glm::cos(innerClamped);
+  float const scale = 1.0f / std::max(1.0f / 1024.0f, cosInner - cosOuter);
+  float const offset = -cosOuter * scale;
+
+  return { scale, offset };
+}
 
 void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   // prepare per view buffer
@@ -18,7 +32,10 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
 
   // prepare lights data
   m_lightUniformsBufferData.lightPositionRadius = glm::vec4(40.0f, 100.0f, 0.0f, 50);
-  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 0.3f, 0.3f, 2.0f);
+  m_lightUniformsBufferData.direction = glm::vec3(0.0f, 1.0f, 0.0f);
+  m_lightUniformsBufferData.type = 0;
+  m_lightUniformsBufferData.scaleOffset = getSpotLightScaleOffset(glm::radians(25.0), glm::radians(29.0));
 
   RenderAPI* backend = engine.getRenderAPI();
   backend->beginFrame();
