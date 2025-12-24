@@ -91,8 +91,8 @@ void Application::init() {
   ailo::MeshReader reader;
 
   //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
-  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
-  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
+  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
+  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
 }
 
 void Application::mainLoop() {

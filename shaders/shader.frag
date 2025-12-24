@@ -23,16 +23,39 @@ layout(location = 3) in vec3 fragNormalWorld;
 
 layout(location = 0) out vec4 outColor;
 
+const float blinnPhongExponent = 512.0;
+
+vec3 pointLight(vec3 lightPos, float radius, vec4 color, vec3 surfaceNormal, vec3 viewDir) {
+    vec3 directionToLight = lightPos - fragPosWorld;
+    float attenuation = radius / dot(directionToLight, directionToLight);
+    directionToLight = normalize(directionToLight);
+    vec3 lightColor = color.rgb * color.w * attenuation;
+    vec3 diffuseLight = lightColor * max(dot(surfaceNormal, directionToLight), 0.0);
+    vec3 halfAngle = normalize(directionToLight + viewDir);
+    float blinnTerm = pow(clamp(dot(surfaceNormal, halfAngle), 0, 1), blinnPhongExponent);
+    vec3 specularLight = lightColor * blinnTerm;
+    return diffuseLight + specularLight;
+}
+
+vec3 directionalLight(vec3 lightDirection, vec4 lightColorIntensity, vec3 surfaceNormal, vec3 viewDir) {
+    vec3 directionToLight = normalize(lightDirection);
+    vec3 diffuseLight = lightColorIntensity.rgb * lightColorIntensity.w * max(dot(surfaceNormal, directionToLight), 0.0);
+
+    vec3 halfAngle = normalize(directionToLight + viewDir);
+    float blinnTerm = pow(clamp(dot(surfaceNormal, halfAngle), 0, 1), blinnPhongExponent);
+    vec3 specularLight = diffuseLight * blinnTerm;
+    return diffuseLight + specularLight;
+}
+
 void main() {
-    vec3 directionToLight = normalize(view.lightDirection);
-    vec3 diffuseLight = view.lightColorIntensity.rgb * view.lightColorIntensity.w * max(dot(normalize(fragNormalWorld), directionToLight), 0.0);
+    vec3 surfaceNormal = normalize(fragNormalWorld);
+    vec3 cameraPosWorld = view.viewInverse[3].xyz;
+    vec3 viewDir = normalize(cameraPosWorld - fragPosWorld);
 
-    vec3 directionToDynamicLight = lights.positionRadius.xyz - fragPosWorld;
-    float attenuation = lights.positionRadius.w / dot(directionToDynamicLight, directionToDynamicLight);
-    vec3 dynamicLightColor = lights.colorIntensity.rgb * lights.colorIntensity.w * attenuation;
-    vec3 dynamicDiffuseLight = dynamicLightColor * max(dot(normalize(fragNormalWorld), normalize(directionToDynamicLight)), 0.0);
+    vec3 directionalLight = directionalLight(view.lightDirection, view.lightColorIntensity, surfaceNormal, viewDir);
+    vec3 pointLight = pointLight(lights.positionRadius.xyz, lights.positionRadius.w, lights.colorIntensity, surfaceNormal, viewDir);
 
-    vec3 ambientLightColor = view.ambientLightColorIntensity.rgb * view.ambientLightColorIntensity.w;
+    vec3 ambientLight = view.ambientLightColorIntensity.rgb * view.ambientLightColorIntensity.w;
 
-    outColor = vec4((diffuseLight + dynamicDiffuseLight + ambientLightColor) * fragColor, 1.0);
+    outColor = vec4((ambientLight + directionalLight + pointLight) * fragColor, 1.0);
 }
