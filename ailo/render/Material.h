@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include "Shader.h"
 #include "Texture.h"
 
@@ -9,7 +10,7 @@ class BufferObject;
 
 class Material {
 public:
-    Material(Engine& engine, Shader& shader);
+    Material(Engine& engine, std::shared_ptr<Shader>& shader);
     void setTexture(uint32_t binding, Texture* texture);
     void setBuffer(uint32_t binding, BufferObject* buffer);
 
@@ -17,7 +18,7 @@ public:
     void updateBuffers(RenderAPI&);
     void bindDescriptorSet(RenderAPI&) const;
 
-    const Shader* getShader() const { return m_shader; }
+    const Shader* getShader() const { return m_shader.get(); }
 
     void destroy(Engine&);
 
@@ -26,7 +27,7 @@ private:
     std::unordered_map<uint32_t, Texture*> m_textures;
     std::unordered_map<uint32_t, BufferObject*> m_buffers;
     std::bitset<64> m_pendingBindings;
-    Shader* m_shader;
+    std::shared_ptr<Shader> m_shader;
 };
 
 }

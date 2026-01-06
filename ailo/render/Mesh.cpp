@@ -235,7 +235,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     vertexInput.attributes.push_back(normalAttr);
 
     // Create shader (shared by all meshes)
-    auto shader = std::make_unique<Shader>(engine, Shader::getDefaultShaderDescription());
+    auto shader = engine.loadShader(Shader::getDefaultShaderDescription());
 
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
@@ -265,7 +265,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         );
         mesh.indexBuffer->updateBuffer(engine, meshData.indices.data(), sizeof(uint16_t) * meshData.indices.size());
 
-        auto material = std::make_unique<Material>(engine, *shader);
+        auto material = std::make_unique<Material>(engine, shader);
 
         // Assign texture to material if available
         if (meshData.materialIndex < textures.size() && textures[meshData.materialIndex]) {
@@ -282,8 +282,6 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         mesh.materials.push_back(std::move(material));
         mesh.vertexInput = vertexInput;
     }
-    // TODO: fix the leak
-    shader.release();
 
     return entities;
 }

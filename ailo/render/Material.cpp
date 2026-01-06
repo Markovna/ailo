@@ -3,9 +3,9 @@
 #include "Renderer.h"
 #include "RenderPrimitive.h"
 
-ailo::Material::Material(Engine& engine, Shader& shader)
-    : m_shader(&shader) {
-    if (auto descriptorSetLayout = shader.getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL))) {
+ailo::Material::Material(Engine& engine, std::shared_ptr<Shader>& shader)
+    : m_shader(shader) {
+    if (auto descriptorSetLayout = shader->getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL))) {
         m_descriptorSet = engine.getRenderAPI()->createDescriptorSet(descriptorSetLayout);
     }
 }

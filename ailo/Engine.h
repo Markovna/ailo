@@ -5,11 +5,13 @@
 struct GLFWwindow;
 
 namespace ailo {
+struct ShaderDescription;
 
 class RenderAPI;
 class Renderer;
 class InputSystem;
 class Scene;
+class Shader;
 
 struct Camera;
 
@@ -26,6 +28,8 @@ class Engine {
   InputSystem* getInputSystem();
 
   std::unique_ptr<Scene> createScene() const;
+
+  std::shared_ptr<Shader> loadShader(const ShaderDescription&);
 
  private:
   std::unique_ptr<RenderAPI> m_renderAPI;

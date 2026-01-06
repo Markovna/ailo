@@ -175,7 +175,7 @@ void RenderAPI::waitIdle() {
 
 BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     BufferHandle handle = m_buffers.allocate();
-    Buffer& vertexBuffer = m_buffers.get(handle);
+    auto& vertexBuffer = m_buffers.get(handle);
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
     if(data != nullptr) {
@@ -187,7 +187,7 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
 BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
     BufferHandle handle = m_buffers.allocate();
-    Buffer& indexBuffer = m_buffers.get(handle);
+    auto& indexBuffer = m_buffers.get(handle);
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
     if(data != nullptr) {
@@ -269,7 +269,7 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
 
 BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
   BufferHandle handle = m_buffers.allocate();
-  Buffer& buffer = m_buffers.get(handle);
+  auto& buffer = m_buffers.get(handle);
   auto usageFlags = vkutils::getBufferUsage(bufferBinding);
   allocateBuffer(buffer, usageFlags, size);
   buffer.binding = bufferBinding;
@@ -279,13 +279,13 @@ BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size)
 void RenderAPI::destroyBuffer(const BufferHandle& handle) {
   if(!handle) { return; }
 
-  Buffer& buffer = m_buffers.get(handle);
+  auto& buffer = m_buffers.get(handle);
   vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
   m_buffers.free(handle);
 }
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
-    Buffer& buffer = m_buffers.get(handle);
+    auto& buffer = m_buffers.get(handle);
     loadFromCpu(m_currentCommandBuffer, buffer, data, byteOffset, size);
 }
 
@@ -293,7 +293,7 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
     TextureHandle handle = m_textures.allocate();
-    TextureVK& texture = m_textures.get(handle);
+    auto& texture = m_textures.get(handle);
 
     texture.format = format;
     texture.width = width;
@@ -337,7 +337,7 @@ TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
     if(!handle) { return; }
 
-    TextureVK& texture = m_textures.get(handle);
+    auto& texture = m_textures.get(handle);
     m_device.destroySampler(texture.sampler);
     m_device.destroyImageView(texture.imageView);
     m_device.destroyImage(texture.image);
@@ -346,11 +346,11 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
-    TextureVK& texture = m_textures.get(handle);
+    auto& texture = m_textures.get(handle);
 
     // Create staging buffer
     // allocate stage buffer
-    StageBuffer stageBuffer = allocateStageBuffer(dataSize);
+    auto stageBuffer = allocateStageBuffer(dataSize);
 
     // mem copy to stage buffer
     memcpy(stageBuffer.mapping, data, dataSize);
@@ -374,7 +374,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 
 DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
     DescriptorSetLayoutHandle handle = m_descriptorSetLayouts.allocate();
-    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
+    auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
 
     std::vector<vk::DescriptorSetLayoutBinding> vkBindings;
     vkBindings.resize(bindings.size());
@@ -402,14 +402,14 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
 void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
-  DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
+  auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
   m_device.destroyDescriptorSetLayout(descriptorSetLayout.layout);
   m_descriptorSetLayouts.free(handle);
 }
 
 DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
     DescriptorSetHandle handle = m_descriptorSets.allocate();
-    DescriptorSet& descriptorSet = m_descriptorSets.get(handle);
+    auto& descriptorSet = m_descriptorSets.get(handle);
 
     createDescriptorSet(descriptorSet, layoutHandle);
 
@@ -417,7 +417,7 @@ DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle lay
 }
 
 void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetLayoutHandle layoutHandle) {
-    DescriptorSetLayout& descriptorSetLayout = m_descriptorSetLayouts.get(layoutHandle);
+    auto& descriptorSetLayout = m_descriptorSetLayouts.get(layoutHandle);
     auto& layout = descriptorSetLayout.layout;
 
     vk::DescriptorSetAllocateInfo allocInfo{};
@@ -436,7 +436,7 @@ void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetL
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
-    DescriptorSet& descriptorSet = m_descriptorSets.get(handle);
+    auto& descriptorSet = m_descriptorSets.get(handle);
     m_descriptorSetsToDestroy.push_back(descriptorSet);
     m_descriptorSets.free(handle);
 }
@@ -446,8 +446,8 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
         return;
     }
 
-    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    Buffer& buffer = m_buffers.get(bufferHandle);
+    auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
+    auto& buffer = m_buffers.get(bufferHandle);
 
     vk::DescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer.buffer;
@@ -473,8 +473,8 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
         return;
     }
 
-    DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    TextureVK& texture = m_textures.get(textureHandle);
+    auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
+    auto& texture = m_textures.get(textureHandle);
 
     if (descriptorSet.boundFence && *descriptorSet.boundFence) {
         // re-create descriptor set
@@ -522,9 +522,9 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 }
 
 void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets) {
-  Pipeline& currentPipeline = m_pipelines.get(m_currentPipeline);
+  auto& currentPipeline = m_pipelines.get(m_currentPipeline);
   assert(descriptorSetHandle);
-  DescriptorSet& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
+  auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
 
   std::array<uint32_t, 32> dynamicOffsetsArray { };
   assert(dynamicOffsets.size() <= dynamicOffsetsArray.size());
@@ -607,7 +607,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 
     PipelineHandle handle = m_pipelines.allocate();
 
-    Pipeline& pipeline = m_pipelines.get(handle);
+    auto& pipeline = m_pipelines.get(handle);
     const ShaderDescription& shader = description.shader;
 
     // Load shaders
@@ -760,7 +760,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
 void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     if(!handle) { return; }
 
-    Pipeline& pipeline = m_pipelines.get(handle);
+    auto& pipeline = m_pipelines.get(handle);
 
     m_device.destroyPipeline(pipeline.pipeline);
     for(auto descriptorSetLayout : pipeline.descriptorSetLayouts) {
@@ -816,14 +816,14 @@ void RenderAPI::bindPipeline(const PipelineHandle& handle) {
 }
 
 void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
-    Buffer& buffer = m_buffers.get(handle);
+    auto& buffer = m_buffers.get(handle);
     vk::Buffer vertexBuffers[] = {buffer.buffer};
     vk::DeviceSize offsets[] = {0};
     m_currentCommandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
 }
 
 void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
-    Buffer& buffer = m_buffers.get(handle);
+    auto& buffer = m_buffers.get(handle);
     m_currentCommandBuffer.bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 
@@ -1568,7 +1568,7 @@ void RenderAPI::createAllocator() {
   m_Allocator = ailo::createAllocator(m_instance, m_physicalDevice, m_device);
 }
 
-StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
+gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
     VkBufferCreateInfo bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = capacity,
@@ -1617,7 +1617,7 @@ void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& ac
 
 void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
   // allocate stage buffer
-  StageBuffer stageBuffer = allocateStageBuffer(numBytes);
+  auto stageBuffer = allocateStageBuffer(numBytes);
 
   // mem copy to stage buffer
   memcpy(stageBuffer.mapping, data, numBytes);

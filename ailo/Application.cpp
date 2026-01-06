@@ -243,6 +243,7 @@ void Application::cleanup() {
       material->destroy(*m_engine);
     }
   }
+  m_scene.reset();
   m_texture->destroy(*m_engine);
 
   m_engine.reset();

@@ -15,6 +15,22 @@
 
 namespace ailo {
 
+namespace gpu {
+
+struct Pipeline;
+struct Buffer;
+struct DescriptorSet;
+struct Texture;
+struct DescriptorSetLayout;
+
+}
+
+using PipelineHandle = Handle<gpu::Pipeline>;
+using BufferHandle = Handle<gpu::Buffer>;
+using DescriptorSetHandle = Handle<gpu::DescriptorSet>;
+using TextureHandle = Handle<gpu::Texture>;
+using DescriptorSetLayoutHandle = Handle<gpu::DescriptorSetLayout>;
+
 enum class BufferBinding : uint8_t {
   UNKNOWN,
   VERTEX,
@@ -62,6 +78,8 @@ enum class CompareOp : uint8_t {
   ALWAYS
 };
 
+namespace gpu {
+
 struct Buffer {
     vk::Buffer buffer;
     uint64_t size;
@@ -71,10 +89,10 @@ struct Buffer {
 };
 
 struct StageBuffer {
-  vk::Buffer buffer;
-  uint64_t size;
-  VmaAllocation vmaAllocation;
-  void* mapping;
+    vk::Buffer buffer;
+    uint64_t size;
+    VmaAllocation vmaAllocation;
+    void* mapping;
 };
 
 struct Pipeline {
@@ -84,13 +102,11 @@ struct Pipeline {
 };
 
 struct DescriptorSetLayout {
-  using bitmask_t = std::bitset<64>;
+    using bitmask_t = std::bitset<64>;
 
-  vk::DescriptorSetLayout layout;
-  bitmask_t dynamicBindings;
+    vk::DescriptorSetLayout layout;
+    bitmask_t dynamicBindings;
 };
-
-using DescriptorSetLayoutHandle = Handle<DescriptorSetLayout>;
 
 struct DescriptorSet {
     vk::DescriptorSet descriptorSet;
@@ -100,7 +116,7 @@ struct DescriptorSet {
     vk::Fence* boundFence;
 };
 
-struct TextureVK {
+struct Texture {
     vk::Image image;
     vk::DeviceMemory memory;
     vk::ImageView imageView;
@@ -110,29 +126,36 @@ struct TextureVK {
     uint32_t height;
 };
 
+struct SwapChain {
+    vk::SwapchainKHR swapchain;
+    std::vector<Texture> textures;
+};
+
+}
+
 struct VertexInputDescription {
     std::vector<vk::VertexInputBindingDescription> bindings;
     std::vector<vk::VertexInputAttributeDescription> attributes;
 };
 
 struct RasterDescription {
-  CullingMode cullingMode = CullingMode::FRONT;
-  bool inverseFrontFace = false;
-  bool blendEnable = false;
-  bool depthWriteEnable = true;
-  BlendOperation rgbBlendOp;
-  BlendOperation alphaBlendOp;
-  BlendFunction srcRgbBlendFunc;
-  BlendFunction srcAlphaBlendFunc;
-  BlendFunction dstRgbBlendFunc;
-  BlendFunction dstAlphaBlendFunc;
-  CompareOp depthCompareOp = CompareOp::LESS;
+    CullingMode cullingMode = CullingMode::FRONT;
+    bool inverseFrontFace = false;
+    bool blendEnable = false;
+    bool depthWriteEnable = true;
+    BlendOperation rgbBlendOp;
+    BlendOperation alphaBlendOp;
+    BlendFunction srcRgbBlendFunc;
+    BlendFunction srcAlphaBlendFunc;
+    BlendFunction dstRgbBlendFunc;
+    BlendFunction dstAlphaBlendFunc;
+    CompareOp depthCompareOp = CompareOp::LESS;
 };
 
 struct DescriptorSetLayoutBinding {
-  uint32_t binding;
-  vk::DescriptorType descriptorType;
-  vk::ShaderStageFlags stageFlags;
+    uint32_t binding;
+    vk::DescriptorType descriptorType;
+    vk::ShaderStageFlags stageFlags;
 };
 
 struct ShaderDescription {
@@ -149,11 +172,6 @@ struct PipelineDescription {
   ShaderDescription shader;
   VertexInputDescription vertexInput;
 };
-
-using PipelineHandle = Handle<Pipeline>;
-using BufferHandle = Handle<Buffer>;
-using DescriptorSetHandle = Handle<DescriptorSet>;
-using TextureHandle = Handle<TextureVK>;
 
 class RenderAPI {
 public:
@@ -212,6 +230,13 @@ public:
     vk::Extent2D getSwapchainExtent() const { return m_swapchainExtent; }
 
 private:
+    using Buffer = gpu::Buffer;
+    using DescriptorSet = gpu::DescriptorSet;
+    using Texture = gpu::Texture;
+    using Pipeline = gpu::Pipeline;
+    using DescriptorSetLayout = gpu::DescriptorSetLayout;
+    using StageBuffer = gpu::StageBuffer;
+
     // Internal initialization
     void createInstance();
     void setupDebugMessenger();
@@ -345,7 +370,7 @@ private:
     ResourceAllocator<Buffer> m_buffers;
     ResourceAllocator<DescriptorSetLayout> m_descriptorSetLayouts;
     ResourceAllocator<DescriptorSet> m_descriptorSets;
-    ResourceAllocator<TextureVK> m_textures;
+    ResourceAllocator<Texture> m_textures;
 };
 
 } // namespace ailo

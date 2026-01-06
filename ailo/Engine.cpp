@@ -38,4 +38,13 @@ std::unique_ptr<Scene> Engine::createScene() const {
   return std::make_unique<Scene>();
 }
 
+std::shared_ptr<Shader> Engine::loadShader(const ShaderDescription&) {
+  return std::shared_ptr<Shader>(
+          new Shader(*this, Shader::getDefaultShaderDescription()),
+          [this](Shader* p) {
+              p->destroy(*this);
+              delete p;
+          });
+}
+
 }
