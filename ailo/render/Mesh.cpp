@@ -20,6 +20,7 @@ struct Vertex {
     glm::vec3 color;
     glm::vec2 texCoord;
     glm::vec3 normal;
+    glm::vec3 tangent;
 };
 
 // Helper function to convert aiMatrix4x4 to glm::mat4
@@ -131,6 +132,16 @@ static void processNode(
                 vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
             }
 
+            if (aiMesh->mTangents) {
+                vertex.tangent = glm::vec3(
+                    (aiMesh->mTangents[v].x + 1.0f) * 0.5f,
+                    (aiMesh->mTangents[v].y + 1.0f) * 0.5f,
+                    (aiMesh->mTangents[v].z + 1.0f) * 0.5f
+                );
+            } else {
+                vertex.tangent = glm::vec3(0.0f, 0.0f, 0.0f);
+            }
+
             meshData.vertices.push_back(vertex);
         }
 
@@ -161,6 +172,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         aiProcess_Triangulate |
         aiProcess_FlipUVs |
         aiProcess_GenNormals |
+        aiProcess_CalcTangentSpace |
         aiProcess_JoinIdenticalVertices);
 
     if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode) {
@@ -233,6 +245,13 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     normalAttr.format = vk::Format::eR32G32B32Sfloat;
     normalAttr.offset = offsetof(Vertex, normal);
     vertexInput.attributes.push_back(normalAttr);
+
+    vk::VertexInputAttributeDescription tangentAttr{};
+    tangentAttr.binding = 0;
+    tangentAttr.location = 4;
+    tangentAttr.format = vk::Format::eR32G32B32Sfloat;
+    tangentAttr.offset = offsetof(Vertex, tangent);
+    vertexInput.attributes.push_back(tangentAttr);
 
     // Create shader (shared by all meshes)
     auto shader = engine.loadShader(Shader::getDefaultShaderDescription());

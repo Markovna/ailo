@@ -126,9 +126,9 @@ struct Texture {
     uint32_t height;
 };
 
-struct SwapChain {
-    vk::SwapchainKHR swapchain;
-    std::vector<Texture> textures;
+struct RenderTarget {
+    std::array<TextureHandle, 8> colorAttachments;
+    TextureHandle depthAttachment;
 };
 
 }
@@ -171,6 +171,104 @@ struct ShaderDescription {
 struct PipelineDescription {
   ShaderDescription shader;
   VertexInputDescription vertexInput;
+};
+
+class RenderAPI;
+
+class SwapChain {
+public:
+    SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent, vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode);
+
+private:
+    vk::SwapchainKHR m_swapchain;
+    std::vector<gpu::Texture> m_colors;
+    gpu::Texture m_depth;
+};
+
+struct Acquirable {
+    vk::Fence* fence;
+};
+
+class CommandBuffer {
+public:
+    CommandBuffer(vk::CommandBuffer commandBuffer, vk::Fence fence)
+        : m_commandBuffer(commandBuffer), m_fence(fence), m_waitSemaphores() {
+
+    }
+
+    void acquire(Acquirable& acquirable) {
+        acquirable.fence = &m_fence;
+    }
+
+    void begin() const {
+        vk::CommandBufferBeginInfo beginInfo{};
+        m_commandBuffer.begin(beginInfo);
+    }
+
+    void submit(vk::Queue& queue, vk::Semaphore signalSemaphore) const {
+        m_commandBuffer.end();
+
+        vk::SubmitInfo submitInfo{};
+        submitInfo.waitSemaphoreCount = m_waitSemaphores.size();
+        submitInfo.pWaitSemaphores = m_waitSemaphores.data();
+        submitInfo.pWaitDstStageMask = m_waitStages.data();
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &m_commandBuffer;
+
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &signalSemaphore;
+
+        queue.submit(submitInfo, m_fence);
+    }
+
+    void addWait(vk::Semaphore waitSemaphore, vk::PipelineStageFlags waitStageMask) {
+        m_waitSemaphores.push_back(waitSemaphore);
+        m_waitStages.push_back(waitStageMask);
+    }
+
+    void reset() {
+        m_waitSemaphores.clear();
+        m_waitStages.clear();
+        m_commandBuffer.reset();
+    }
+
+    vk::Fence& getFence() { return m_fence; }
+
+private:
+    vk::CommandBuffer m_commandBuffer;
+    vk::Fence m_fence;
+    std::vector<vk::Semaphore> m_waitSemaphores;
+    std::vector<vk::PipelineStageFlags> m_waitStages;
+};
+
+class CommandBufferPool {
+public:
+    CommandBuffer& current() {
+        if (m_recording) {
+            return m_commandBuffers[m_currentBufferIndex];
+        }
+
+        auto& buffer = m_commandBuffers[m_currentBufferIndex];
+        (void)m_device.waitForFences(1, &buffer.getFence(), VK_TRUE, UINT64_MAX);
+        (void)m_device.resetFences(1, &buffer.getFence());
+
+        buffer.reset();
+        buffer.begin();
+        m_recording = true;
+        return buffer;
+    }
+
+    void submit(vk::Queue& queue, vk::Semaphore signalSemaphore) {
+        m_recording = false;
+        m_commandBuffers[m_currentBufferIndex].submit(queue, signalSemaphore);
+        m_currentBufferIndex = (m_currentBufferIndex + 1) % m_commandBuffers.size();
+    }
+
+private:
+    vk::Device m_device;
+    std::vector<CommandBuffer> m_commandBuffers;
+    uint8_t m_currentBufferIndex = 0;
+    bool m_recording = false;
 };
 
 class RenderAPI {
@@ -267,23 +365,10 @@ private:
     bool isDeviceSuitable(vk::PhysicalDevice device);
     bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
-        bool isComplete() const { return graphicsFamily.has_value() && presentFamily.has_value(); }
-    };
-    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
+    static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+    static vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+    static vk::Extent2D chooseSwapExtent(GLFWwindow*, const vk::SurfaceCapabilitiesKHR& capabilities);
 
-    struct SwapchainSupportDetails {
-        vk::SurfaceCapabilitiesKHR capabilities;
-        std::vector<vk::SurfaceFormatKHR> formats;
-        std::vector<vk::PresentModeKHR> presentModes;
-    };
-    SwapchainSupportDetails querySwapchainSupport(vk::PhysicalDevice device);
-
-    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
     void createRenderPass();
 
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
@@ -294,7 +379,6 @@ private:
     void destroyStageBuffers(uint32_t index);
     void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-    vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
     vk::Format findDepthFormat();
     void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
     vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags);
@@ -322,6 +406,7 @@ private:
     vk::Queue m_graphicsQueue;
     vk::Queue m_presentQueue;
 
+    friend class SwapChain;
     // Swapchain
     vk::SwapchainKHR m_swapchain;
     std::vector<vk::Image> m_swapchainImages;
@@ -330,6 +415,7 @@ private:
     std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
     int32_t m_swapChainImageIndex{};
+
     vk::RenderPass m_renderPass;
 
     // Depth buffering

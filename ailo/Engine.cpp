@@ -38,9 +38,9 @@ std::unique_ptr<Scene> Engine::createScene() const {
   return std::make_unique<Scene>();
 }
 
-std::shared_ptr<Shader> Engine::loadShader(const ShaderDescription&) {
+std::shared_ptr<Shader> Engine::loadShader(const ShaderDescription& description) {
   return std::shared_ptr<Shader>(
-          new Shader(*this, Shader::getDefaultShaderDescription()),
+          new Shader(*this, description),
           [this](Shader* p) {
               p->destroy(*this);
               delete p;

@@ -36,6 +36,92 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 
 // Initialization and shutdown
 
+SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent,
+    vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode) {
+
+    auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
+
+    uint32_t imageCount = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
+        imageCount = capabilities.maxImageCount;
+    }
+
+    vk::SwapchainCreateInfoKHR createInfo{};
+    createInfo.surface = surface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+
+    auto indices = vkutils::findQueueFamilies(physicalDevice, surface);
+    uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+
+    if (indices.graphicsFamily != indices.presentFamily) {
+        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
+        createInfo.queueFamilyIndexCount = 2;
+        createInfo.pQueueFamilyIndices = queueFamilyIndices;
+    } else {
+        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
+    }
+
+    createInfo.preTransform = capabilities.currentTransform;
+    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    createInfo.presentMode = presentMode;
+    createInfo.clipped = VK_TRUE;
+    createInfo.oldSwapchain = nullptr;
+
+    m_swapchain = device.createSwapchainKHR(createInfo);
+    auto swapchainImages = device.getSwapchainImagesKHR(m_swapchain);
+    for (auto& image : swapchainImages) {
+        vk::ImageViewCreateInfo createInfo{};
+        createInfo.image = image;
+        createInfo.viewType = vk::ImageViewType::e2D;
+        createInfo.format = surfaceFormat.format;
+        createInfo.components.r = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.g = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.b = vk::ComponentSwizzle::eIdentity;
+        createInfo.components.a = vk::ComponentSwizzle::eIdentity;
+        createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
+
+        auto imageView = device.createImageView(createInfo);
+        m_colors.push_back(gpu::Texture{
+            .image = image,
+            .memory = nullptr,
+            .imageView = imageView,
+            .sampler = nullptr,
+            .format = surfaceFormat.format,
+            .width = extent.width,
+            .height = extent.height,
+        });
+    }
+
+    vk::Format depthFormat = api.findDepthFormat();
+
+    vk::Image depthImage;
+    vk::DeviceMemory depthImageMemory;
+
+    api.createImage(extent.width, extent.height, depthFormat,
+                vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
+                vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
+
+    auto depthImageView = api.createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+    m_depth = gpu::Texture {
+        .image = depthImage,
+        .memory = depthImageMemory,
+        .imageView = depthImageView,
+        .sampler = nullptr,
+        .format = depthFormat,
+        .width = extent.width,
+        .height = extent.height,
+    };
+}
+
 void RenderAPI::init(GLFWwindow* window) {
     m_window = window;
 
@@ -939,7 +1025,7 @@ void RenderAPI::pickPhysicalDevice() {
 }
 
 void RenderAPI::createLogicalDevice() {
-    QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
+    auto indices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
@@ -993,15 +1079,17 @@ void RenderAPI::createLogicalDevice() {
 }
 
 void RenderAPI::createSwapchain() {
-    SwapchainSupportDetails swapchainSupport = querySwapchainSupport(m_physicalDevice);
+    auto capabilities = m_physicalDevice.getSurfaceCapabilitiesKHR(m_surface);
+    auto formats = m_physicalDevice.getSurfaceFormatsKHR(m_surface);
+    auto presentModes = m_physicalDevice.getSurfacePresentModesKHR(m_surface);
 
-    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
-    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
-    vk::Extent2D extent = chooseSwapExtent(swapchainSupport.capabilities);
+    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(formats);
+    vk::PresentModeKHR presentMode = chooseSwapPresentMode(presentModes);
+    vk::Extent2D extent = chooseSwapExtent(m_window, capabilities);
 
-    uint32_t imageCount = swapchainSupport.capabilities.minImageCount + 1;
-    if (swapchainSupport.capabilities.maxImageCount > 0 && imageCount > swapchainSupport.capabilities.maxImageCount) {
-        imageCount = swapchainSupport.capabilities.maxImageCount;
+    uint32_t imageCount = capabilities.minImageCount + 1;
+    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
+        imageCount = capabilities.maxImageCount;
     }
 
     vk::SwapchainCreateInfoKHR createInfo{};
@@ -1013,7 +1101,7 @@ void RenderAPI::createSwapchain() {
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
 
-    QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
+    auto indices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
     uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
     if (indices.graphicsFamily != indices.presentFamily) {
@@ -1024,7 +1112,7 @@ void RenderAPI::createSwapchain() {
         createInfo.imageSharingMode = vk::SharingMode::eExclusive;
     }
 
-    createInfo.preTransform = swapchainSupport.capabilities.currentTransform;
+    createInfo.preTransform = capabilities.currentTransform;
     createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
@@ -1070,7 +1158,7 @@ void RenderAPI::createDepthResources() {
 }
 
 void RenderAPI::createCommandPool() {
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_physicalDevice);
+    auto queueFamilyIndices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
 
     vk::CommandPoolCreateInfo poolInfo{};
     poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
@@ -1226,14 +1314,15 @@ std::vector<const char*> RenderAPI::getRequiredExtensions() {
 }
 
 bool RenderAPI::isDeviceSuitable(vk::PhysicalDevice device) {
-    QueueFamilyIndices indices = findQueueFamilies(device);
+    auto indices = vkutils::findQueueFamilies(device, m_surface);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
 
     bool swapchainAdequate = false;
     if (extensionsSupported) {
-        SwapchainSupportDetails swapchainSupport = querySwapchainSupport(device);
-        swapchainAdequate = !swapchainSupport.formats.empty() && !swapchainSupport.presentModes.empty();
+        auto formats = device.getSurfaceFormatsKHR(m_surface);
+        auto presentModes = device.getSurfacePresentModesKHR(m_surface);
+        swapchainAdequate = !formats.empty() && !presentModes.empty();
     }
 
     vk::PhysicalDeviceFeatures supportedFeatures;
@@ -1252,41 +1341,6 @@ bool RenderAPI::checkDeviceExtensionSupport(vk::PhysicalDevice device) {
     }
 
     return requiredExtensions.empty();
-}
-
-RenderAPI::QueueFamilyIndices RenderAPI::findQueueFamilies(vk::PhysicalDevice device) {
-    QueueFamilyIndices indices;
-
-    auto queueFamilies = device.getQueueFamilyProperties();
-
-    int i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
-            indices.graphicsFamily = i;
-        }
-
-        if (device.getSurfaceSupportKHR(i, m_surface)) {
-            indices.presentFamily = i;
-        }
-
-        if (indices.isComplete()) {
-            break;
-        }
-
-        i++;
-    }
-
-    return indices;
-}
-
-RenderAPI::SwapchainSupportDetails RenderAPI::querySwapchainSupport(vk::PhysicalDevice device) {
-    SwapchainSupportDetails details;
-
-    details.capabilities = device.getSurfaceCapabilitiesKHR(m_surface);
-    details.formats = device.getSurfaceFormatsKHR(m_surface);
-    details.presentModes = device.getSurfacePresentModesKHR(m_surface);
-
-    return details;
 }
 
 vk::SurfaceFormatKHR RenderAPI::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
@@ -1308,12 +1362,12 @@ vk::PresentModeKHR RenderAPI::chooseSwapPresentMode(const std::vector<vk::Presen
     return vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D RenderAPI::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+vk::Extent2D RenderAPI::chooseSwapExtent(GLFWwindow* window, const vk::SurfaceCapabilitiesKHR& capabilities) {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
         return capabilities.currentExtent;
     } else {
         int width, height;
-        glfwGetFramebufferSize(m_window, &width, &height);
+        glfwGetFramebufferSize(window, &width, &height);
 
         vk::Extent2D actualExtent = {
             static_cast<uint32_t>(width),
@@ -1381,26 +1435,19 @@ void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Devic
     m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
-vk::Format RenderAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
-    for (vk::Format format : candidates) {
-        vk::FormatProperties props = m_physicalDevice.getFormatProperties(format);
-
-        if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features) {
-            return format;
-        } else if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features) {
-            return format;
-        }
-    }
-
-    throw std::runtime_error("failed to find supported format!");
-}
-
 vk::Format RenderAPI::findDepthFormat() {
-    return findSupportedFormat(
+    auto format = vkutils::findSupportedFormat(
+        m_physicalDevice,
         {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint},
         vk::ImageTiling::eOptimal,
         vk::FormatFeatureFlagBits::eDepthStencilAttachment
     );
+
+    if (format == vk::Format::eUndefined) {
+        throw std::runtime_error("failed to find supported format!");
+    }
+
+    return format;
 }
 
 void RenderAPI::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling,

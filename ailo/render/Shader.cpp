@@ -37,7 +37,7 @@ DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) cons
         return {};
     }
 
-    return m_descriptorSetLayouts[setIndex];
+    return  m_descriptorSetLayouts[setIndex];
 }
 
 void Shader::destroy(Engine& engine) {
@@ -68,16 +68,24 @@ ShaderDescription& Shader::getDefaultShaderDescription() {
                       .binding = 0,
                       .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                       .stageFlags = vk::ShaderStageFlagBits::eFragment,
-                  }
+                  },
+                    {
+                        .binding = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                    }
             },
         }
     };
     return shaderDescription;
 }
 
-Shader::Shader(Engine&, const ShaderDescription& description)
+Shader::Shader(Engine& engine, const ShaderDescription& description)
     : m_description(description) {
 
+    for (auto& layout : m_description.layout) {
+        m_descriptorSetLayouts.push_back(engine.getRenderAPI()->createDescriptorSetLayout(layout));
+    }
 }
 
 }

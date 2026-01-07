@@ -26,13 +26,13 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.5f);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.7f);
   m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 5.0f, -3.0f));
-  m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
+  m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.02f);
 
   // prepare lights data
-  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(40.0f, 100.0f, 0.0f, 50);
-  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 0.3f, 0.3f, 2.0f);
+  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(40.0f, 100.0f, 0.0f, 70);
+  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 0.3f, 0.3f, 2.5f);
   m_lightUniformsBufferData.direction = glm::vec3(0.0f, 1.0f, 0.0f);
   m_lightUniformsBufferData.type = 0;
   m_lightUniformsBufferData.scaleOffset = getSpotLightScaleOffset(glm::radians(25.0), glm::radians(29.0));

@@ -75,7 +75,7 @@ void Application::init() {
 
   // Load texture
   int texWidth, texHeight, texChannels;
-  stbi_uc* pixels = stbi_load("assets/textures/gray.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  stbi_uc* pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_BaseColor.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
     throw std::runtime_error("failed to load texture image!");
   }
@@ -83,16 +83,32 @@ void Application::init() {
   // Create texture
   m_texture = std::make_unique<ailo::Texture>(*m_engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
   m_texture->updateImage(*m_engine, pixels, texWidth * texHeight * 4);
+  stbi_image_free(pixels);
 
+  // Load texture
+  pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_Normal.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  if (!pixels) {
+    throw std::runtime_error("failed to load texture image!");
+  }
+
+  m_normalMapTexture = std::make_unique<ailo::Texture>(*m_engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
+  m_normalMapTexture->updateImage(*m_engine, pixels, texWidth * texHeight * 4);
   stbi_image_free(pixels);
 
   m_camera = std::make_unique<ailo::Camera>();
 
   ailo::MeshReader reader;
 
-  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
+  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
   //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
-  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
+  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
+  auto meshView = m_scene->view<ailo::Mesh>();
+  for(const auto& [entity, mesh] : meshView.each()) {
+    for (auto& material : mesh.materials) {
+      material->setTexture(0, m_texture.get());
+      material->setTexture(1, m_normalMapTexture.get());
+    }
+  }
 }
 
 void Application::mainLoop() {
@@ -245,6 +261,7 @@ void Application::cleanup() {
   }
   m_scene.reset();
   m_texture->destroy(*m_engine);
+  m_normalMapTexture->destroy(*m_engine);
 
   m_engine.reset();
 

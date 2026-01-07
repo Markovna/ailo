@@ -22,11 +22,13 @@ layout (set = 0, binding = 1, std140) uniform perLight {
 };
 
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
+layout(set = 2, binding = 1) uniform sampler2D normalMap;
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragPosWorld;
 layout(location = 3) in vec3 fragNormalWorld;
+layout(location = 4) in mat3 fragTBN;
 
 layout(location = 0) out vec4 outColor;
 
@@ -73,7 +75,13 @@ vec3 directionalLight(vec3 lightDirection, vec4 lightColorIntensity, vec3 surfac
 }
 
 void main() {
-    vec3 surfaceNormal = normalize(fragNormalWorld);
+    vec3 normal = texture(normalMap, fragTexCoord).rgb;
+    normal = normalize(normal);
+    vec3 surfaceNormal = normalize(fragTBN * normal);
+
+    // without normal map
+    //vec3 surfaceNormal = normalize(fragNormalWorld);
+
     vec3 cameraPosWorld = view.viewInverse[3].xyz;
     vec3 viewDir = normalize(cameraPosWorld - fragPosWorld);
 
@@ -82,5 +90,6 @@ void main() {
 
     vec3 ambientLight = view.ambientLightColorIntensity.rgb * view.ambientLightColorIntensity.w;
 
-    outColor = vec4((ambientLight + directionalLight + pointLight) * fragColor, 1.0);
+    vec3 texColor = texture(texSampler, fragTexCoord).rgb;
+    outColor = vec4((ambientLight + directionalLight + pointLight) * fragColor * texColor, 1.0);
 }
