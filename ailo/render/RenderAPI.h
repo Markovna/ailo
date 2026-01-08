@@ -12,6 +12,8 @@
 #include <bitset>
 
 #include "utils/ResourceAllocator.h"
+#include "CommandBuffer.h"
+#include "SemaphoreQueue.h"
 
 namespace ailo {
 
@@ -78,6 +80,15 @@ enum class CompareOp : uint8_t {
   ALWAYS
 };
 
+class Acquirable {
+public:
+    void setFence(const std::shared_ptr<FenceStatus>& fence) { m_fenceStatus = fence; }
+    bool isAcquired() const { return m_fenceStatus && !m_fenceStatus->isSignaled(); }
+
+private:
+    std::shared_ptr<FenceStatus> m_fenceStatus;
+};
+
 namespace gpu {
 
 struct Buffer {
@@ -88,7 +99,7 @@ struct Buffer {
     BufferBinding binding;
 };
 
-struct StageBuffer {
+struct StageBuffer : public Acquirable {
     vk::Buffer buffer;
     uint64_t size;
     VmaAllocation vmaAllocation;
@@ -113,7 +124,9 @@ struct DescriptorSet {
     DescriptorSetLayout::bitmask_t boundBindings;
     DescriptorSetLayout::bitmask_t dynamicBindings;
     DescriptorSetLayoutHandle layoutHandle;
-    vk::Fence* boundFence;
+    std::shared_ptr<FenceStatus> boundFence;
+
+    bool isBound() const { return boundFence && !boundFence->isSignaled(); }
 };
 
 struct Texture {
@@ -183,92 +196,6 @@ private:
     vk::SwapchainKHR m_swapchain;
     std::vector<gpu::Texture> m_colors;
     gpu::Texture m_depth;
-};
-
-struct Acquirable {
-    vk::Fence* fence;
-};
-
-class CommandBuffer {
-public:
-    CommandBuffer(vk::CommandBuffer commandBuffer, vk::Fence fence)
-        : m_commandBuffer(commandBuffer), m_fence(fence), m_waitSemaphores() {
-
-    }
-
-    void acquire(Acquirable& acquirable) {
-        acquirable.fence = &m_fence;
-    }
-
-    void begin() const {
-        vk::CommandBufferBeginInfo beginInfo{};
-        m_commandBuffer.begin(beginInfo);
-    }
-
-    void submit(vk::Queue& queue, vk::Semaphore signalSemaphore) const {
-        m_commandBuffer.end();
-
-        vk::SubmitInfo submitInfo{};
-        submitInfo.waitSemaphoreCount = m_waitSemaphores.size();
-        submitInfo.pWaitSemaphores = m_waitSemaphores.data();
-        submitInfo.pWaitDstStageMask = m_waitStages.data();
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &m_commandBuffer;
-
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &signalSemaphore;
-
-        queue.submit(submitInfo, m_fence);
-    }
-
-    void addWait(vk::Semaphore waitSemaphore, vk::PipelineStageFlags waitStageMask) {
-        m_waitSemaphores.push_back(waitSemaphore);
-        m_waitStages.push_back(waitStageMask);
-    }
-
-    void reset() {
-        m_waitSemaphores.clear();
-        m_waitStages.clear();
-        m_commandBuffer.reset();
-    }
-
-    vk::Fence& getFence() { return m_fence; }
-
-private:
-    vk::CommandBuffer m_commandBuffer;
-    vk::Fence m_fence;
-    std::vector<vk::Semaphore> m_waitSemaphores;
-    std::vector<vk::PipelineStageFlags> m_waitStages;
-};
-
-class CommandBufferPool {
-public:
-    CommandBuffer& current() {
-        if (m_recording) {
-            return m_commandBuffers[m_currentBufferIndex];
-        }
-
-        auto& buffer = m_commandBuffers[m_currentBufferIndex];
-        (void)m_device.waitForFences(1, &buffer.getFence(), VK_TRUE, UINT64_MAX);
-        (void)m_device.resetFences(1, &buffer.getFence());
-
-        buffer.reset();
-        buffer.begin();
-        m_recording = true;
-        return buffer;
-    }
-
-    void submit(vk::Queue& queue, vk::Semaphore signalSemaphore) {
-        m_recording = false;
-        m_commandBuffers[m_currentBufferIndex].submit(queue, signalSemaphore);
-        m_currentBufferIndex = (m_currentBufferIndex + 1) % m_commandBuffers.size();
-    }
-
-private:
-    vk::Device m_device;
-    std::vector<CommandBuffer> m_commandBuffers;
-    uint8_t m_currentBufferIndex = 0;
-    bool m_recording = false;
 };
 
 class RenderAPI {
@@ -356,7 +283,6 @@ private:
     void cleanupSwpachainFramebuffer();
     void createSwapchainFramebuffers();
 
-    void flushCommandBuffer();
     void cleanupDescriptorSets();
 
     // Helper functions
@@ -376,7 +302,7 @@ private:
     uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     StageBuffer allocateStageBuffer(uint32_t capacity);
-    void destroyStageBuffers(uint32_t index);
+    void destroyStageBuffers();
     void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
     vk::Format findDepthFormat();
@@ -425,9 +351,7 @@ private:
 
     // Command buffers
     vk::CommandPool m_commandPool;
-    std::vector<vk::CommandBuffer> m_commandBuffers;
-    uint32_t m_currentCommandBufferIndex = 0;
-    vk::CommandBuffer m_currentCommandBuffer;
+    CommandsPool m_commands;
 
     // Descriptor pool
     vk::DescriptorPool m_descriptorPool;
@@ -435,10 +359,12 @@ private:
     VmaAllocator m_Allocator = nullptr;
 
     // Synchronization
+    SemaphoreQueue m_imageAvailableSemaphores;
+
     static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-    std::vector<vk::Semaphore> m_imageAvailableSemaphores;
+    // std::vector<vk::Semaphore> m_imageAvailableSemaphores;
+    // uint32_t m_imageAvailableSemaphoreIndex = 0;
     std::vector<vk::Semaphore> m_renderFinishedSemaphores;
-    std::vector<vk::Fence> m_inFlightFences;
     uint32_t m_currentFrame = 0;
 
     // Validation
@@ -448,7 +374,7 @@ private:
 
     // Current render state
     PipelineHandle m_currentPipeline;
-    std::vector<std::vector<StageBuffer>> m_stageBuffers;
+    std::vector<StageBuffer> m_stageBuffers;
 
     std::vector<DescriptorSet> m_descriptorSetsToDestroy;
     // resources

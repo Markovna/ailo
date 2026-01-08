@@ -140,8 +140,6 @@ void RenderAPI::init(GLFWwindow* window) {
     createAllocator();
     createRenderPass();
     createSwapchainFramebuffers();
-
-    flushCommandBuffer();
 }
 
 void RenderAPI::shutdown() {
@@ -150,11 +148,9 @@ void RenderAPI::shutdown() {
     cleanupSwpachainFramebuffer();
     cleanupSwapchain();
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        m_device.destroySemaphore(m_imageAvailableSemaphores[i]);
-        m_device.destroyFence(m_inFlightFences[i]);
-        destroyStageBuffers(i);
-    }
+    m_commands.destroy();
+
+    destroyStageBuffers();
 
     for (auto renderFinishedSemaphore : m_renderFinishedSemaphores) {
         m_device.destroySemaphore(renderFinishedSemaphore);
@@ -167,6 +163,8 @@ void RenderAPI::shutdown() {
     m_device.destroyRenderPass(m_renderPass);
     m_device.destroyDescriptorPool(m_descriptorPool);
     m_device.destroyCommandPool(m_commandPool);
+
+    m_imageAvailableSemaphores.destroy(m_device);
     m_device.destroy();
 
     if (enableValidationLayers) {
@@ -180,10 +178,9 @@ void RenderAPI::shutdown() {
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
-    m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-    auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX,
-                                                m_imageAvailableSemaphores[m_currentFrame], nullptr);
+    m_imageAvailableSemaphores.moveNext();
+    auto& semaphore = m_imageAvailableSemaphores.get();
+    auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, semaphore, nullptr);
 
     if (result.result == vk::Result::eErrorOutOfDateKHR) {
         recreateSwapchain();
@@ -198,22 +195,10 @@ bool RenderAPI::beginFrame() {
 }
 
 void RenderAPI::endFrame() {
-    m_currentCommandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    vk::Semaphore waitSemaphores[] = {m_imageAvailableSemaphores[m_currentFrame]};
-    vk::PipelineStageFlags waitStages[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_currentCommandBuffer;
+    m_commands.get().addWait(m_imageAvailableSemaphores.get(), vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    m_commands.submit(m_graphicsQueue, m_renderFinishedSemaphores[m_swapChainImageIndex]);
 
     vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_swapChainImageIndex]};
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    m_graphicsQueue.submit(submitInfo, m_inFlightFences[m_currentCommandBufferIndex]);
 
     vk::PresentInfoKHR presentInfo{};
     presentInfo.waitSemaphoreCount = 1;
@@ -234,7 +219,9 @@ void RenderAPI::endFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    flushCommandBuffer();
+    // free resources acquired by command buffer
+    destroyStageBuffers();
+    cleanupDescriptorSets();
 
     m_swapChainImageIndex = -1;
 }
@@ -242,7 +229,7 @@ void RenderAPI::endFrame() {
 void RenderAPI::cleanupDescriptorSets() {
     const auto [first, last] =
         std::ranges::remove_if(m_descriptorSetsToDestroy, [this](const DescriptorSet& descriptorSet) {
-            if (descriptorSet.boundFence && static_cast<bool>(*descriptorSet.boundFence) == false) {
+            if (descriptorSet.isBound()) {
                 return false;
             }
 
@@ -264,8 +251,10 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     auto& vertexBuffer = m_buffers.get(handle);
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
+
+    auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(m_currentCommandBuffer, vertexBuffer, data, 0, size);
+        loadFromCpu(commands.buffer(), vertexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -276,8 +265,9 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     auto& indexBuffer = m_buffers.get(handle);
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
+    auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(m_currentCommandBuffer, indexBuffer, data, 0, size);
+        loadFromCpu(commands.buffer(), indexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -372,7 +362,8 @@ void RenderAPI::destroyBuffer(const BufferHandle& handle) {
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
     auto& buffer = m_buffers.get(handle);
-    loadFromCpu(m_currentCommandBuffer, buffer, data, byteOffset, size);
+    auto& commands = m_commands.get();
+    loadFromCpu(commands.buffer(), buffer, data, byteOffset, size);
 }
 
 // Texture management
@@ -434,7 +425,6 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
     auto& texture = m_textures.get(handle);
 
-    // Create staging buffer
     // allocate stage buffer
     auto stageBuffer = allocateStageBuffer(dataSize);
 
@@ -562,9 +552,8 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     auto& texture = m_textures.get(textureHandle);
 
-    if (descriptorSet.boundFence && *descriptorSet.boundFence) {
+    if (descriptorSet.isBound()) {
         // re-create descriptor set
-
         m_descriptorSetsToDestroy.push_back(descriptorSet);
 
         DescriptorSet newDescriptorSet;
@@ -616,7 +605,8 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
   assert(dynamicOffsets.size() <= dynamicOffsetsArray.size());
   std::copy(dynamicOffsets.begin(), dynamicOffsets.end(), dynamicOffsetsArray.begin());
 
-  m_currentCommandBuffer.bindDescriptorSets(
+  auto& commands = m_commands.get();
+  commands.buffer().bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         currentPipeline.layout,
         setIndex,
@@ -626,8 +616,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
         dynamicOffsetsArray.data()
     );
 
-    auto& fence = m_inFlightFences[m_currentCommandBufferIndex];
-    descriptorSet.boundFence = &fence;
+    descriptorSet.boundFence = commands.getFenceStatusShared();
 }
 
 void RenderAPI::createRenderPass() {
@@ -872,8 +861,9 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
+    auto& commands = m_commands.get();
 
-    m_currentCommandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    commands.buffer().beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
     // Set default viewport and scissor
     vk::Viewport viewport{};
@@ -883,21 +873,23 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     viewport.height = (float)m_swapchainExtent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    m_currentCommandBuffer.setViewport(0, 1, &viewport);
+    commands.buffer().setViewport(0, 1, &viewport);
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{0, 0};
     scissor.extent = m_swapchainExtent;
-    m_currentCommandBuffer.setScissor(0, 1, &scissor);
+    commands.buffer().setScissor(0, 1, &scissor);
 }
 
 void RenderAPI::endRenderPass() {
-    m_currentCommandBuffer.endRenderPass();
+    auto& commands = m_commands.get();
+    commands.buffer().endRenderPass();
 }
 
 void RenderAPI::bindPipeline(const PipelineHandle& handle) {
     auto& currentPipeline = m_pipelines.get(handle);
-    m_currentCommandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
+    auto& commands = m_commands.get();
+    commands.buffer().bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
     m_currentPipeline = handle;
 }
 
@@ -905,26 +897,31 @@ void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
     auto& buffer = m_buffers.get(handle);
     vk::Buffer vertexBuffers[] = {buffer.buffer};
     vk::DeviceSize offsets[] = {0};
-    m_currentCommandBuffer.bindVertexBuffers(0, 1, vertexBuffers, offsets);
+    auto& commands = m_commands.get();
+    commands.buffer().bindVertexBuffers(0, 1, vertexBuffers, offsets);
 }
 
 void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
     auto& buffer = m_buffers.get(handle);
-    m_currentCommandBuffer.bindIndexBuffer(buffer.buffer, 0, indexType);
+    auto& commands = m_commands.get();
+    commands.buffer().bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 
 void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset) {
-    m_currentCommandBuffer.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
+    auto& commands = m_commands.get();
+    commands.buffer().drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
 }
 
 void RenderAPI::setViewport(float x, float y, float width, float height) {
     vk::Viewport viewport{x, y, width, height, 0.0f, 1.0f};
-    m_currentCommandBuffer.setViewport(0, 1, &viewport);
+    auto& commands = m_commands.get();
+    commands.buffer().setViewport(0, 1, &viewport);
 }
 
 void RenderAPI::setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height) {
     vk::Rect2D scissor{{x, y}, {width, height}};
-    m_currentCommandBuffer.setScissor(0, 1, &scissor);
+    auto& commands = m_commands.get();
+    commands.buffer().setScissor(0, 1, &scissor);
 }
 
 // Swapchain management
@@ -1168,31 +1165,16 @@ void RenderAPI::createCommandPool() {
 }
 
 void RenderAPI::createCommandBuffers() {
-    m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-    m_stageBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.commandPool = m_commandPool;
-    allocInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocInfo.commandBufferCount = static_cast<uint32_t>(m_commandBuffers.size());
-
-    m_commandBuffers = m_device.allocateCommandBuffers(allocInfo);
+    m_commands.init(m_device, m_commandPool, MAX_FRAMES_IN_FLIGHT);
 }
 
 void RenderAPI::createSyncObjects() {
-    m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-    m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
 
     vk::SemaphoreCreateInfo semaphoreInfo{};
-    vk::FenceCreateInfo fenceInfo{};
-    fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        m_imageAvailableSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
-        m_inFlightFences[i] = m_device.createFence(fenceInfo);
-    }
 
     m_renderFinishedSemaphores.resize(m_swapchainImages.size());
+    m_imageAvailableSemaphores.init(m_device, m_swapchainImages.size());
+
     for (size_t i = 0; i < m_swapchainImages.size(); i++) {
         m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
     }
@@ -1636,16 +1618,24 @@ gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
       .vmaAllocation = memory,
       .mapping = pMapping
     };
-    m_stageBuffers[m_currentCommandBufferIndex].push_back(stageBuffer);
+    stageBuffer.setFence(m_commands.get().getFenceStatusShared());
+    m_stageBuffers.push_back(stageBuffer);
     return stageBuffer;
 }
 
-void RenderAPI::destroyStageBuffers(uint32_t index) {
-  for(auto& stage : m_stageBuffers[index]) {
-    vmaUnmapMemory(m_Allocator, stage.vmaAllocation);
-    vmaDestroyBuffer(m_Allocator, stage.buffer, stage.vmaAllocation);
-  }
-  m_stageBuffers[index].clear();
+void RenderAPI::destroyStageBuffers() {
+    const auto [first, last] =
+        std::ranges::remove_if(m_stageBuffers, [this](const StageBuffer& stageBuffer) {
+            if (stageBuffer.isAcquired()) {
+                return false;
+            }
+
+            vmaUnmapMemory(m_Allocator, stageBuffer.vmaAllocation);
+            vmaDestroyBuffer(m_Allocator, stageBuffer.buffer, stageBuffer.vmaAllocation);
+            return true;
+        });
+
+    m_stageBuffers.erase(first, last);
 }
 
 void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& access, VkPipelineStageFlags& stage) {
@@ -1713,26 +1703,6 @@ void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& buff
 
   vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStageMask, 0, 0,
                        nullptr, 1, &barrier, 0, nullptr);
-}
-
-void RenderAPI::flushCommandBuffer() {
-  m_currentCommandBufferIndex = (m_currentCommandBufferIndex + 1) % m_commandBuffers.size();
-
-  auto& fence = m_inFlightFences[m_currentCommandBufferIndex];
-
-  (void)m_device.waitForFences(1, &fence, VK_TRUE, UINT64_MAX);
-
-  // free resources acquired by command buffer
-  destroyStageBuffers(m_currentCommandBufferIndex);
-  cleanupDescriptorSets();
-
-  (void)m_device.resetFences(1, &fence);
-
-  m_currentCommandBuffer = m_commandBuffers[m_currentCommandBufferIndex];
-  m_currentCommandBuffer.reset();
-
-  vk::CommandBufferBeginInfo beginInfo{};
-  m_currentCommandBuffer.begin(beginInfo);
 }
 
 } // namespace ailo

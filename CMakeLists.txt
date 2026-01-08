@@ -57,7 +57,11 @@ add_executable(ailo
     ailo/render/Mesh.h
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
-    )
+        ailo/render/CommandBuffer.cpp
+        ailo/render/CommandBuffer.h
+        ailo/render/SemaphoreQueue.cpp
+        ailo/render/SemaphoreQueue.h
+)
 
 # Link libraries
 target_link_libraries(ailo
