@@ -43,8 +43,7 @@ CommandBuffer& CommandsPool::get() {
     return buffer;
 }
 
-void CommandsPool::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) {
-    get().submit(queue, signalSemaphore);
+void CommandsPool::next() {
     m_currentBufferIndex = (m_currentBufferIndex + 1) % m_commandBuffers.size();
     m_recording = false;
 }
@@ -69,6 +68,8 @@ void CommandBuffer::reset() {
 
     m_fenceStatus->setSignaled();
     m_fenceStatus.reset();
+
+    m_submitSemaphore.reset();
 }
 
 }

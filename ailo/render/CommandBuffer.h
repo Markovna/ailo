@@ -2,6 +2,8 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "UniqueVkHandle.h"
+
 namespace ailo {
 
 class FenceStatus {
@@ -22,6 +24,12 @@ public:
         m_fenceStatus(std::make_shared<FenceStatus>()) {
 
     }
+
+    CommandBuffer(const CommandBuffer&) = delete;
+    CommandBuffer& operator=(const CommandBuffer&) = delete;
+
+    CommandBuffer(CommandBuffer&&) = default;
+    CommandBuffer& operator=(CommandBuffer&&) = default;
 
     ~CommandBuffer() {
         m_device.destroyFence(m_fence);
@@ -47,6 +55,12 @@ public:
         m_waitStages.push_back(waitStageMask);
     }
 
+    void setSubmitSignal(UniqueVkHandle<vk::Semaphore> semaphore) {
+        m_submitSemaphore = std::move(semaphore);
+
+        addWait(m_submitSemaphore.get(), vk::PipelineStageFlagBits::eColorAttachmentOutput);
+    }
+
     void wait();
 
     void reset();
@@ -59,6 +73,7 @@ private:
     vk::Device m_device;
     vk::Fence m_fence;
     std::shared_ptr<FenceStatus> m_fenceStatus;
+    UniqueVkHandle<vk::Semaphore> m_submitSemaphore;
     std::vector<vk::Semaphore> m_waitSemaphores;
     std::vector<vk::PipelineStageFlags> m_waitStages;
 };
@@ -70,8 +85,7 @@ public:
     void init(vk::Device device, vk::CommandPool pool, uint32_t numCommandBuffers);
     CommandBuffer& get();
 
-    void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore);
-
+    void next();
     void destroy();
 
 private:

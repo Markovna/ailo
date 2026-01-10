@@ -1,6 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "RenderAPI.h"
 #include "vulkan/VulkanUtils.h"
+#include "SwapChain.h"
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -36,91 +37,9 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 
 // Initialization and shutdown
 
-SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent,
-    vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode) {
+RenderAPI::RenderAPI() = default;
 
-    auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
-
-    uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
-        imageCount = capabilities.maxImageCount;
-    }
-
-    vk::SwapchainCreateInfoKHR createInfo{};
-    createInfo.surface = surface;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
-
-    auto indices = vkutils::findQueueFamilies(physicalDevice, surface);
-    uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
-
-    if (indices.graphicsFamily != indices.presentFamily) {
-        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
-    } else {
-        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
-    }
-
-    createInfo.preTransform = capabilities.currentTransform;
-    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = nullptr;
-
-    m_swapchain = device.createSwapchainKHR(createInfo);
-    auto swapchainImages = device.getSwapchainImagesKHR(m_swapchain);
-    for (auto& image : swapchainImages) {
-        vk::ImageViewCreateInfo createInfo{};
-        createInfo.image = image;
-        createInfo.viewType = vk::ImageViewType::e2D;
-        createInfo.format = surfaceFormat.format;
-        createInfo.components.r = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.g = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.b = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.a = vk::ComponentSwizzle::eIdentity;
-        createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        auto imageView = device.createImageView(createInfo);
-        m_colors.push_back(gpu::Texture{
-            .image = image,
-            .memory = nullptr,
-            .imageView = imageView,
-            .sampler = nullptr,
-            .format = surfaceFormat.format,
-            .width = extent.width,
-            .height = extent.height,
-        });
-    }
-
-    vk::Format depthFormat = api.findDepthFormat();
-
-    vk::Image depthImage;
-    vk::DeviceMemory depthImageMemory;
-
-    api.createImage(extent.width, extent.height, depthFormat,
-                vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
-
-    auto depthImageView = api.createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
-    m_depth = gpu::Texture {
-        .image = depthImage,
-        .memory = depthImageMemory,
-        .imageView = depthImageView,
-        .sampler = nullptr,
-        .format = depthFormat,
-        .width = extent.width,
-        .height = extent.height,
-    };
-}
+RenderAPI::~RenderAPI() = default;
 
 void RenderAPI::init(GLFWwindow* window) {
     m_window = window;
@@ -131,11 +50,8 @@ void RenderAPI::init(GLFWwindow* window) {
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapchain();
-    createImageViews();
-    createDepthResources();
     createCommandPool();
     createCommandBuffers();
-    createSyncObjects();
     createDescriptorPool();
     createAllocator();
     createRenderPass();
@@ -152,10 +68,6 @@ void RenderAPI::shutdown() {
 
     destroyStageBuffers();
 
-    for (auto renderFinishedSemaphore : m_renderFinishedSemaphores) {
-        m_device.destroySemaphore(renderFinishedSemaphore);
-    }
-
     cleanupDescriptorSets();
 
     vmaDestroyAllocator(m_Allocator);
@@ -164,7 +76,6 @@ void RenderAPI::shutdown() {
     m_device.destroyDescriptorPool(m_descriptorPool);
     m_device.destroyCommandPool(m_commandPool);
 
-    m_imageAvailableSemaphores.destroy(m_device);
     m_device.destroy();
 
     if (enableValidationLayers) {
@@ -178,39 +89,29 @@ void RenderAPI::shutdown() {
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
-    m_imageAvailableSemaphores.moveNext();
-    auto& semaphore = m_imageAvailableSemaphores.get();
-    auto result = m_device.acquireNextImageKHR(m_swapchain, UINT64_MAX, semaphore, nullptr);
+    UniqueVkHandle acquireSemaphore {
+        m_device, m_device.createSemaphore(vk::SemaphoreCreateInfo{})
+    };
 
-    if (result.result == vk::Result::eErrorOutOfDateKHR) {
+    auto result = m_swapChain->acquireNextImage(m_device, acquireSemaphore.get(), UINT64_MAX);
+    m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
+
+    if (result == vk::Result::eErrorOutOfDateKHR) {
         recreateSwapchain();
         return false;
-    } else if (result.result != vk::Result::eSuccess && result.result != vk::Result::eSuboptimalKHR) {
-        throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    m_swapChainImageIndex = result.value;
+    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
 
     return true;
 }
 
 void RenderAPI::endFrame() {
-    m_commands.get().addWait(m_imageAvailableSemaphores.get(), vk::PipelineStageFlagBits::eColorAttachmentOutput);
-    m_commands.submit(m_graphicsQueue, m_renderFinishedSemaphores[m_swapChainImageIndex]);
+    auto& commands = m_commands.get();
 
-    vk::Semaphore signalSemaphores[] = {m_renderFinishedSemaphores[m_swapChainImageIndex]};
-
-    vk::PresentInfoKHR presentInfo{};
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
-
-    uint32_t swapchainImageIndex = m_swapChainImageIndex;
-    vk::SwapchainKHR swapchains[] = {m_swapchain};
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapchains;
-    presentInfo.pImageIndices = &swapchainImageIndex;
-
-    auto result = m_presentQueue.presentKHR(presentInfo);
+    auto result = m_swapChain->present(commands, m_graphicsQueue, m_presentQueue);
 
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_framebufferResized) {
         m_framebufferResized = false;
@@ -223,7 +124,7 @@ void RenderAPI::endFrame() {
     destroyStageBuffers();
     cleanupDescriptorSets();
 
-    m_swapChainImageIndex = -1;
+    m_commands.next();
 }
 
 void RenderAPI::cleanupDescriptorSets() {
@@ -622,7 +523,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
 void RenderAPI::createRenderPass() {
     // Create render pass
     vk::AttachmentDescription colorAttachment{};
-    colorAttachment.format = m_swapchainImageFormat;
+    colorAttachment.format = m_swapChain->getColorFormat();
     colorAttachment.samples = vk::SampleCountFlagBits::e1;
     colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -849,11 +750,13 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
 // Command recording
 
 void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
+    auto extent = m_swapChain->getExtent();
+
     vk::RenderPassBeginInfo renderPassInfo{};
     renderPassInfo.renderPass = m_renderPass;
-    renderPassInfo.framebuffer = m_swapchainFramebuffers[m_swapChainImageIndex];
+    renderPassInfo.framebuffer = m_swapchainFramebuffers[m_swapChain->getCurrentImageIndex()];
     renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-    renderPassInfo.renderArea.extent = m_swapchainExtent;
+    renderPassInfo.renderArea.extent = extent;
 
     std::array<vk::ClearValue, 2> clearValues{};
     clearValues[0].color = clearColor;
@@ -869,15 +772,15 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)m_swapchainExtent.width;
-    viewport.height = (float)m_swapchainExtent.height;
+    viewport.width = (float)extent.width;
+    viewport.height = (float)extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     commands.buffer().setViewport(0, 1, &viewport);
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{0, 0};
-    scissor.extent = m_swapchainExtent;
+    scissor.extent = extent;
     commands.buffer().setScissor(0, 1, &scissor);
 }
 
@@ -1084,74 +987,7 @@ void RenderAPI::createSwapchain() {
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(presentModes);
     vk::Extent2D extent = chooseSwapExtent(m_window, capabilities);
 
-    uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
-        imageCount = capabilities.maxImageCount;
-    }
-
-    vk::SwapchainCreateInfoKHR createInfo{};
-    createInfo.surface = m_surface;
-    createInfo.minImageCount = imageCount;
-    createInfo.imageFormat = surfaceFormat.format;
-    createInfo.imageColorSpace = surfaceFormat.colorSpace;
-    createInfo.imageExtent = extent;
-    createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
-
-    auto indices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
-    uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
-
-    if (indices.graphicsFamily != indices.presentFamily) {
-        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
-    } else {
-        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
-    }
-
-    createInfo.preTransform = capabilities.currentTransform;
-    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = nullptr;
-
-    m_swapchain = m_device.createSwapchainKHR(createInfo);
-    m_swapchainImages = m_device.getSwapchainImagesKHR(m_swapchain);
-
-    m_swapchainImageFormat = surfaceFormat.format;
-    m_swapchainExtent = extent;
-}
-
-void RenderAPI::createImageViews() {
-    m_swapchainImageViews.resize(m_swapchainImages.size());
-
-    for (size_t i = 0; i < m_swapchainImages.size(); i++) {
-        vk::ImageViewCreateInfo createInfo{};
-        createInfo.image = m_swapchainImages[i];
-        createInfo.viewType = vk::ImageViewType::e2D;
-        createInfo.format = m_swapchainImageFormat;
-        createInfo.components.r = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.g = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.b = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.a = vk::ComponentSwizzle::eIdentity;
-        createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        m_swapchainImageViews[i] = m_device.createImageView(createInfo);
-    }
-}
-
-void RenderAPI::createDepthResources() {
-    vk::Format depthFormat = findDepthFormat();
-
-    createImage(m_swapchainExtent.width, m_swapchainExtent.height, depthFormat,
-                vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                vk::MemoryPropertyFlagBits::eDeviceLocal, m_depthImage, m_depthImageMemory);
-
-    m_depthImageView = createImageView(m_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+    m_swapChain = std::make_unique<SwapChain>(*this, m_surface, m_physicalDevice, m_device, extent, surfaceFormat.format, presentMode);
 }
 
 void RenderAPI::createCommandPool() {
@@ -1166,19 +1002,6 @@ void RenderAPI::createCommandPool() {
 
 void RenderAPI::createCommandBuffers() {
     m_commands.init(m_device, m_commandPool, MAX_FRAMES_IN_FLIGHT);
-}
-
-void RenderAPI::createSyncObjects() {
-
-    vk::SemaphoreCreateInfo semaphoreInfo{};
-
-    m_renderFinishedSemaphores.resize(m_swapchainImages.size());
-    m_imageAvailableSemaphores.init(m_device, m_swapchainImages.size());
-
-    for (size_t i = 0; i < m_swapchainImages.size(); i++) {
-        m_renderFinishedSemaphores[i] = m_device.createSemaphore(semaphoreInfo);
-    }
-
 }
 
 void RenderAPI::createDescriptorPool() {
@@ -1199,15 +1022,7 @@ void RenderAPI::createDescriptorPool() {
 }
 
 void RenderAPI::cleanupSwapchain() {
-    m_device.destroyImageView(m_depthImageView);
-    m_device.destroyImage(m_depthImage);
-    m_device.freeMemory(m_depthImageMemory);
-
-    for (auto imageView : m_swapchainImageViews) {
-        m_device.destroyImageView(imageView);
-    }
-
-    m_device.destroySwapchainKHR(m_swapchain);
+    m_swapChain->destroy(m_device);
 }
 
 void RenderAPI::cleanupSwpachainFramebuffer() {
@@ -1218,19 +1033,20 @@ void RenderAPI::cleanupSwpachainFramebuffer() {
 }
 
 void RenderAPI::createSwapchainFramebuffers() {
-    m_swapchainFramebuffers.resize(m_swapchainImageViews.size());
-    for (size_t i = 0; i < m_swapchainImageViews.size(); i++) {
+    m_swapchainFramebuffers.resize(m_swapChain->getImageCount());
+    for (size_t i = 0; i < m_swapchainFramebuffers.size(); i++) {
         std::array<vk::ImageView, 2> attachments = {
-            m_swapchainImageViews[i],
-            m_depthImageView
+            m_swapChain->getColorImage(i),
+            m_swapChain->getDepthImage()
         };
 
+        auto extent = m_swapChain->getExtent();
         vk::FramebufferCreateInfo framebufferInfo{};
         framebufferInfo.renderPass = m_renderPass;
         framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
         framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = m_swapchainExtent.width;
-        framebufferInfo.height = m_swapchainExtent.height;
+        framebufferInfo.width = extent.width;
+        framebufferInfo.height = extent.height;
         framebufferInfo.layers = 1;
 
         m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
@@ -1251,8 +1067,6 @@ void RenderAPI::recreateSwapchain() {
     cleanupSwapchain();
 
     createSwapchain();
-    createImageViews();
-    createDepthResources();
     createSwapchainFramebuffers();
 }
 

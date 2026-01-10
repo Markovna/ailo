@@ -13,7 +13,6 @@
 
 #include "utils/ResourceAllocator.h"
 #include "CommandBuffer.h"
-#include "SemaphoreQueue.h"
 
 namespace ailo {
 
@@ -186,22 +185,12 @@ struct PipelineDescription {
   VertexInputDescription vertexInput;
 };
 
-class RenderAPI;
-
-class SwapChain {
-public:
-    SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent, vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode);
-
-private:
-    vk::SwapchainKHR m_swapchain;
-    std::vector<gpu::Texture> m_colors;
-    gpu::Texture m_depth;
-};
+class SwapChain;
 
 class RenderAPI {
 public:
-    RenderAPI() = default;
-    ~RenderAPI() = default;
+    RenderAPI();
+    ~RenderAPI();
 
     // Initialization and shutdown
     void init(GLFWwindow* window);
@@ -252,7 +241,6 @@ public:
 
     // Swapchain management
     void handleWindowResize();
-    vk::Extent2D getSwapchainExtent() const { return m_swapchainExtent; }
 
 private:
     using Buffer = gpu::Buffer;
@@ -269,11 +257,8 @@ private:
     void pickPhysicalDevice();
     void createLogicalDevice();
     void createSwapchain();
-    void createImageViews();
-    void createDepthResources();
     void createCommandPool();
     void createCommandBuffers();
-    void createSyncObjects();
     void createDescriptorPool();
     void createAllocator();
 
@@ -333,14 +318,7 @@ private:
     vk::Queue m_presentQueue;
 
     friend class SwapChain;
-    // Swapchain
-    vk::SwapchainKHR m_swapchain;
-    std::vector<vk::Image> m_swapchainImages;
-    vk::Format m_swapchainImageFormat;
-    vk::Extent2D m_swapchainExtent;
-    std::vector<vk::ImageView> m_swapchainImageViews;
     std::vector<vk::Framebuffer> m_swapchainFramebuffers;
-    int32_t m_swapChainImageIndex{};
 
     vk::RenderPass m_renderPass;
 
@@ -358,14 +336,7 @@ private:
 
     VmaAllocator m_Allocator = nullptr;
 
-    // Synchronization
-    SemaphoreQueue m_imageAvailableSemaphores;
-
-    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-    // std::vector<vk::Semaphore> m_imageAvailableSemaphores;
-    // uint32_t m_imageAvailableSemaphoreIndex = 0;
-    std::vector<vk::Semaphore> m_renderFinishedSemaphores;
-    uint32_t m_currentFrame = 0;
+    static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
     // Validation
     bool m_enableValidationLayers = true;
@@ -383,6 +354,8 @@ private:
     ResourceAllocator<DescriptorSetLayout> m_descriptorSetLayouts;
     ResourceAllocator<DescriptorSet> m_descriptorSets;
     ResourceAllocator<Texture> m_textures;
+
+    std::unique_ptr<SwapChain> m_swapChain;
 };
 
 } // namespace ailo

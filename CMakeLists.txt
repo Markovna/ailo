@@ -59,8 +59,10 @@ add_executable(ailo
     ailo/ecs/Transform.cpp
         ailo/render/CommandBuffer.cpp
         ailo/render/CommandBuffer.h
-        ailo/render/SemaphoreQueue.cpp
-        ailo/render/SemaphoreQueue.h
+        ailo/render/UniqueVkHandle.cpp
+        ailo/render/UniqueVkHandle.h
+        ailo/render/SwapChain.cpp
+        ailo/render/SwapChain.h
 )
 
 # Link libraries
