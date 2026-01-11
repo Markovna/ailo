@@ -9,7 +9,9 @@ class HandleDeleter;
 template<>
 class HandleDeleter<vk::Semaphore> {
 public:
-    void operator()(vk::Device device, vk::Semaphore semaphore) const { device.destroySemaphore(semaphore); }
+    void operator()(vk::Device device, vk::Semaphore semaphore) const {
+        device.destroySemaphore(semaphore);
+    }
 };
 
 

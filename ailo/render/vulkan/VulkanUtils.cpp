@@ -9,6 +9,7 @@ vk::CullModeFlags getCullMode(CullingMode mode) {
     case CullingMode::BACK: return vk::CullModeFlagBits::eBack;
     case CullingMode::FRONT_AND_BACK: return vk::CullModeFlagBits::eFrontAndBack;
   }
+  return vk::CullModeFlagBits::eNone;
 }
 
 vk::BlendOp getBlendOp(BlendOperation blendOperation) {
@@ -29,6 +30,7 @@ vk::BlendFactor getBlendFunction(BlendFunction blendFunction) {
     case BlendFunction::ONE_MINUS_DST_ALPHA: return vk::BlendFactor::eOneMinusDstAlpha;
     case BlendFunction::SRC_ALPHA_SATURATE: return vk::BlendFactor::eSrcAlphaSaturate;
   }
+  return vk::BlendFactor::eZero;
 }
 
 vk::CompareOp getCompareOperation(CompareOp compOp) {
@@ -45,43 +47,4 @@ vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
   return static_cast<vk::BufferUsageFlagBits>(0);
 }
 
-QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device, vk::SurfaceKHR surface) {
-  QueueFamilyIndices indices;
-
-  auto queueFamilies = device.getQueueFamilyProperties();
-
-  int i = 0;
-  for (const auto& queueFamily : queueFamilies) {
-    if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
-      indices.graphicsFamily = i;
-    }
-
-    if (device.getSurfaceSupportKHR(i, surface)) {
-      indices.presentFamily = i;
-    }
-
-    if (indices.isComplete()) {
-      break;
-    }
-
-    i++;
-  }
-
-  return indices;
-}
-
-vk::Format findSupportedFormat(vk::PhysicalDevice physicalDevice, const std::vector<vk::Format>& candidates,
-  vk::ImageTiling tiling, vk::FormatFeatureFlags features) {
-  for (vk::Format format : candidates) {
-    vk::FormatProperties props = physicalDevice.getFormatProperties(format);
-
-    if (tiling == vk::ImageTiling::eLinear && (props.linearTilingFeatures & features) == features) {
-      return format;
-    } else if (tiling == vk::ImageTiling::eOptimal && (props.optimalTilingFeatures & features) == features) {
-      return format;
-    }
-  }
-
-  return vk::Format::eUndefined;
-}
 }

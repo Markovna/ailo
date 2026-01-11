@@ -7,8 +7,8 @@
 
 namespace ailo {
 
-Engine::Engine() :
-  m_renderAPI(std::make_unique<RenderAPI>()),
+Engine::Engine(GLFWwindow* window) :
+  m_renderAPI(std::make_unique<RenderAPI>(window)),
   m_renderer(std::make_unique<Renderer>()),
   m_inputSystem(std::make_unique<InputSystem>())
 { }
@@ -20,10 +20,6 @@ Engine::~Engine() {
   m_renderer.reset();
   m_renderAPI.reset();
   m_inputSystem.reset();
-}
-
-void Engine::init(GLFWwindow* window) {
-  m_renderAPI->init(window);
 }
 
 void Engine::render(Scene& scene, Camera& camera) {

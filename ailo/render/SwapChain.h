@@ -8,7 +8,7 @@ namespace ailo {
 
 class SwapChain {
 public:
-    SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent, vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode);
+    explicit SwapChain(VulkanDevice&);
     vk::Result acquireNextImage(vk::Device, vk::Semaphore& semaphore, uint64_t timeout);
     vk::Result present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue);
     void destroy(vk::Device device);
@@ -17,14 +17,14 @@ public:
     vk::Extent2D getExtent() { return { m_colors[0].width, m_colors[0].height }; }
     uint32_t getImageCount() { return m_colors.size(); }
     vk::ImageView getColorImage(uint32_t index) { return m_colors[index].imageView; }
-    vk::ImageView getDepthImage() { return m_depth.imageView; }
+    vk::ImageView getDepthImage() { return m_depth ? m_depth->imageView : vk::ImageView{}; }
     uint32_t getCurrentImageIndex() { return m_currentImageIndex; }
     vk::Format getColorFormat() { return m_colors[0].format; }
 
 private:
     vk::SwapchainKHR m_swapchain;
     std::vector<gpu::Texture> m_colors;
-    gpu::Texture m_depth;
+    std::optional<gpu::Texture> m_depth;
     uint32_t m_currentImageIndex = 0;
     std::vector<vk::Semaphore> m_renderFinishedSemaphores;
 };

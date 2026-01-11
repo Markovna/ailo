@@ -17,10 +17,9 @@ struct Camera;
 
 class Engine {
  public:
-  Engine();
+  Engine(GLFWwindow*);
   ~Engine();
 
-  void init(GLFWwindow*);
   void render(Scene&, Camera&);
 
   Renderer* getRenderer();

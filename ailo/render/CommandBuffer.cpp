@@ -16,9 +16,10 @@ void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) con
     queue.submit(submitInfo, m_fence);
 }
 
-void CommandsPool::init(vk::Device device, vk::CommandPool pool, uint32_t numCommandBuffers) {
+CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) {
+    const uint32_t numCommandBuffers = 4;
     vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.commandPool = pool;
+    allocInfo.commandPool = commandPool;
     allocInfo.level = vk::CommandBufferLevel::ePrimary;
     allocInfo.commandBufferCount = numCommandBuffers;
 
@@ -57,6 +58,7 @@ void CommandsPool::destroy() {
 
 void CommandBuffer::wait() {
     (void)m_device.waitForFences(1, &m_fence, VK_TRUE, UINT64_MAX);
+    m_fenceStatus->setSignaled();
 }
 
 void CommandBuffer::reset() {

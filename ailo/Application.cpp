@@ -21,6 +21,7 @@
 #include <vector>
 #include <iostream>
 
+#include "common/SparseSet.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
 
@@ -58,8 +59,7 @@ void Application::init() {
   glfwSetCursorPosCallback(m_window, cursorPosCallback);
   glfwSetScrollCallback(m_window, scrollCallback);
 
-  m_engine = std::make_unique<ailo::Engine>();
-  m_engine->init(m_window);
+  m_engine = std::make_unique<ailo::Engine>(m_window);
   auto* renderAPI = m_engine->getRenderAPI();
 
   m_scene = m_engine->createScene();

@@ -1,12 +1,21 @@
 #include "SwapChain.h"
+
+#include <iostream>
+#include <ostream>
+
 #include "vulkan/VulkanUtils.h"
 
 namespace ailo {
 
-SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice physicalDevice, vk::Device device, vk::Extent2D extent,
-    vk::SurfaceFormatKHR surfaceFormat, vk::PresentModeKHR presentMode) {
+SwapChain::SwapChain(VulkanDevice& device) {
+    vk::SurfaceFormatKHR surfaceFormat = device.getSurfaceFormat();
+    vk::PresentModeKHR presentMode = device.getPresentMode();
+    vk::Extent2D extent = device.getSwapExtent();
+    vk::Format depthFormat = device.getDepthFormat();
 
-    auto capabilities = physicalDevice.getSurfaceCapabilitiesKHR(surface);
+    m_depth.emplace(device.device(), device.physicalDevice(), depthFormat, extent.width, extent.height, vk::Filter{}, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageAspectFlagBits::eDepth);
+
+    auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
 
     uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
@@ -14,7 +23,7 @@ SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice 
     }
 
     vk::SwapchainCreateInfoKHR createInfo{};
-    createInfo.surface = surface;
+    createInfo.surface = device.surface();
     createInfo.minImageCount = imageCount;
     createInfo.imageFormat = surfaceFormat.format;
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -22,10 +31,9 @@ SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice 
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
 
-    auto indices = vkutils::findQueueFamilies(physicalDevice, surface);
-    uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
+    uint32_t queueFamilyIndices[] = {device.graphicsQueueFamilyIndex(), device.presentQueueFamilyIndex()};
 
-    if (indices.graphicsFamily != indices.presentFamily) {
+    if (device.graphicsQueueFamilyIndex() != device.presentQueueFamilyIndex()) {
         createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -39,57 +47,15 @@ SwapChain::SwapChain(RenderAPI& api, vk::SurfaceKHR surface, vk::PhysicalDevice 
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = nullptr;
 
-    m_swapchain = device.createSwapchainKHR(createInfo);
-    auto swapchainImages = device.getSwapchainImagesKHR(m_swapchain);
+    m_swapchain = device.device().createSwapchainKHR(createInfo);
+    auto swapchainImages = device.device().getSwapchainImagesKHR(m_swapchain);
+    m_colors.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
-        vk::ImageViewCreateInfo createInfo{};
-        createInfo.image = image;
-        createInfo.viewType = vk::ImageViewType::e2D;
-        createInfo.format = surfaceFormat.format;
-        createInfo.components.r = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.g = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.b = vk::ComponentSwizzle::eIdentity;
-        createInfo.components.a = vk::ComponentSwizzle::eIdentity;
-        createInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        createInfo.subresourceRange.baseMipLevel = 0;
-        createInfo.subresourceRange.levelCount = 1;
-        createInfo.subresourceRange.baseArrayLayer = 0;
-        createInfo.subresourceRange.layerCount = 1;
-
-        auto imageView = device.createImageView(createInfo);
-        m_colors.push_back(gpu::Texture{
-            .image = image,
-            .memory = nullptr,
-            .imageView = imageView,
-            .sampler = nullptr,
-            .format = surfaceFormat.format,
-            .width = extent.width,
-            .height = extent.height,
-        });
+        m_colors.emplace_back(device.device(), image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor);
 
         vk::SemaphoreCreateInfo semaphoreInfo{};
-        m_renderFinishedSemaphores.push_back(device.createSemaphore(semaphoreInfo));
+        m_renderFinishedSemaphores.push_back(device.device().createSemaphore(semaphoreInfo));
     }
-
-    vk::Format depthFormat = api.findDepthFormat();
-
-    vk::Image depthImage;
-    vk::DeviceMemory depthImageMemory;
-
-    api.createImage(extent.width, extent.height, depthFormat,
-                vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment,
-                vk::MemoryPropertyFlagBits::eDeviceLocal, depthImage, depthImageMemory);
-
-    auto depthImageView = api.createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
-    m_depth = gpu::Texture {
-        .image = depthImage,
-        .memory = depthImageMemory,
-        .imageView = depthImageView,
-        .sampler = nullptr,
-        .format = depthFormat,
-        .width = extent.width,
-        .height = extent.height,
-    };
 }
 
 vk::Result SwapChain::acquireNextImage(vk::Device device, vk::Semaphore& semaphore, uint64_t timeout) {
@@ -116,13 +82,11 @@ vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQu
 }
 
 void SwapChain::destroy(vk::Device device) {
-    device.destroyImageView(m_depth.imageView);
-    device.destroyImage(m_depth.image);
-    device.freeMemory(m_depth.memory);
-
-    for (auto tex : m_colors) {
-        device.destroyImageView(tex.imageView);
+    if (m_depth) {
+        m_depth.reset();
     }
+
+    m_colors.clear();
 
     for (auto semaphore : m_renderFinishedSemaphores) {
         device.destroySemaphore(semaphore);

@@ -3,63 +3,108 @@
 #include "vulkan/VulkanUtils.h"
 #include "SwapChain.h"
 #include <iostream>
-#include <fstream>
 #include <stdexcept>
-#include <set>
-#include <algorithm>
-#include <cstring>
 
-#ifdef NDEBUG
-const bool enableValidationLayers = false;
-#else
-const bool enableValidationLayers = true;
-#endif
+#include "entt/entity/view.hpp"
 
 namespace ailo {
 
-// Static helper to load debug extension functions
-static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                                              const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                                           const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
 
 // Initialization and shutdown
 
-RenderAPI::RenderAPI() = default;
+gpu::Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
+    : m_device(device), format(format), width(width), height(height) {
 
-RenderAPI::~RenderAPI() = default;
+    vk::ImageCreateInfo imageInfo{};
+    imageInfo.imageType = vk::ImageType::e2D;
+    imageInfo.extent.width = width;
+    imageInfo.extent.height = height;
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.format = format;
+    imageInfo.tiling = vk::ImageTiling::eOptimal;
+    imageInfo.initialLayout = vk::ImageLayout::eUndefined;
+    imageInfo.usage = usage;
+    imageInfo.samples = vk::SampleCountFlagBits::e1;
+    imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
-void RenderAPI::init(GLFWwindow* window) {
-    m_window = window;
+    image = device.createImage(imageInfo);
 
-    createInstance();
-    setupDebugMessenger();
-    createSurface();
-    pickPhysicalDevice();
-    createLogicalDevice();
+    vk::MemoryRequirements memRequirements = device.getImageMemoryRequirements(image);
+
+    vk::MemoryAllocateInfo allocInfo{};
+    allocInfo.allocationSize = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+    memory = device.allocateMemory(allocInfo);
+    device.bindImageMemory(image, memory, 0);
+
+    imageView = createImageView(device, image, format, aspect);
+
+    if (usage & vk::ImageUsageFlagBits::eSampled) {
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.magFilter = filter;
+        samplerInfo.minFilter = filter;
+        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
+        samplerInfo.anisotropyEnable = VK_TRUE;
+
+        vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
+        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = vk::CompareOp::eAlways;
+        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
+        samplerInfo.mipLodBias = 0.0f;
+        samplerInfo.minLod = 0.0f;
+        samplerInfo.maxLod = 0.0f;
+
+        sampler = device.createSampler(samplerInfo);
+    }
+}
+
+gpu::Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
+    : m_device(device), image(image), format(format), width(width), height(height) {
+    imageView = createImageView(device, image, format, aspectFlags);
+}
+
+vk::ImageView gpu::Texture::createImageView(vk::Device device, vk::Image image, vk::Format format,
+    vk::ImageAspectFlags aspectFlags) {
+    vk::ImageViewCreateInfo viewInfo{};
+    viewInfo.image = image;
+    viewInfo.viewType = vk::ImageViewType::e2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.baseMipLevel = 0;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.baseArrayLayer = 0;
+    viewInfo.subresourceRange.layerCount = 1;
+
+    return device.createImageView(viewInfo);
+}
+
+RenderAPI::RenderAPI(GLFWwindow* window)
+    : m_window(window),
+    m_device(window),
+    m_commandPool(m_device.device().createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
+    m_commands(m_device.device(), m_commandPool),
+    m_descriptorPool(createDescriptorPoolS(m_device.device())),
+    m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), m_device.device())) {
+
     createSwapchain();
-    createCommandPool();
-    createCommandBuffers();
-    createDescriptorPool();
-    createAllocator();
     createRenderPass();
     createSwapchainFramebuffers();
 }
 
+RenderAPI::~RenderAPI() = default;
+
 void RenderAPI::shutdown() {
-    m_device.waitIdle();
+    vk::Device device = m_device.device();
+
+    device.waitIdle();
 
     cleanupSwpachainFramebuffer();
     cleanupSwapchain();
@@ -72,28 +117,18 @@ void RenderAPI::shutdown() {
 
     vmaDestroyAllocator(m_Allocator);
 
-    m_device.destroyRenderPass(m_renderPass);
-    m_device.destroyDescriptorPool(m_descriptorPool);
-    m_device.destroyCommandPool(m_commandPool);
-
-    m_device.destroy();
-
-    if (enableValidationLayers) {
-        DestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
-    }
-
-    m_instance.destroySurfaceKHR(m_surface);
-    m_instance.destroy();
+    device.destroyRenderPass(m_renderPass);
+    device.destroyDescriptorPool(m_descriptorPool);
+    device.destroyCommandPool(m_commandPool);
 }
 
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
-    UniqueVkHandle acquireSemaphore {
-        m_device, m_device.createSemaphore(vk::SemaphoreCreateInfo{})
-    };
+    auto device = m_device.device();
+    UniqueVkHandle acquireSemaphore { device, device.createSemaphore(vk::SemaphoreCreateInfo{}) };
 
-    auto result = m_swapChain->acquireNextImage(m_device, acquireSemaphore.get(), UINT64_MAX);
+    auto result = m_swapChain->acquireNextImage(device, acquireSemaphore.get(), UINT64_MAX);
     m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -111,7 +146,7 @@ bool RenderAPI::beginFrame() {
 void RenderAPI::endFrame() {
     auto& commands = m_commands.get();
 
-    auto result = m_swapChain->present(commands, m_graphicsQueue, m_presentQueue);
+    auto result = m_swapChain->present(commands, m_device.graphicsQueue(), m_device.presentQueue());
 
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_framebufferResized) {
         m_framebufferResized = false;
@@ -134,7 +169,7 @@ void RenderAPI::cleanupDescriptorSets() {
                 return false;
             }
 
-            (void) m_device.freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+            (void) m_device.device().freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
             return true;
         });
 
@@ -142,14 +177,13 @@ void RenderAPI::cleanupDescriptorSets() {
 }
 
 void RenderAPI::waitIdle() {
-    m_device.waitIdle();
+    m_device.device().waitIdle();
 }
 
 // Buffer management
 
 BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
-    BufferHandle handle = m_buffers.allocate();
-    auto& vertexBuffer = m_buffers.get(handle);
+    auto [handle, vertexBuffer] = m_buffers.emplace();
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
 
@@ -162,8 +196,7 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
 
 BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
-    BufferHandle handle = m_buffers.allocate();
-    auto& indexBuffer = m_buffers.get(handle);
+    auto [handle, indexBuffer] = m_buffers.emplace();
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
     indexBuffer.binding = BufferBinding::INDEX;
     auto& commands = m_commands.get();
@@ -173,7 +206,7 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     return handle;
 }
 
-VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
+VmaAllocator RenderAPI::createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
   VmaAllocator allocator;
   VmaVulkanFunctions const funcs {
 #if VMA_DYNAMIC_VULKAN_FUNCTIONS
@@ -245,8 +278,7 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
 }
 
 BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
-  BufferHandle handle = m_buffers.allocate();
-  auto& buffer = m_buffers.get(handle);
+  auto [handle, buffer] = m_buffers.emplace();
   auto usageFlags = vkutils::getBufferUsage(bufferBinding);
   allocateBuffer(buffer, usageFlags, size);
   buffer.binding = bufferBinding;
@@ -258,7 +290,7 @@ void RenderAPI::destroyBuffer(const BufferHandle& handle) {
 
   auto& buffer = m_buffers.get(handle);
   vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
-  m_buffers.free(handle);
+  m_buffers.erase(handle);
 }
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
@@ -270,57 +302,14 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 // Texture management
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
-    TextureHandle handle = m_textures.allocate();
-    auto& texture = m_textures.get(handle);
-
-    texture.format = format;
-    texture.width = width;
-    texture.height = height;
-
-    // Create image
-    createImage(width, height, format, vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-                vk::MemoryPropertyFlagBits::eDeviceLocal,
-                texture.image, texture.memory);
-
-    // Create image view
-    texture.imageView = createImageView(texture.image, format, vk::ImageAspectFlagBits::eColor);
-
-    // Create sampler
-    vk::SamplerCreateInfo samplerInfo{};
-    samplerInfo.magFilter = filter;
-    samplerInfo.minFilter = filter;
-    samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-    samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-    samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-
-    vk::PhysicalDeviceProperties properties = m_physicalDevice.getProperties();
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-
-    samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = vk::CompareOp::eAlways;
-    samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-
-    texture.sampler = m_device.createSampler(samplerInfo);
-
+    auto [handle, texture] = m_textures.emplace(m_device.device(), m_device.physicalDevice(), format, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
     return handle;
 }
 
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
     if(!handle) { return; }
 
-    auto& texture = m_textures.get(handle);
-    m_device.destroySampler(texture.sampler);
-    m_device.destroyImageView(texture.imageView);
-    m_device.destroyImage(texture.image);
-    m_device.freeMemory(texture.memory);
-    m_textures.free(handle);
+    m_textures.erase(handle);
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
@@ -350,8 +339,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 // Descriptor set management
 
 DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
-    DescriptorSetLayoutHandle handle = m_descriptorSetLayouts.allocate();
-    auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
+    auto [handle, descriptorSetLayout] = m_descriptorSetLayouts.emplace();
 
     std::vector<vk::DescriptorSetLayoutBinding> vkBindings;
     vkBindings.resize(bindings.size());
@@ -366,7 +354,7 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
     layoutInfo.bindingCount = static_cast<uint32_t>(vkBindings.size());
     layoutInfo.pBindings = vkBindings.data();
 
-    descriptorSetLayout.layout = m_device.createDescriptorSetLayout(layoutInfo);
+    descriptorSetLayout.layout = m_device.device().createDescriptorSetLayout(layoutInfo);
     for(auto& binding : bindings) {
       if(binding.descriptorType == vk::DescriptorType::eUniformBufferDynamic) {
         descriptorSetLayout.dynamicBindings.set(binding.binding, true);
@@ -380,13 +368,12 @@ void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
   auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
-  m_device.destroyDescriptorSetLayout(descriptorSetLayout.layout);
-  m_descriptorSetLayouts.free(handle);
+  m_device.device().destroyDescriptorSetLayout(descriptorSetLayout.layout);
+  m_descriptorSetLayouts.erase(handle);
 }
 
 DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
-    DescriptorSetHandle handle = m_descriptorSets.allocate();
-    auto& descriptorSet = m_descriptorSets.get(handle);
+    auto [handle, descriptorSet] = m_descriptorSets.emplace();
 
     createDescriptorSet(descriptorSet, layoutHandle);
 
@@ -402,7 +389,7 @@ void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetL
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &layout;
 
-    auto result = m_device.allocateDescriptorSets(allocInfo);
+    auto result = m_device.device().allocateDescriptorSets(allocInfo);
     descriptorSet.descriptorSet = result[0];
     descriptorSet.boundBindings.reset();
     descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
@@ -415,7 +402,7 @@ void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
 
     auto& descriptorSet = m_descriptorSets.get(handle);
     m_descriptorSetsToDestroy.push_back(descriptorSet);
-    m_descriptorSets.free(handle);
+    m_descriptorSets.erase(handle);
 }
 
 void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding, uint64_t offset, uint64_t size) {
@@ -441,7 +428,7 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pBufferInfo = &bufferInfo;
 
-    m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    m_device.device().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     descriptorSet.boundBindings[binding] = true;
 }
 
@@ -452,6 +439,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     auto& texture = m_textures.get(textureHandle);
+    auto& device = m_device.device();
 
     if (descriptorSet.isBound()) {
         // re-create descriptor set
@@ -475,7 +463,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 
             copyDescriptors.push_back(copyDescriptorSet);
         }
-        m_device.updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
+        device.updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
 
         std::swap(descriptorSet, newDescriptorSet);
     }
@@ -493,7 +481,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pImageInfo = &imageInfo;
 
-    m_device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     descriptorSet.boundBindings[binding] = true;
 }
 
@@ -533,7 +521,7 @@ void RenderAPI::createRenderPass() {
     colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
     vk::AttachmentDescription depthAttachment{};
-    depthAttachment.format = findDepthFormat();
+    depthAttachment.format = m_device.getDepthFormat();
     depthAttachment.samples = vk::SampleCountFlagBits::e1;
     depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -573,17 +561,16 @@ void RenderAPI::createRenderPass() {
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    m_renderPass = m_device.createRenderPass(renderPassInfo);
+    m_renderPass = m_device.device().createRenderPass(renderPassInfo);
 }
 
 // Pipeline management
 
-PipelineHandle RenderAPI::createGraphicsPipeline(
-    const PipelineDescription& description) {
+PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& description) {
 
-    PipelineHandle handle = m_pipelines.allocate();
+    vk::Device device = m_device.device();
 
-    auto& pipeline = m_pipelines.get(handle);
+    auto [handle, pipeline] = m_pipelines.emplace();
     const ShaderDescription& shader = description.shader;
 
     // Load shaders
@@ -691,7 +678,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
       layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
       layoutInfo.pBindings = bindings.data();
 
-      auto descriptorSetLayout = m_device.createDescriptorSetLayout(layoutInfo);
+      auto descriptorSetLayout = device.createDescriptorSetLayout(layoutInfo);
       setLayouts.push_back(descriptorSetLayout);
     }
 
@@ -702,7 +689,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     pipelineLayoutInfo.setLayoutCount = setLayouts.size();
     pipelineLayoutInfo.pSetLayouts = setLayouts.data();
 
-    pipeline.layout = m_device.createPipelineLayout(pipelineLayoutInfo);
+    pipeline.layout = device.createPipelineLayout(pipelineLayoutInfo);
 
     // Create graphics pipeline
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -720,15 +707,15 @@ PipelineHandle RenderAPI::createGraphicsPipeline(
     pipelineInfo.renderPass = m_renderPass;
     pipelineInfo.subpass = 0;
 
-    auto result = m_device.createGraphicsPipeline(nullptr, pipelineInfo);
+    auto result = device.createGraphicsPipeline(nullptr, pipelineInfo);
     if (result.result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
     pipeline.pipeline = result.value;
 
     // Cleanup shader modules
-    m_device.destroyShaderModule(vertShaderModule);
-    m_device.destroyShaderModule(fragShaderModule);
+    device.destroyShaderModule(vertShaderModule);
+    device.destroyShaderModule(fragShaderModule);
 
     return handle;
 }
@@ -737,14 +724,15 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     if(!handle) { return; }
 
     auto& pipeline = m_pipelines.get(handle);
+    auto& device = m_device.device();
 
-    m_device.destroyPipeline(pipeline.pipeline);
+    device.destroyPipeline(pipeline.pipeline);
     for(auto descriptorSetLayout : pipeline.descriptorSetLayouts) {
-      m_device.destroyDescriptorSetLayout(descriptorSetLayout);
+      device.destroyDescriptorSetLayout(descriptorSetLayout);
     }
-    m_device.destroyPipelineLayout(pipeline.layout);
+    device.destroyPipelineLayout(pipeline.layout);
 
-    m_pipelines.free(handle);
+    m_pipelines.erase(handle);
 }
 
 // Command recording
@@ -835,176 +823,13 @@ void RenderAPI::handleWindowResize() {
 
 // Internal initialization
 
-void RenderAPI::createInstance() {
-    if (enableValidationLayers && !checkValidationLayerSupport()) {
-        throw std::runtime_error("validation layers requested, but not available!");
-    }
 
-    glfwInit();
-
-    vk::ApplicationInfo appInfo{};
-    appInfo.pApplicationName = "Vulkan Application";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
-
-    vk::InstanceCreateInfo createInfo{};
-    createInfo.pApplicationInfo = &appInfo;
-    createInfo.flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
-
-    auto extensions = getRequiredExtensions();
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
-    createInfo.ppEnabledExtensionNames = extensions.data();
-
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
-    if (enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
-        createInfo.ppEnabledLayerNames = m_validationLayers.data();
-
-        debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-        debugCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                          VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        debugCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                                     VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                                     VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        debugCreateInfo.pfnUserCallback = debugCallback;
-        createInfo.pNext = &debugCreateInfo;
-    } else {
-        createInfo.enabledLayerCount = 0;
-        createInfo.pNext = nullptr;
-    }
-
-    m_instance = vk::createInstance(createInfo);
-}
-
-void RenderAPI::setupDebugMessenger() {
-    if (!enableValidationLayers) return;
-
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                                  VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                  VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-    createInfo.pfnUserCallback = debugCallback;
-
-    if (CreateDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr,
-        reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_debugMessenger)) != VK_SUCCESS) {
-        throw std::runtime_error("failed to set up debug messenger!");
-    }
-}
-
-void RenderAPI::createSurface() {
-    VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(m_instance, m_window, nullptr, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create window surface!");
-    }
-    m_surface = surface;
-}
-
-void RenderAPI::pickPhysicalDevice() {
-    auto devices = m_instance.enumeratePhysicalDevices();
-    if (devices.empty()) {
-        throw std::runtime_error("failed to find GPUs with Vulkan support!");
-    }
-
-    for (const auto& device : devices) {
-        if (isDeviceSuitable(device)) {
-            m_physicalDevice = device;
-            break;
-        }
-    }
-
-    if (!m_physicalDevice) {
-        throw std::runtime_error("failed to find a suitable GPU!");
-    }
-}
-
-void RenderAPI::createLogicalDevice() {
-    auto indices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
-
-    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(), indices.presentFamily.value()};
-
-    float queuePriority = 1.0f;
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
-        vk::DeviceQueueCreateInfo queueCreateInfo{};
-        queueCreateInfo.queueFamilyIndex = queueFamily;
-        queueCreateInfo.queueCount = 1;
-        queueCreateInfo.pQueuePriorities = &queuePriority;
-        queueCreateInfos.push_back(queueCreateInfo);
-    }
-
-    vk::PhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = true;
-
-    // Check for portability subset extension
-    std::vector<const char*> enabledExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
-    auto availableExtensions = m_physicalDevice.enumerateDeviceExtensionProperties();
-
-    bool hasPortabilitySubset = false;
-    for (const auto& extension : availableExtensions) {
-        if (strcmp(extension.extensionName, "VK_KHR_portability_subset") == 0) {
-            hasPortabilitySubset = true;
-            break;
-        }
-    }
-
-    if (hasPortabilitySubset) {
-        enabledExtensions.push_back("VK_KHR_portability_subset");
-    }
-
-    vk::DeviceCreateInfo createInfo{};
-    createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-    createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = &deviceFeatures;
-    createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
-    createInfo.ppEnabledExtensionNames = enabledExtensions.data();
-
-    if (enableValidationLayers) {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
-        createInfo.ppEnabledLayerNames = m_validationLayers.data();
-    } else {
-        createInfo.enabledLayerCount = 0;
-    }
-
-    m_device = m_physicalDevice.createDevice(createInfo);
-
-    m_graphicsQueue = m_device.getQueue(indices.graphicsFamily.value(), 0);
-    m_presentQueue = m_device.getQueue(indices.presentFamily.value(), 0);
-}
 
 void RenderAPI::createSwapchain() {
-    auto capabilities = m_physicalDevice.getSurfaceCapabilitiesKHR(m_surface);
-    auto formats = m_physicalDevice.getSurfaceFormatsKHR(m_surface);
-    auto presentModes = m_physicalDevice.getSurfacePresentModesKHR(m_surface);
-
-    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(formats);
-    vk::PresentModeKHR presentMode = chooseSwapPresentMode(presentModes);
-    vk::Extent2D extent = chooseSwapExtent(m_window, capabilities);
-
-    m_swapChain = std::make_unique<SwapChain>(*this, m_surface, m_physicalDevice, m_device, extent, surfaceFormat.format, presentMode);
+    m_swapChain = std::make_unique<SwapChain>(m_device);
 }
 
-void RenderAPI::createCommandPool() {
-    auto queueFamilyIndices = vkutils::findQueueFamilies(m_physicalDevice, m_surface);
-
-    vk::CommandPoolCreateInfo poolInfo{};
-    poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
-
-    m_commandPool = m_device.createCommandPool(poolInfo);
-}
-
-void RenderAPI::createCommandBuffers() {
-    m_commands.init(m_device, m_commandPool, MAX_FRAMES_IN_FLIGHT);
-}
-
-void RenderAPI::createDescriptorPool() {
+vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     // Create a descriptor pool that can allocate descriptor sets
     // We'll allocate enough for a reasonable number of uniform buffers and textures
     std::vector<vk::DescriptorPoolSize> poolSizes{};
@@ -1018,16 +843,16 @@ void RenderAPI::createDescriptorPool() {
     poolInfo.maxSets = 100;
     poolInfo.flags |= vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
 
-    m_descriptorPool = m_device.createDescriptorPool(poolInfo);
+    return device.createDescriptorPool(poolInfo);
 }
 
 void RenderAPI::cleanupSwapchain() {
-    m_swapChain->destroy(m_device);
+    m_swapChain->destroy(m_device.device());
 }
 
 void RenderAPI::cleanupSwpachainFramebuffer() {
     for(auto swapchainFramebuffer : m_swapchainFramebuffers) {
-        m_device.destroyFramebuffer(swapchainFramebuffer);
+        m_device.device().destroyFramebuffer(swapchainFramebuffer);
     }
     m_swapchainFramebuffers.clear();
 }
@@ -1049,7 +874,7 @@ void RenderAPI::createSwapchainFramebuffers() {
         framebufferInfo.height = extent.height;
         framebufferInfo.layers = 1;
 
-        m_swapchainFramebuffers[i] = m_device.createFramebuffer(framebufferInfo);
+        m_swapchainFramebuffers[i] = m_device.device().createFramebuffer(framebufferInfo);
     }
 }
 
@@ -1061,7 +886,7 @@ void RenderAPI::recreateSwapchain() {
         glfwWaitEvents();
     }
 
-    m_device.waitIdle();
+    m_device.device().waitIdle();
 
     cleanupSwpachainFramebuffer();
     cleanupSwapchain();
@@ -1070,127 +895,16 @@ void RenderAPI::recreateSwapchain() {
     createSwapchainFramebuffers();
 }
 
-// Helper functions
-
-bool RenderAPI::checkValidationLayerSupport() {
-    auto availableLayers = vk::enumerateInstanceLayerProperties();
-
-    for (const char* layerName : m_validationLayers) {
-        bool layerFound = false;
-
-        for (const auto& layerProperties : availableLayers) {
-            if (strcmp(layerName, layerProperties.layerName) == 0) {
-                layerFound = true;
-                break;
-            }
-        }
-
-        if (!layerFound) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-std::vector<const char*> RenderAPI::getRequiredExtensions() {
-    uint32_t extensionCount = 0;
-    const char** requiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
-
-    std::vector<const char*> extensions(requiredExtensions, requiredExtensions + extensionCount);
-
-    if (enableValidationLayers) {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
-
-    extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-    extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-
-    return extensions;
-}
-
-bool RenderAPI::isDeviceSuitable(vk::PhysicalDevice device) {
-    auto indices = vkutils::findQueueFamilies(device, m_surface);
-
-    bool extensionsSupported = checkDeviceExtensionSupport(device);
-
-    bool swapchainAdequate = false;
-    if (extensionsSupported) {
-        auto formats = device.getSurfaceFormatsKHR(m_surface);
-        auto presentModes = device.getSurfacePresentModesKHR(m_surface);
-        swapchainAdequate = !formats.empty() && !presentModes.empty();
-    }
-
-    vk::PhysicalDeviceFeatures supportedFeatures;
-    device.getFeatures(&supportedFeatures);
-
-    return indices.isComplete() && extensionsSupported && swapchainAdequate && supportedFeatures.samplerAnisotropy;
-}
-
-bool RenderAPI::checkDeviceExtensionSupport(vk::PhysicalDevice device) {
-    auto availableExtensions = device.enumerateDeviceExtensionProperties();
-
-    std::set<std::string> requiredExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
-
-    for (const auto& extension : availableExtensions) {
-        requiredExtensions.erase(extension.extensionName);
-    }
-
-    return requiredExtensions.empty();
-}
-
-vk::SurfaceFormatKHR RenderAPI::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
-    for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb &&
-            availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) {
-            return availableFormat;
-        }
-    }
-    return availableFormats[0];
-}
-
-vk::PresentModeKHR RenderAPI::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
-    for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
-            return availablePresentMode;
-        }
-    }
-    return vk::PresentModeKHR::eFifo;
-}
-
-vk::Extent2D RenderAPI::chooseSwapExtent(GLFWwindow* window, const vk::SurfaceCapabilitiesKHR& capabilities) {
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    } else {
-        int width, height;
-        glfwGetFramebufferSize(window, &width, &height);
-
-        vk::Extent2D actualExtent = {
-            static_cast<uint32_t>(width),
-            static_cast<uint32_t>(height)
-        };
-
-        actualExtent.width = std::clamp(actualExtent.width,
-                                        capabilities.minImageExtent.width,
-                                        capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(actualExtent.height,
-                                         capabilities.minImageExtent.height,
-                                         capabilities.maxImageExtent.height);
-
-        return actualExtent;
-    }
-}
-
 vk::ShaderModule RenderAPI::createShaderModule(const std::vector<char>& code) {
     vk::ShaderModuleCreateInfo createInfo{};
     createInfo.codeSize = code.size();
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
-    return m_device.createShaderModule(createInfo);
+    return m_device.device().createShaderModule(createInfo);
 }
 
-uint32_t RenderAPI::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
-    vk::PhysicalDeviceMemoryProperties memProperties = m_physicalDevice.getMemoryProperties();
+uint32_t gpu::Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
 
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
         if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
@@ -1201,14 +915,24 @@ uint32_t RenderAPI::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags 
     throw std::runtime_error("failed to find suitable memory type!");
 }
 
-void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
 
-  vk::CommandBufferAllocateInfo allocInfo{};
+gpu::Texture::~Texture() {
+    m_device.destroySampler(sampler);
+    m_device.destroyImageView(imageView);
+
+    if (memory) {
+        m_device.destroyImage(image);
+        m_device.freeMemory(memory);
+    }
+}
+
+void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
+    vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.level = vk::CommandBufferLevel::ePrimary;
     allocInfo.commandPool = m_commandPool;
     allocInfo.commandBufferCount = 1;
 
-    vk::CommandBuffer commandBuffer = m_device.allocateCommandBuffers(allocInfo)[0];
+    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
 
     vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1225,68 +949,10 @@ void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Devic
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    m_graphicsQueue.submit(submitInfo, nullptr);
-    m_graphicsQueue.waitIdle();
+    m_device.graphicsQueue().submit(submitInfo, nullptr);
+    m_device.graphicsQueue().waitIdle();
 
-    m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
-}
-
-vk::Format RenderAPI::findDepthFormat() {
-    auto format = vkutils::findSupportedFormat(
-        m_physicalDevice,
-        {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint},
-        vk::ImageTiling::eOptimal,
-        vk::FormatFeatureFlagBits::eDepthStencilAttachment
-    );
-
-    if (format == vk::Format::eUndefined) {
-        throw std::runtime_error("failed to find supported format!");
-    }
-
-    return format;
-}
-
-void RenderAPI::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling,
-                            vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties,
-                            vk::Image& image, vk::DeviceMemory& imageMemory) {
-    vk::ImageCreateInfo imageInfo{};
-    imageInfo.imageType = vk::ImageType::e2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = tiling;
-    imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-    imageInfo.usage = usage;
-    imageInfo.samples = vk::SampleCountFlagBits::e1;
-    imageInfo.sharingMode = vk::SharingMode::eExclusive;
-
-    image = m_device.createImage(imageInfo);
-
-    vk::MemoryRequirements memRequirements = m_device.getImageMemoryRequirements(image);
-
-    vk::MemoryAllocateInfo allocInfo{};
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
-
-    imageMemory = m_device.allocateMemory(allocInfo);
-    m_device.bindImageMemory(image, imageMemory, 0);
-}
-
-vk::ImageView RenderAPI::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags) {
-    vk::ImageViewCreateInfo viewInfo{};
-    viewInfo.image = image;
-    viewInfo.viewType = vk::ImageViewType::e2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    return m_device.createImageView(viewInfo);
+    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
 void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
@@ -1295,7 +961,7 @@ void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::Im
     allocInfo.commandPool = m_commandPool;
     allocInfo.commandBufferCount = 1;
 
-    vk::CommandBuffer commandBuffer = m_device.allocateCommandBuffers(allocInfo)[0];
+    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
 
     vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1346,10 +1012,10 @@ void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::Im
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    m_graphicsQueue.submit(submitInfo, nullptr);
-    m_graphicsQueue.waitIdle();
+    m_device.graphicsQueue().submit(submitInfo, nullptr);
+    m_device.graphicsQueue().waitIdle();
 
-    m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
+    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
 void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
@@ -1358,7 +1024,7 @@ void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t w
     allocInfo.commandPool = m_commandPool;
     allocInfo.commandBufferCount = 1;
 
-    vk::CommandBuffer commandBuffer = m_device.allocateCommandBuffers(allocInfo)[0];
+    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
 
     vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
@@ -1383,32 +1049,10 @@ void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t w
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    m_graphicsQueue.submit(submitInfo, nullptr);
-    m_graphicsQueue.waitIdle();
+    m_device.graphicsQueue().submit(submitInfo, nullptr);
+    m_device.graphicsQueue().waitIdle();
 
-    m_device.freeCommandBuffers(m_commandPool, 1, &commandBuffer);
-}
-
-VKAPI_ATTR VkBool32 VKAPI_CALL RenderAPI::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-
-    std::ostream* out = nullptr;
-    auto errorMask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    if((pCallbackData->flags & errorMask) > 0) {
-        out = &std::cerr;
-    } else {
-        out = &std::cout;
-    }
-
-    *out << "[Vulkan] " << pCallbackData->pMessage << std::endl;
-    return VK_FALSE;
-}
-
-void RenderAPI::createAllocator() {
-  m_Allocator = ailo::createAllocator(m_instance, m_physicalDevice, m_device);
+    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
 gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {

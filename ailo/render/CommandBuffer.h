@@ -80,9 +80,8 @@ private:
 
 class CommandsPool {
 public:
-    CommandsPool() = default;
+    CommandsPool(vk::Device device, vk::CommandPool commandPool);
 
-    void init(vk::Device device, vk::CommandPool pool, uint32_t numCommandBuffers);
     CommandBuffer& get();
 
     void next();

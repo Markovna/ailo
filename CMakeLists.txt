@@ -57,12 +57,21 @@ add_executable(ailo
     ailo/render/Mesh.h
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
-        ailo/render/CommandBuffer.cpp
-        ailo/render/CommandBuffer.h
-        ailo/render/UniqueVkHandle.cpp
-        ailo/render/UniqueVkHandle.h
-        ailo/render/SwapChain.cpp
-        ailo/render/SwapChain.h
+    ailo/render/CommandBuffer.cpp
+    ailo/render/CommandBuffer.h
+    ailo/render/UniqueVkHandle.cpp
+    ailo/render/UniqueVkHandle.h
+    ailo/render/SwapChain.cpp
+    ailo/render/SwapChain.h
+        ailo/render/FrameBufferCache.cpp
+        ailo/render/FrameBufferCache.h
+        ailo/render/VulkanConstants.h
+        ailo/render/VulkanDevice.cpp
+        ailo/render/VulkanDevice.h
+        ailo/render/Constants.h
+        ailo/common/SparseSet.h
+        ailo/render/ResourceContainer.cpp
+        ailo/render/ResourceContainer.h
 )
 
 # Link libraries
