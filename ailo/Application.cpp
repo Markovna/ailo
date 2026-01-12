@@ -21,7 +21,6 @@
 #include <vector>
 #include <iostream>
 
-#include "common/SparseSet.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
 

@@ -31,8 +31,7 @@ add_executable(ailo
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-    ailo/utils/ResourceAllocator.h
-    ailo/Engine.cpp
+        ailo/Engine.cpp
     ailo/Engine.h
     ailo/Application.cpp
     ailo/Application.h
@@ -69,9 +68,12 @@ add_executable(ailo
         ailo/render/VulkanDevice.cpp
         ailo/render/VulkanDevice.h
         ailo/render/Constants.h
-        ailo/common/SparseSet.h
         ailo/render/ResourceContainer.cpp
         ailo/render/ResourceContainer.h
+        ailo/render/vulkan/Texture.cpp
+        ailo/render/vulkan/Texture.h
+        ailo/common/LRUCache.cpp
+        ailo/common/LRUCache.h
 )
 
 # Link libraries

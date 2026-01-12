@@ -13,12 +13,11 @@ public:
     vk::Result present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue);
     void destroy(vk::Device device);
 
+    vk::ImageView getCurrentImage() { return m_colors[m_currentImageIndex].imageView; }
+
     // TODO: replace with render target and frame buffer cache
     vk::Extent2D getExtent() { return { m_colors[0].width, m_colors[0].height }; }
-    uint32_t getImageCount() { return m_colors.size(); }
-    vk::ImageView getColorImage(uint32_t index) { return m_colors[index].imageView; }
     vk::ImageView getDepthImage() { return m_depth ? m_depth->imageView : vk::ImageView{}; }
-    uint32_t getCurrentImageIndex() { return m_currentImageIndex; }
     vk::Format getColorFormat() { return m_colors[0].format; }
 
 private:

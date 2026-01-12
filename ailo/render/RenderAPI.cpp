@@ -9,82 +9,7 @@
 
 namespace ailo {
 
-
 // Initialization and shutdown
-
-gpu::Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
-    : m_device(device), format(format), width(width), height(height) {
-
-    vk::ImageCreateInfo imageInfo{};
-    imageInfo.imageType = vk::ImageType::e2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = format;
-    imageInfo.tiling = vk::ImageTiling::eOptimal;
-    imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-    imageInfo.usage = usage;
-    imageInfo.samples = vk::SampleCountFlagBits::e1;
-    imageInfo.sharingMode = vk::SharingMode::eExclusive;
-
-    image = device.createImage(imageInfo);
-
-    vk::MemoryRequirements memRequirements = device.getImageMemoryRequirements(image);
-
-    vk::MemoryAllocateInfo allocInfo{};
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
-
-    memory = device.allocateMemory(allocInfo);
-    device.bindImageMemory(image, memory, 0);
-
-    imageView = createImageView(device, image, format, aspect);
-
-    if (usage & vk::ImageUsageFlagBits::eSampled) {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = filter;
-        samplerInfo.minFilter = filter;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-
-        vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
-        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        sampler = device.createSampler(samplerInfo);
-    }
-}
-
-gpu::Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height) {
-    imageView = createImageView(device, image, format, aspectFlags);
-}
-
-vk::ImageView gpu::Texture::createImageView(vk::Device device, vk::Image image, vk::Format format,
-    vk::ImageAspectFlags aspectFlags) {
-    vk::ImageViewCreateInfo viewInfo{};
-    viewInfo.image = image;
-    viewInfo.viewType = vk::ImageViewType::e2D;
-    viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
-
-    return device.createImageView(viewInfo);
-}
 
 RenderAPI::RenderAPI(GLFWwindow* window)
     : m_window(window),
@@ -92,11 +17,11 @@ RenderAPI::RenderAPI(GLFWwindow* window)
     m_commandPool(m_device.device().createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
     m_commands(m_device.device(), m_commandPool),
     m_descriptorPool(createDescriptorPoolS(m_device.device())),
-    m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), m_device.device())) {
+    m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), m_device.device())),
+    m_framebufferCache(m_device.device()) {
 
     createSwapchain();
     createRenderPass();
-    createSwapchainFramebuffers();
 }
 
 RenderAPI::~RenderAPI() = default;
@@ -106,8 +31,9 @@ void RenderAPI::shutdown() {
 
     device.waitIdle();
 
-    cleanupSwpachainFramebuffer();
     cleanupSwapchain();
+
+    m_framebufferCache.clear();
 
     m_commands.destroy();
 
@@ -740,9 +666,20 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
 void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     auto extent = m_swapChain->getExtent();
 
+    FrameBufferCacheQuery frameBufferCacheQuery {
+        .renderPass = m_renderPass,
+        .attachmentCount = 1,
+        .depth = m_swapChain->getDepthImage(),
+        .width = extent.width,
+        .height = extent.height
+    };
+    frameBufferCacheQuery.color[0] = m_swapChain->getCurrentImage();
+
+    auto& frameBuffer = m_framebufferCache.getOrCreate(frameBufferCacheQuery);
+
     vk::RenderPassBeginInfo renderPassInfo{};
     renderPassInfo.renderPass = m_renderPass;
-    renderPassInfo.framebuffer = m_swapchainFramebuffers[m_swapChain->getCurrentImageIndex()];
+    renderPassInfo.framebuffer = frameBuffer.getHandle();
     renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
     renderPassInfo.renderArea.extent = extent;
 
@@ -760,8 +697,8 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)extent.width;
-    viewport.height = (float)extent.height;
+    viewport.width = static_cast<float>(extent.width);
+    viewport.height = static_cast<float>(extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     commands.buffer().setViewport(0, 1, &viewport);
@@ -850,34 +787,6 @@ void RenderAPI::cleanupSwapchain() {
     m_swapChain->destroy(m_device.device());
 }
 
-void RenderAPI::cleanupSwpachainFramebuffer() {
-    for(auto swapchainFramebuffer : m_swapchainFramebuffers) {
-        m_device.device().destroyFramebuffer(swapchainFramebuffer);
-    }
-    m_swapchainFramebuffers.clear();
-}
-
-void RenderAPI::createSwapchainFramebuffers() {
-    m_swapchainFramebuffers.resize(m_swapChain->getImageCount());
-    for (size_t i = 0; i < m_swapchainFramebuffers.size(); i++) {
-        std::array<vk::ImageView, 2> attachments = {
-            m_swapChain->getColorImage(i),
-            m_swapChain->getDepthImage()
-        };
-
-        auto extent = m_swapChain->getExtent();
-        vk::FramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.renderPass = m_renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = extent.width;
-        framebufferInfo.height = extent.height;
-        framebufferInfo.layers = 1;
-
-        m_swapchainFramebuffers[i] = m_device.device().createFramebuffer(framebufferInfo);
-    }
-}
-
 void RenderAPI::recreateSwapchain() {
     int width = 0, height = 0;
     glfwGetFramebufferSize(m_window, &width, &height);
@@ -888,11 +797,8 @@ void RenderAPI::recreateSwapchain() {
 
     m_device.device().waitIdle();
 
-    cleanupSwpachainFramebuffer();
     cleanupSwapchain();
-
     createSwapchain();
-    createSwapchainFramebuffers();
 }
 
 vk::ShaderModule RenderAPI::createShaderModule(const std::vector<char>& code) {
@@ -901,29 +807,6 @@ vk::ShaderModule RenderAPI::createShaderModule(const std::vector<char>& code) {
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
     return m_device.device().createShaderModule(createInfo);
-}
-
-uint32_t gpu::Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
-    vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
-
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-
-    throw std::runtime_error("failed to find suitable memory type!");
-}
-
-
-gpu::Texture::~Texture() {
-    m_device.destroySampler(sampler);
-    m_device.destroyImageView(imageView);
-
-    if (memory) {
-        m_device.destroyImage(image);
-        m_device.freeMemory(memory);
-    }
 }
 
 void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
