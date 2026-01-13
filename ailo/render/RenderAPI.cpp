@@ -248,17 +248,19 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     memcpy(stageBuffer.mapping, data, dataSize);
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
+    vk::CommandBuffer commandBuffer = m_commands.get().buffer();
+
     // Transition image layout to transfer destination
-    transitionImageLayout(texture.image, texture.format,
+    transitionImageLayout(commandBuffer, texture.image, texture.format,
                          vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
 
     if(width == 0) width = texture.width;
     if(height == 0) height = texture.height;
 
-    copyBufferToImage(stageBuffer.buffer, texture.image, width, height, xOffset, yOffset);
+    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset);
 
     // Transition image layout to shader read
-    transitionImageLayout(texture.image, texture.format,
+    transitionImageLayout(commandBuffer, texture.image, texture.format,
                          vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -760,8 +762,6 @@ void RenderAPI::handleWindowResize() {
 
 // Internal initialization
 
-
-
 void RenderAPI::createSwapchain() {
     m_swapChain = std::make_unique<SwapChain>(m_device);
 }
@@ -810,46 +810,12 @@ vk::ShaderModule RenderAPI::createShaderModule(const std::vector<char>& code) {
 }
 
 void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocInfo.commandPool = m_commandPool;
-    allocInfo.commandBufferCount = 1;
-
-    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
-
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-
-    commandBuffer.begin(beginInfo);
-
     vk::BufferCopy copyRegion{};
     copyRegion.size = size;
-    commandBuffer.copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
-
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    m_device.graphicsQueue().submit(submitInfo, nullptr);
-    m_device.graphicsQueue().waitIdle();
-
-    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
+    m_commands.get().buffer().copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
-void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocInfo.commandPool = m_commandPool;
-    allocInfo.commandBufferCount = 1;
-
-    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
-
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-    commandBuffer.begin(beginInfo);
-
+void RenderAPI::transitionImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
     vk::ImageMemoryBarrier barrier{};
     barrier.oldLayout = oldLayout;
     barrier.newLayout = newLayout;
@@ -888,31 +854,9 @@ void RenderAPI::transitionImageLayout(vk::Image image, vk::Format format, vk::Im
         0, nullptr,
         1, &barrier
     );
-
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    m_device.graphicsQueue().submit(submitInfo, nullptr);
-    m_device.graphicsQueue().waitIdle();
-
-    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
-void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.level = vk::CommandBufferLevel::ePrimary;
-    allocInfo.commandPool = m_commandPool;
-    allocInfo.commandBufferCount = 1;
-
-    vk::CommandBuffer commandBuffer = m_device.device().allocateCommandBuffers(allocInfo)[0];
-
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-    commandBuffer.begin(beginInfo);
-
+void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
     vk::BufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
@@ -925,17 +869,6 @@ void RenderAPI::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t w
     region.imageExtent = vk::Extent3D{width, height, 1};
 
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
-
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    m_device.graphicsQueue().submit(submitInfo, nullptr);
-    m_device.graphicsQueue().waitIdle();
-
-    m_device.device().freeCommandBuffers(m_commandPool, 1, &commandBuffer);
 }
 
 gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
