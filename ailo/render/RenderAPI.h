@@ -16,6 +16,7 @@
 #include "ResourceContainer.h"
 #include "CommandBuffer.h"
 #include "FrameBufferCache.h"
+#include "RenderPassCache.h"
 
 namespace ailo {
 
@@ -138,6 +139,11 @@ struct RenderTarget {
 
 }
 
+struct RenderPassDescription {
+    std::array<vk::AttachmentLoadOp, kMaxColorAttachments + 1> loadOp;
+    std::array<vk::AttachmentStoreOp, kMaxColorAttachments + 1> storeOp;
+};
+
 struct VertexInputDescription {
     std::vector<vk::VertexInputBindingDescription> bindings;
     std::vector<vk::VertexInputAttributeDescription> attributes;
@@ -218,7 +224,7 @@ public:
     void destroyPipeline(const PipelineHandle& handle);
 
     // Command recording (call between beginFrame and endFrame)
-    void beginRenderPass(vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    void beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
     void endRenderPass();
     void bindPipeline(const PipelineHandle& handle);
     void bindVertexBuffer(const BufferHandle& handle);
@@ -299,6 +305,7 @@ private:
 
     std::unique_ptr<SwapChain> m_swapChain;
     FrameBufferCache m_framebufferCache;
+    RenderPassCache m_renderPassCache;
 };
 
 } // namespace ailo

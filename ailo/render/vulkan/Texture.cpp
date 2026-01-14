@@ -1,9 +1,11 @@
 #include "Texture.h"
 
+#include "VulkanUtils.h"
+
 namespace ailo::gpu {
 
 Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
-    : m_device(device), format(format), width(width), height(height) {
+    : m_device(device), format(format), width(width), height(height), aspect(aspect) {
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
@@ -57,7 +59,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
 }
 
 Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height) {
+    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags) {
     imageView = createImageView(device, image, format, aspectFlags);
 }
 
@@ -98,4 +100,38 @@ Texture::~Texture() {
     }
 }
 
+void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout newLayout) {
+    if (layout == newLayout) {
+        return;
+    }
+
+    vk::ImageMemoryBarrier barrier{};
+    barrier.oldLayout = layout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = aspect;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    auto [srcAccess, srcStage] = vkutils::getTransitionSrcAccess(layout);
+    auto [dstAccess, dstStage] = vkutils::getTransitionDstAccess(newLayout);
+
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstAccessMask = dstAccess;
+
+    commandBuffer.pipelineBarrier(
+            srcStage, dstStage,
+            {},
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+    layout = newLayout;
+
+}
 }

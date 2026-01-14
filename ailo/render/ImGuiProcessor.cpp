@@ -280,7 +280,14 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
     m_renderAPI->updateBuffer(m_vertexBuffer, vertices.data(), vertexSize);
     m_renderAPI->updateBuffer(m_indexBuffer, indices.data(), indexSize);
 
-    m_renderAPI->beginRenderPass();
+    RenderPassDescription renderPass {};
+    renderPass.loadOp[0] = vk::AttachmentLoadOp::eLoad;
+    renderPass.storeOp[0] = vk::AttachmentStoreOp::eStore;
+
+    renderPass.loadOp[kMaxColorAttachments] = vk::AttachmentLoadOp::eClear;
+    renderPass.storeOp[kMaxColorAttachments] = vk::AttachmentStoreOp::eDontCare;
+
+    m_renderAPI->beginRenderPass(renderPass);
     // Setup render state
     setupRenderState(drawData, io, fbWidth, fbHeight);
 

@@ -47,4 +47,38 @@ vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
   return static_cast<vk::BufferUsageFlagBits>(0);
 }
 
+std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout layout) {
+  switch (layout) {
+    case vk::ImageLayout::eUndefined:
+      return { vk::AccessFlagBits::eMemoryRead, vk::PipelineStageFlagBits::eAllGraphics };
+    case vk::ImageLayout::eColorAttachmentOptimal:
+      return { vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite, vk::PipelineStageFlagBits::eColorAttachmentOutput };
+    case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+      return { vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::PipelineStageFlagBits::eLateFragmentTests };
+    case vk::ImageLayout::eTransferSrcOptimal:
+      return { vk::AccessFlagBits::eTransferRead, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::eTransferDstOptimal:
+      return { vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::ePresentSrcKHR:
+      return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eTransfer };
+    default: return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eNone };
+  }
+}
+
+std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionDstAccess(vk::ImageLayout layout) {
+  switch (layout) {
+    case vk::ImageLayout::eColorAttachmentOptimal:
+      return { vk::AccessFlagBits::eMemoryRead | vk::AccessFlagBits::eMemoryWrite, vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eFragmentShader };
+    case vk::ImageLayout::eDepthStencilAttachmentOptimal:
+      return { vk::AccessFlagBits::eDepthStencilAttachmentRead | vk::AccessFlagBits::eDepthStencilAttachmentWrite, vk::PipelineStageFlagBits::eEarlyFragmentTests };
+    case vk::ImageLayout::eTransferSrcOptimal:
+      return { vk::AccessFlagBits::eTransferRead, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::eTransferDstOptimal:
+      return { vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::ePresentSrcKHR:
+    case vk::ImageLayout::eUndefined:
+      return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eTopOfPipe };
+    default: return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eNone };
+  }
+}
 }

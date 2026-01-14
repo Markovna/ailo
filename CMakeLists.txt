@@ -74,6 +74,8 @@ add_executable(ailo
         ailo/render/vulkan/Texture.h
         ailo/common/LRUCache.cpp
         ailo/common/LRUCache.h
+        ailo/render/RenderPassCache.cpp
+        ailo/render/RenderPassCache.h
 )
 
 # Link libraries

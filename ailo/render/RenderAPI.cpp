@@ -18,7 +18,8 @@ RenderAPI::RenderAPI(GLFWwindow* window)
     m_commands(m_device.device(), m_commandPool),
     m_descriptorPool(createDescriptorPoolS(m_device.device())),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), m_device.device())),
-    m_framebufferCache(m_device.device()) {
+    m_framebufferCache(m_device.device()),
+    m_renderPassCache(m_device.device()) {
 
     createSwapchain();
     createRenderPass();
@@ -34,6 +35,7 @@ void RenderAPI::shutdown() {
     cleanupSwapchain();
 
     m_framebufferCache.clear();
+    m_renderPassCache.clear();
 
     m_commands.destroy();
 
@@ -438,8 +440,11 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
 
 void RenderAPI::createRenderPass() {
     // Create render pass
+    auto& colorTarget = m_swapChain->getColorTarget();
+    auto& depthTarget = m_swapChain->getDepthTarget();
+
     vk::AttachmentDescription colorAttachment{};
-    colorAttachment.format = m_swapChain->getColorFormat();
+    colorAttachment.format = colorTarget.format;
     colorAttachment.samples = vk::SampleCountFlagBits::e1;
     colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
@@ -449,7 +454,7 @@ void RenderAPI::createRenderPass() {
     colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
 
     vk::AttachmentDescription depthAttachment{};
-    depthAttachment.format = m_device.getDepthFormat();
+    depthAttachment.format = depthTarget.format;
     depthAttachment.samples = vk::SampleCountFlagBits::e1;
     depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
     depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
@@ -665,22 +670,45 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
 
 // Command recording
 
-void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
-    auto extent = m_swapChain->getExtent();
+void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
+    auto& colorTarget = m_swapChain->getColorTarget();
+    auto& depthTarget = m_swapChain->getDepthTarget();
+    RenderPassCacheQuery renderPassCacheQuery {};
+
+    auto& colorAttachmentDesc = renderPassCacheQuery.colors[0];
+    colorAttachmentDesc.format = colorTarget.format;
+    colorAttachmentDesc.loadOp = description.loadOp[0];
+    colorAttachmentDesc.storeOp = description.storeOp[0];
+    renderPassCacheQuery.attachmentsUsed.set(0);
+
+    const auto depthIndex = kMaxColorAttachments;
+    auto& depthAttachmentDesc = renderPassCacheQuery.depth;
+    depthAttachmentDesc.format = depthTarget.format;
+    depthAttachmentDesc.loadOp = description.loadOp[depthIndex];
+    depthAttachmentDesc.storeOp = description.storeOp[depthIndex];
+    renderPassCacheQuery.attachmentsUsed.set(depthIndex);
+
+    vk::CommandBuffer commandBuffer = m_commands.get().buffer();
+
+    colorTarget.transitionLayout(commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
+    depthTarget.transitionLayout(commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+    auto& renderPass = m_renderPassCache.getOrCreate(renderPassCacheQuery);
 
     FrameBufferCacheQuery frameBufferCacheQuery {
-        .renderPass = m_renderPass,
+        .renderPass = renderPass.getHandle(),
+        .color = { colorTarget.imageView },
         .attachmentCount = 1,
-        .depth = m_swapChain->getDepthImage(),
-        .width = extent.width,
-        .height = extent.height
+        .depth = depthTarget.imageView,
+        .width = colorTarget.width,
+        .height = colorTarget.height
     };
-    frameBufferCacheQuery.color[0] = m_swapChain->getCurrentImage();
 
     auto& frameBuffer = m_framebufferCache.getOrCreate(frameBufferCacheQuery);
 
+    vk::Extent2D extent { colorTarget.width, colorTarget.height };
     vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = m_renderPass;
+    renderPassInfo.renderPass = renderPass.getHandle();
     renderPassInfo.framebuffer = frameBuffer.getHandle();
     renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
     renderPassInfo.renderArea.extent = extent;
@@ -691,9 +719,8 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
-    auto& commands = m_commands.get();
 
-    commands.buffer().beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
     // Set default viewport and scissor
     vk::Viewport viewport{};
@@ -703,12 +730,12 @@ void RenderAPI::beginRenderPass(vk::ClearColorValue clearColor) {
     viewport.height = static_cast<float>(extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    commands.buffer().setViewport(0, 1, &viewport);
+    commandBuffer.setViewport(0, 1, &viewport);
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{0, 0};
     scissor.extent = extent;
-    commands.buffer().setScissor(0, 1, &scissor);
+    commandBuffer.setScissor(0, 1, &scissor);
 }
 
 void RenderAPI::endRenderPass() {
@@ -769,11 +796,11 @@ void RenderAPI::createSwapchain() {
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     // Create a descriptor pool that can allocate descriptor sets
     // We'll allocate enough for a reasonable number of uniform buffers and textures
-    std::vector<vk::DescriptorPoolSize> poolSizes{};
-    poolSizes.push_back({vk::DescriptorType::eUniformBuffer, 100});
-    poolSizes.push_back({vk::DescriptorType::eUniformBufferDynamic, 100});
-    poolSizes.push_back({vk::DescriptorType::eCombinedImageSampler, 100});
-
+    std::array poolSizes {
+        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBuffer, 100 },
+        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBufferDynamic, 100 },
+        vk::DescriptorPoolSize {vk::DescriptorType::eCombinedImageSampler, 100 }
+    };
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();

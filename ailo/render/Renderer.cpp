@@ -43,7 +43,14 @@ void Renderer::render(Engine& engine, Scene& scene, const Camera& camera) {
   // prepare descriptor sets and uniform buffers
   prepare(*backend, scene);
 
-  backend->beginRenderPass();
+  RenderPassDescription renderPass {};
+  renderPass.loadOp[0] = vk::AttachmentLoadOp::eClear;
+  renderPass.storeOp[0] = vk::AttachmentStoreOp::eStore;
+
+  renderPass.loadOp[kMaxColorAttachments] = vk::AttachmentLoadOp::eClear;
+  renderPass.storeOp[kMaxColorAttachments] = vk::AttachmentStoreOp::eDontCare;
+
+  backend->beginRenderPass(renderPass);
 
   uint32_t bufferOffset = 0;
   auto meshView = scene.view<Mesh>();

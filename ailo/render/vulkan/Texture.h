@@ -12,11 +12,16 @@ public:
 
     ~Texture();
 
+    void transitionLayout(vk::CommandBuffer, vk::ImageLayout layout);
+    void setLayout(vk::ImageLayout newLayout) { layout = newLayout; }
+
     vk::Image image {};
     vk::DeviceMemory memory {};
     vk::ImageView imageView {};
     vk::Sampler sampler {};
     vk::Format format;
+    vk::ImageLayout layout = vk::ImageLayout::eUndefined;
+    vk::ImageAspectFlags aspect;
     uint32_t width;
     uint32_t height;
 
