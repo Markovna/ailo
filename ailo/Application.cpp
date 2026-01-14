@@ -66,8 +66,9 @@ void Application::init() {
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   io.DisplaySize = ImVec2(WIDTH, HEIGHT);
-  io.DisplayFramebufferScale.x = 2;
-  io.DisplayFramebufferScale.y = 2;
+  // TODO: get scale from fb
+  io.DisplayFramebufferScale.x = 1;
+  io.DisplayFramebufferScale.y = 1;
 
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
@@ -231,7 +232,18 @@ void Application::updateTransforms() {
 void Application::drawFrame() {
   updateTransforms();
 
-  m_engine->render(*m_scene, *m_camera);
+  auto renderer = m_engine->getRenderer();
+  if (!renderer->beginFrame(*m_engine)) {
+    return;
+  }
+
+  renderer->colorPass(*m_engine, *m_scene, *m_camera);
+
+  drawImGui();
+
+  renderer->endFrame(*m_engine);
+
+  // m_engine->render(*m_scene, *m_camera);
 }
 
 void Application::drawImGui() {

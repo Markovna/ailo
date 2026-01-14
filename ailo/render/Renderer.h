@@ -82,6 +82,10 @@ class Scene;
 
 class Renderer {
  public:
+  bool beginFrame(Engine&);
+  void colorPass(Engine&, Scene& scene, const Camera& camera);
+  void endFrame(Engine&);
+
   void render(Engine&, Scene& scene, const Camera&);
   void terminate(Engine&);
 
