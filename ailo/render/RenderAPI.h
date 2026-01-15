@@ -112,7 +112,6 @@ struct StageBuffer : public Acquirable {
 struct Pipeline {
     vk::Pipeline pipeline;
     vk::PipelineLayout layout;
-    std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
 };
 
 struct DescriptorSetLayout {

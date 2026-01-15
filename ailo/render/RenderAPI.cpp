@@ -507,11 +507,9 @@ PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& desc
     const ShaderDescription& shader = description.shader;
 
     // Load shaders
-    auto vertShaderCode = shader.vertexShader;
-    auto fragShaderCode = shader.fragmentShader;
 
-    vk::ShaderModule vertShaderModule = createShaderModule(vertShaderCode);
-    vk::ShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+    vk::ShaderModule vertShaderModule = createShaderModule(shader.vertexShader);
+    vk::ShaderModule fragShaderModule = createShaderModule(shader.fragmentShader);
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
@@ -615,14 +613,16 @@ PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& desc
       setLayouts.push_back(descriptorSetLayout);
     }
 
-    pipeline.descriptorSetLayouts = setLayouts;
-
     // Pipeline layout
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.setLayoutCount = setLayouts.size();
     pipelineLayoutInfo.pSetLayouts = setLayouts.data();
 
     pipeline.layout = device.createPipelineLayout(pipelineLayoutInfo);
+
+    for(auto descriptorSetLayout : setLayouts) {
+        device.destroyDescriptorSetLayout(descriptorSetLayout);
+    }
 
     // Create graphics pipeline
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -660,9 +660,6 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     auto& device = m_device.device();
 
     device.destroyPipeline(pipeline.pipeline);
-    for(auto descriptorSetLayout : pipeline.descriptorSetLayouts) {
-      device.destroyDescriptorSetLayout(descriptorSetLayout);
-    }
     device.destroyPipelineLayout(pipeline.layout);
 
     m_pipelines.erase(handle);

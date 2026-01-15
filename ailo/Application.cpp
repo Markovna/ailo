@@ -38,6 +38,21 @@ void Application::run() {
   cleanup();
 }
 
+std::tuple<ImVec2, ImVec2> ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(GLFWwindow* window) {
+  int w, h;
+  int display_w, display_h;
+  glfwGetWindowSize(window, &w, &h);
+  glfwGetFramebufferSize(window, &display_w, &display_h);
+  float fb_scale_x = (w > 0) ? (float)display_w / (float)w : 1.0f;
+  float fb_scale_y = (h > 0) ? (float)display_h / (float)h : 1.0f;
+#if GLFW_HAS_X11_OR_WAYLAND
+  ImGui_ImplGlfw_Data* bd = ImGui_ImplGlfw_GetBackendData(window);
+  if (!bd->IsWayland)
+    fb_scale_x = fb_scale_y = 1.0f;
+#endif
+  return std::make_tuple(ImVec2(w, h), ImVec2(fb_scale_x, fb_scale_y));
+}
+
 void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
   auto app = static_cast<Application*>(glfwGetWindowUserPointer(window));
   app->m_engine->getRenderAPI()->handleWindowResize();
@@ -64,11 +79,6 @@ void Application::init() {
   m_scene = m_engine->createScene();
 
   ImGui::CreateContext();
-  ImGuiIO& io = ImGui::GetIO();
-  io.DisplaySize = ImVec2(WIDTH, HEIGHT);
-  // TODO: get scale from fb
-  io.DisplayFramebufferScale.x = 1;
-  io.DisplayFramebufferScale.y = 1;
 
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
@@ -122,7 +132,6 @@ void Application::mainLoop() {
     handleInput();
 
     drawFrame();
-    //drawImGui();
   }
   m_engine->getRenderAPI()->waitIdle();
 }
@@ -232,6 +241,23 @@ void Application::updateTransforms() {
 void Application::drawFrame() {
   updateTransforms();
 
+  ImGuiIO& io = ImGui::GetIO();
+  io.DeltaTime = m_deltaTime;
+
+  auto [size, scale] = ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(m_window);
+  io.DisplaySize = size;
+  io.DisplayFramebufferScale = scale;
+
+  ImGui::NewFrame();
+
+  ImGui::Begin("Console");
+
+  ImGui::Text("FPS: %f", io.Framerate);
+
+  ImGui::End();
+
+  ImGui::Render();
+
   auto renderer = m_engine->getRenderer();
   if (!renderer->beginFrame(*m_engine)) {
     return;
@@ -247,16 +273,6 @@ void Application::drawFrame() {
 }
 
 void Application::drawImGui() {
-
-  ImGuiIO& io = ImGui::GetIO();
-  io.DeltaTime = m_deltaTime;
-
-  ImGui::NewFrame();
-
-  ImGui::ShowDemoWindow();
-
-  ImGui::Render();
-
   m_imguiProcessor->processImGuiCommands(ImGui::GetDrawData(), ImGui::GetIO());
 }
 

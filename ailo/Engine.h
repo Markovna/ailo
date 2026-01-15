@@ -20,8 +20,6 @@ class Engine {
   Engine(GLFWwindow*);
   ~Engine();
 
-  void render(Scene&, Camera&);
-
   Renderer* getRenderer();
   RenderAPI* getRenderAPI();
   InputSystem* getInputSystem();

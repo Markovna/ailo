@@ -81,20 +81,19 @@ public:
 class Scene;
 
 class Renderer {
- public:
+public:
   bool beginFrame(Engine&);
   void colorPass(Engine&, Scene& scene, const Camera& camera);
   void endFrame(Engine&);
 
-  void render(Engine&, Scene& scene, const Camera&);
   void terminate(Engine&);
 
- private:
+private:
   void prepare(RenderAPI& backend, Scene&);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
-  PerObjectUniformBufferData m_perObjectUniformBufferData;
+  PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
   LightUniform m_lightUniformsBufferData {};
 
