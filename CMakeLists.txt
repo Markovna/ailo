@@ -76,6 +76,8 @@ add_executable(ailo
         ailo/common/LRUCache.h
         ailo/render/RenderPassCache.cpp
         ailo/render/RenderPassCache.h
+        ailo/render/PipelineCache.cpp
+        ailo/render/PipelineCache.h
 )
 
 # Link libraries

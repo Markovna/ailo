@@ -86,6 +86,7 @@ void Application::init() {
   // Load texture
   int texWidth, texHeight, texChannels;
   stbi_uc* pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_BaseColor.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  // stbi_uc* pixels = stbi_load("assets/models/camera/Camera_Base_color.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
     throw std::runtime_error("failed to load texture image!");
   }
@@ -97,6 +98,7 @@ void Application::init() {
 
   // Load texture
   pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_Normal.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+  // pixels = stbi_load("assets/models/camera/Camera_Normal_DirectX.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
   if (!pixels) {
     throw std::runtime_error("failed to load texture image!");
   }
@@ -110,7 +112,7 @@ void Application::init() {
   ailo::MeshReader reader;
 
   auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
-  //auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
+  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
   auto meshView = m_scene->view<ailo::Mesh>();
   for(const auto& [entity, mesh] : meshView.each()) {
@@ -268,8 +270,6 @@ void Application::drawFrame() {
   drawImGui();
 
   renderer->endFrame(*m_engine);
-
-  // m_engine->render(*m_scene, *m_camera);
 }
 
 void Application::drawImGui() {

@@ -27,6 +27,9 @@ public:
     vk::Extent2D getSwapExtent() const;
     vk::Format getDepthFormat() const;
 
+    vk::Device operator*() { return m_device; }
+    vk::Device* operator->() { return &m_device; }
+
 private:
     void createInstance();
 

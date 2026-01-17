@@ -2,9 +2,11 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "render/ResourceContainer.h"
+
 namespace ailo::gpu {
 
-class Texture {
+class Texture : public enable_resource_ptr<Texture> {
 public:
     Texture() = default;
     Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags);

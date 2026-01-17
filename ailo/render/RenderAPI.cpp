@@ -14,12 +14,12 @@ namespace ailo {
 RenderAPI::RenderAPI(GLFWwindow* window)
     : m_window(window),
     m_device(window),
-    m_commandPool(m_device.device().createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
-    m_commands(m_device.device(), m_commandPool),
-    m_descriptorPool(createDescriptorPoolS(m_device.device())),
-    m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), m_device.device())),
-    m_framebufferCache(m_device.device()),
-    m_renderPassCache(m_device.device()) {
+    m_commandPool(m_device->createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
+    m_commands(*m_device, m_commandPool),
+    m_descriptorPool(createDescriptorPoolS(*m_device)),
+    m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
+    m_framebufferCache(*m_device),
+    m_renderPassCache(*m_device) {
 
     createSwapchain();
     createRenderPass();
@@ -28,9 +28,8 @@ RenderAPI::RenderAPI(GLFWwindow* window)
 RenderAPI::~RenderAPI() = default;
 
 void RenderAPI::shutdown() {
-    vk::Device device = m_device.device();
 
-    device.waitIdle();
+    m_device->waitIdle();
 
     cleanupSwapchain();
 
@@ -45,18 +44,17 @@ void RenderAPI::shutdown() {
 
     vmaDestroyAllocator(m_Allocator);
 
-    device.destroyRenderPass(m_renderPass);
-    device.destroyDescriptorPool(m_descriptorPool);
-    device.destroyCommandPool(m_commandPool);
+    m_device->destroyRenderPass(m_renderPass);
+    m_device->destroyDescriptorPool(m_descriptorPool);
+    m_device->destroyCommandPool(m_commandPool);
 }
 
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
-    auto device = m_device.device();
-    UniqueVkHandle acquireSemaphore { device, device.createSemaphore(vk::SemaphoreCreateInfo{}) };
+    UniqueVkHandle acquireSemaphore { *m_device, m_device->createSemaphore(vk::SemaphoreCreateInfo{}) };
 
-    auto result = m_swapChain->acquireNextImage(device, acquireSemaphore.get(), UINT64_MAX);
+    auto result = m_swapChain->acquireNextImage(*m_device, acquireSemaphore.get(), UINT64_MAX);
     m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
@@ -97,7 +95,7 @@ void RenderAPI::cleanupDescriptorSets() {
                 return false;
             }
 
-            (void) m_device.device().freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
+            (void) m_device->freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
             return true;
         });
 
@@ -105,7 +103,7 @@ void RenderAPI::cleanupDescriptorSets() {
 }
 
 void RenderAPI::waitIdle() {
-    m_device.device().waitIdle();
+    m_device->waitIdle();
 }
 
 // Buffer management
@@ -117,7 +115,7 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
 
     auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(commands.buffer(), vertexBuffer, data, 0, size);
+        loadFromCpu(*commands, vertexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -129,7 +127,7 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     indexBuffer.binding = BufferBinding::INDEX;
     auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(commands.buffer(), indexBuffer, data, 0, size);
+        loadFromCpu(*commands, indexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -224,20 +222,19 @@ void RenderAPI::destroyBuffer(const BufferHandle& handle) {
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
     auto& buffer = m_buffers.get(handle);
     auto& commands = m_commands.get();
-    loadFromCpu(commands.buffer(), buffer, data, byteOffset, size);
+    loadFromCpu(*commands, buffer, data, byteOffset, size);
 }
 
 // Texture management
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
-    auto [handle, texture] = m_textures.emplace(m_device.device(), m_device.physicalDevice(), format, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
-    return handle;
+    auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), format, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
+    return ptr.getHandle();
 }
 
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
-    if(!handle) { return; }
-
-    m_textures.erase(handle);
+    auto& texture = m_textures.get(handle);
+    texture.release();
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
@@ -250,7 +247,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     memcpy(stageBuffer.mapping, data, dataSize);
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
-    vk::CommandBuffer commandBuffer = m_commands.get().buffer();
+    vk::CommandBuffer commandBuffer = *m_commands.get();
 
     // Transition image layout to transfer destination
     transitionImageLayout(commandBuffer, texture.image, texture.format,
@@ -284,7 +281,7 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
     layoutInfo.bindingCount = static_cast<uint32_t>(vkBindings.size());
     layoutInfo.pBindings = vkBindings.data();
 
-    descriptorSetLayout.layout = m_device.device().createDescriptorSetLayout(layoutInfo);
+    descriptorSetLayout.layout = m_device->createDescriptorSetLayout(layoutInfo);
     for(auto& binding : bindings) {
       if(binding.descriptorType == vk::DescriptorType::eUniformBufferDynamic) {
         descriptorSetLayout.dynamicBindings.set(binding.binding, true);
@@ -298,7 +295,7 @@ void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
   auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
-  m_device.device().destroyDescriptorSetLayout(descriptorSetLayout.layout);
+  m_device->destroyDescriptorSetLayout(descriptorSetLayout.layout);
   m_descriptorSetLayouts.erase(handle);
 }
 
@@ -319,7 +316,7 @@ void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetL
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &layout;
 
-    auto result = m_device.device().allocateDescriptorSets(allocInfo);
+    auto result = m_device->allocateDescriptorSets(allocInfo);
     descriptorSet.descriptorSet = result[0];
     descriptorSet.boundBindings.reset();
     descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
@@ -358,7 +355,7 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pBufferInfo = &bufferInfo;
 
-    m_device.device().updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     descriptorSet.boundBindings[binding] = true;
 }
 
@@ -369,7 +366,6 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     auto& texture = m_textures.get(textureHandle);
-    auto& device = m_device.device();
 
     if (descriptorSet.isBound()) {
         // re-create descriptor set
@@ -393,7 +389,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 
             copyDescriptors.push_back(copyDescriptorSet);
         }
-        device.updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
+        m_device->updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
 
         std::swap(descriptorSet, newDescriptorSet);
     }
@@ -411,7 +407,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     descriptorWrite.descriptorCount = 1;
     descriptorWrite.pImageInfo = &imageInfo;
 
-    device.updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
+    m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
     descriptorSet.boundBindings[binding] = true;
 }
 
@@ -425,7 +421,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
   std::copy(dynamicOffsets.begin(), dynamicOffsets.end(), dynamicOffsetsArray.begin());
 
   auto& commands = m_commands.get();
-  commands.buffer().bindDescriptorSets(
+  commands->bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         currentPipeline.layout,
         setIndex,
@@ -494,15 +490,12 @@ void RenderAPI::createRenderPass() {
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    m_renderPass = m_device.device().createRenderPass(renderPassInfo);
+    m_renderPass = m_device->createRenderPass(renderPassInfo);
 }
 
 // Pipeline management
 
 PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& description) {
-
-    vk::Device device = m_device.device();
-
     auto [handle, pipeline] = m_pipelines.emplace();
     const ShaderDescription& shader = description.shader;
 
@@ -609,7 +602,7 @@ PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& desc
       layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
       layoutInfo.pBindings = bindings.data();
 
-      auto descriptorSetLayout = device.createDescriptorSetLayout(layoutInfo);
+      auto descriptorSetLayout = m_device->createDescriptorSetLayout(layoutInfo);
       setLayouts.push_back(descriptorSetLayout);
     }
 
@@ -618,10 +611,10 @@ PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& desc
     pipelineLayoutInfo.setLayoutCount = setLayouts.size();
     pipelineLayoutInfo.pSetLayouts = setLayouts.data();
 
-    pipeline.layout = device.createPipelineLayout(pipelineLayoutInfo);
+    pipeline.layout = m_device->createPipelineLayout(pipelineLayoutInfo);
 
     for(auto descriptorSetLayout : setLayouts) {
-        device.destroyDescriptorSetLayout(descriptorSetLayout);
+        m_device->destroyDescriptorSetLayout(descriptorSetLayout);
     }
 
     // Create graphics pipeline
@@ -640,15 +633,15 @@ PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& desc
     pipelineInfo.renderPass = m_renderPass;
     pipelineInfo.subpass = 0;
 
-    auto result = device.createGraphicsPipeline(nullptr, pipelineInfo);
+    auto result = m_device->createGraphicsPipeline(nullptr, pipelineInfo);
     if (result.result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to create graphics pipeline!");
     }
     pipeline.pipeline = result.value;
 
     // Cleanup shader modules
-    device.destroyShaderModule(vertShaderModule);
-    device.destroyShaderModule(fragShaderModule);
+    m_device->destroyShaderModule(vertShaderModule);
+    m_device->destroyShaderModule(fragShaderModule);
 
     return handle;
 }
@@ -657,10 +650,9 @@ void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
     if(!handle) { return; }
 
     auto& pipeline = m_pipelines.get(handle);
-    auto& device = m_device.device();
 
-    device.destroyPipeline(pipeline.pipeline);
-    device.destroyPipelineLayout(pipeline.layout);
+    m_device->destroyPipeline(pipeline.pipeline);
+    m_device->destroyPipelineLayout(pipeline.layout);
 
     m_pipelines.erase(handle);
 }
@@ -685,10 +677,10 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     depthAttachmentDesc.storeOp = description.storeOp[depthIndex];
     renderPassCacheQuery.attachmentsUsed.set(depthIndex);
 
-    vk::CommandBuffer commandBuffer = m_commands.get().buffer();
+    CommandBuffer& commandBuffer = m_commands.get();
 
-    colorTarget.transitionLayout(commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
-    depthTarget.transitionLayout(commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    colorTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
+    depthTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
     auto& renderPass = m_renderPassCache.getOrCreate(renderPassCacheQuery);
 
@@ -717,7 +709,7 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    commandBuffer->beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
     // Set default viewport and scissor
     vk::Viewport viewport{};
@@ -727,23 +719,23 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     viewport.height = static_cast<float>(extent.height);
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    commandBuffer.setViewport(0, 1, &viewport);
+    commandBuffer->setViewport(0, 1, &viewport);
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{0, 0};
     scissor.extent = extent;
-    commandBuffer.setScissor(0, 1, &scissor);
+    commandBuffer->setScissor(0, 1, &scissor);
 }
 
 void RenderAPI::endRenderPass() {
     auto& commands = m_commands.get();
-    commands.buffer().endRenderPass();
+    commands->endRenderPass();
 }
 
 void RenderAPI::bindPipeline(const PipelineHandle& handle) {
     auto& currentPipeline = m_pipelines.get(handle);
     auto& commands = m_commands.get();
-    commands.buffer().bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
+    commands->bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
     m_currentPipeline = handle;
 }
 
@@ -752,30 +744,30 @@ void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
     vk::Buffer vertexBuffers[] = {buffer.buffer};
     vk::DeviceSize offsets[] = {0};
     auto& commands = m_commands.get();
-    commands.buffer().bindVertexBuffers(0, 1, vertexBuffers, offsets);
+    commands->bindVertexBuffers(0, 1, vertexBuffers, offsets);
 }
 
 void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
     auto& buffer = m_buffers.get(handle);
     auto& commands = m_commands.get();
-    commands.buffer().bindIndexBuffer(buffer.buffer, 0, indexType);
+    commands->bindIndexBuffer(buffer.buffer, 0, indexType);
 }
 
 void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset) {
     auto& commands = m_commands.get();
-    commands.buffer().drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
+    commands->drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
 }
 
 void RenderAPI::setViewport(float x, float y, float width, float height) {
     vk::Viewport viewport{x, y, width, height, 0.0f, 1.0f};
     auto& commands = m_commands.get();
-    commands.buffer().setViewport(0, 1, &viewport);
+    commands->setViewport(0, 1, &viewport);
 }
 
 void RenderAPI::setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height) {
     vk::Rect2D scissor{{x, y}, {width, height}};
     auto& commands = m_commands.get();
-    commands.buffer().setScissor(0, 1, &scissor);
+    commands->setScissor(0, 1, &scissor);
 }
 
 // Swapchain management
@@ -808,7 +800,7 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
 }
 
 void RenderAPI::cleanupSwapchain() {
-    m_swapChain->destroy(m_device.device());
+    m_swapChain->destroy(*m_device);
 }
 
 void RenderAPI::recreateSwapchain() {
@@ -819,7 +811,7 @@ void RenderAPI::recreateSwapchain() {
         glfwWaitEvents();
     }
 
-    m_device.device().waitIdle();
+    m_device->waitIdle();
 
     cleanupSwapchain();
     createSwapchain();
@@ -830,13 +822,13 @@ vk::ShaderModule RenderAPI::createShaderModule(const std::vector<char>& code) {
     createInfo.codeSize = code.size();
     createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
 
-    return m_device.device().createShaderModule(createInfo);
+    return m_device->createShaderModule(createInfo);
 }
 
 void RenderAPI::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
     vk::BufferCopy copyRegion{};
     copyRegion.size = size;
-    m_commands.get().buffer().copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
+    m_commands.get()->copyBuffer(srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
 void RenderAPI::transitionImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {

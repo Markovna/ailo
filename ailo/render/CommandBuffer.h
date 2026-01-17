@@ -39,6 +39,9 @@ public:
         }
     }
 
+    vk::CommandBuffer& operator*() { return m_commandBuffer; }
+    vk::CommandBuffer* operator->() { return &m_commandBuffer; }
+
     void begin() {
         vk::CommandBufferBeginInfo beginInfo{};
         m_commandBuffer.begin(beginInfo);

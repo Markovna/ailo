@@ -8,8 +8,8 @@ namespace ailo {
 class Engine;
 
 struct PipelineCacheKey {
-  std::array<vk::VertexInputBindingDescription, 16> vertexBindings;
-  std::array<vk::VertexInputAttributeDescription, 16> vertexAttributes;
+  std::array<vk::VertexInputBindingDescription, 8> vertexBindings;
+  std::array<vk::VertexInputAttributeDescription, 8> vertexAttributes;
 };
 
 struct PipelineCacheKeyHasher {
