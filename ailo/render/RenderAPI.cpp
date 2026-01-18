@@ -479,51 +479,44 @@ void RenderAPI::destroyProgram(const ProgramHandle& handle) {
 void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
     auto& colorTarget = m_swapChain->getColorTarget();
     auto& depthTarget = m_swapChain->getDepthTarget();
-    RenderPassCacheQuery renderPassCacheQuery {};
 
-    auto& colorAttachmentDesc = renderPassCacheQuery.attachments[0];
-    colorAttachmentDesc.format = colorTarget.format;
-    colorAttachmentDesc.loadOp = description.color[0].load;
-    colorAttachmentDesc.storeOp = description.color[0].store;
-    renderPassCacheQuery.attachmentsUsed.set(0);
+    gpu::FrameBufferFormat fbFormat {
+        .color = { colorTarget.format },
+        .depth = depthTarget.format
+    };
 
-    constexpr auto depthAttachmentIndex = kMaxColorAttachments;
-    auto& depthAttachmentDesc = renderPassCacheQuery.attachments[depthAttachmentIndex];
-    depthAttachmentDesc.format = depthTarget.format;
-    depthAttachmentDesc.loadOp = description.depth.load;
-    depthAttachmentDesc.storeOp = description.depth.store;
-    renderPassCacheQuery.attachmentsUsed.set(depthAttachmentIndex);
+    gpu::FrameBufferImageView fbImageView {
+        .color = { colorTarget.imageView },
+        .depth = depthTarget.imageView
+    };
 
-    auto& renderPass = m_renderPassCache.getOrCreate(renderPassCacheQuery);
+    auto& renderPass = m_renderPassCache.getOrCreate(description, fbFormat);
+    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, colorTarget.width, colorTarget.height);
 
     CommandBuffer& commandBuffer = m_commands.get();
     colorTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
     depthTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
-    FrameBufferCacheQuery frameBufferCacheQuery {
-        .renderPass = renderPass.getHandle(),
-        .color = { colorTarget.imageView },
-        .attachmentCount = 1,
-        .depth = depthTarget.imageView,
-        .width = colorTarget.width,
-        .height = colorTarget.height
-    };
+    m_pipelineCache.bindRenderPass(renderPass, fbFormat);
 
-    auto& frameBuffer = m_framebufferCache.getOrCreate(frameBufferCacheQuery);
-
-    m_pipelineCache.bindRenderPass(renderPass.getHandle(), renderPassCacheQuery);
     vk::Extent2D extent { colorTarget.width, colorTarget.height };
+    vk::Rect2D rect { { 0, 0 }, extent};
+
     vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = renderPass.getHandle();
-    renderPassInfo.framebuffer = frameBuffer.getHandle();
-    renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-    renderPassInfo.renderArea.extent = extent;
+    renderPassInfo.renderPass = renderPass;
+    renderPassInfo.framebuffer = frameBuffer;
+    renderPassInfo.renderArea = rect;
 
-    std::array<vk::ClearValue, 2> clearValues{};
-    clearValues[0].color = clearColor;
-    clearValues[1].depthStencil = vk::ClearDepthStencilValue{1.0f, 0};
-
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    std::array<vk::ClearValue, fbImageView.color.size() + 1> clearValues;
+    uint32_t clearValuesCount = 0;
+    for (size_t i = 0; i < fbImageView.color.size(); i++) {
+        if (fbImageView.color[i] != VK_NULL_HANDLE) {
+            clearValues[clearValuesCount++].color = clearColor;
+        }
+    }
+    const vk::ClearDepthStencilValue depthStencilClearValue { 1.0f, 0 };
+    clearValues[clearValuesCount++].depthStencil = depthStencilClearValue;
+    renderPassInfo.clearValueCount = clearValuesCount;
     renderPassInfo.pClearValues = clearValues.data();
 
     commandBuffer->beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
@@ -538,9 +531,7 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     viewport.maxDepth = 1.0f;
     commandBuffer->setViewport(0, 1, &viewport);
 
-    vk::Rect2D scissor{};
-    scissor.offset = vk::Offset2D{0, 0};
-    scissor.extent = extent;
+    vk::Rect2D scissor {{0, 0}, extent };
     commandBuffer->setScissor(0, 1, &scissor);
 }
 
@@ -576,7 +567,7 @@ void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_
     auto pipeline = m_pipelineCache.getOrCreate();
     assert(pipeline);
 
-    commands->bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->getHandle());
+    commands->bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
     commands->drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
 }
 

@@ -61,7 +61,8 @@ public:
     Pipeline(vk::Device device, const resource_ptr<gpu::Program>& program, vk::RenderPass renderPass, const PipelineCacheQuery& key);
     ~Pipeline();
 
-    vk::Pipeline getHandle() const { return m_pipeline; }
+    vk::Pipeline operator*() const noexcept { return m_pipeline; }
+    operator vk::Pipeline() const noexcept { return m_pipeline; }
 
 private:
     // Do not allow the program to be destroyed until the pipeline has been destroyed.
@@ -82,9 +83,9 @@ public:
 
     void bindProgram(const resource_ptr<gpu::Program>& program);
     void bindVertexLayout(const gpu::VertexBufferLayout& vertexLayout) { m_boundVertexLayout = vertexLayout; }
-    void bindRenderPass(vk::RenderPass renderPass, const RenderPassCacheQuery& query) {
+    void bindRenderPass(vk::RenderPass renderPass, const gpu::FrameBufferFormat& format) {
         m_boundRenderPass = renderPass;
-        m_renderPassQuery = query;
+        m_frameBufferFormat = format;
     }
 
     vk::PipelineLayout pipelineLayout() const { return m_boundProgram->pipelineLayout(); }
@@ -104,7 +105,7 @@ private:
     resource_ptr<gpu::Program> m_boundProgram;
     gpu::VertexBufferLayout m_boundVertexLayout;
     vk::RenderPass m_boundRenderPass;
-    RenderPassCacheQuery m_renderPassQuery;
+    gpu::FrameBufferFormat m_frameBufferFormat;
 };
 
 }

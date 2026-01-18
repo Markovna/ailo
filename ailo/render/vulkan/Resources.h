@@ -84,6 +84,8 @@ private:
     std::shared_ptr<FenceStatus> m_fenceStatus;
 };
 
+class ColorAttachmentMask : public std::bitset<kMaxColorAttachments> {};
+
 template<typename T>
 class PerColorAttachment : public std::array<T, kMaxColorAttachments> {
 
@@ -132,11 +134,21 @@ struct DescriptorSet {
     bool isBound() const;
 };
 
+struct FrameBufferFormat {
+    PerColorAttachment<vk::Format> color {};
+    vk::Format depth = vk::Format::eUndefined;
+};
+
+struct FrameBufferImageView {
+    PerColorAttachment<vk::ImageView> color {};
+    vk::ImageView depth {};
+};
+
 }
 
 struct RenderPassAttachmentOperations {
-    vk::AttachmentLoadOp load;
-    vk::AttachmentStoreOp store;
+    vk::AttachmentLoadOp load = vk::AttachmentLoadOp::eDontCare;
+    vk::AttachmentStoreOp store = vk::AttachmentStoreOp::eDontCare;
 };
 
 struct RenderPassDescription {

@@ -4,6 +4,7 @@
 #include <bitset>
 
 #include "Constants.h"
+#include "render/vulkan/Resources.h"
 #include "vulkan/vulkan.hpp"
 #include "common/LRUCache.h"
 #include "utils/Utils.h"
@@ -42,7 +43,8 @@ public:
     RenderPass(vk::Device device, const RenderPassCacheQuery& query);
     ~RenderPass();
 
-    vk::RenderPass getHandle() const { return m_renderPass; }
+    const vk::RenderPass& operator*() const& noexcept { return m_renderPass; }
+    operator vk::RenderPass() const noexcept { return m_renderPass; }
 
 private:
     vk::Device m_device;
@@ -54,8 +56,7 @@ public:
     static constexpr size_t kDefaultCacheSize = 32;
 
     explicit RenderPassCache(vk::Device device) : m_device(device) {}
-
-    RenderPass& getOrCreate(const RenderPassCacheQuery& query);
+    RenderPass& getOrCreate(const RenderPassDescription&, const gpu::FrameBufferFormat&);
 
     void clear();
 

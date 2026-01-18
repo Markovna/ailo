@@ -4,19 +4,27 @@ namespace ailo {
 
 FrameBuffer::FrameBuffer(
     vk::Device device,
-    const FrameBufferCacheQuery& query)
+    vk::RenderPass renderPass,
+    const gpu::FrameBufferImageView& views,
+    uint32_t width, uint32_t height)
         : m_device(device) {
 
-    std::array<vk::ImageView, query.color.size() + 1> attachments;
-    std::copy_n(query.color.begin(), query.attachmentCount, attachments.begin());
-    attachments[query.attachmentCount] = query.depth;
+    std::array<vk::ImageView, views.color.size() + 1> attachments;
+    uint32_t attachmentCount = 0;
+    for (size_t i = 0; i < views.color.size(); i++) {
+        if (views.color[i] != VK_NULL_HANDLE) {
+            attachments[attachmentCount++] = views.color[i];
+        }
+    }
+
+    attachments[attachmentCount++] = views.depth;
 
     vk::FramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.renderPass = query.renderPass;
-    framebufferInfo.attachmentCount = query.attachmentCount + 1;
+    framebufferInfo.renderPass = renderPass;
+    framebufferInfo.attachmentCount = attachmentCount;
     framebufferInfo.pAttachments = attachments.data();
-    framebufferInfo.width = query.width;
-    framebufferInfo.height = query.height;
+    framebufferInfo.width = width;
+    framebufferInfo.height = height;
     framebufferInfo.layers = 1;
 
     m_framebuffer = device.createFramebuffer(framebufferInfo);
@@ -26,8 +34,19 @@ FrameBuffer::~FrameBuffer() {
     m_device.destroyFramebuffer(m_framebuffer);
 }
 
-FrameBuffer& FrameBufferCache::getOrCreate(const FrameBufferCacheQuery& query) {
-    auto [it, result] = m_cache.tryEmplace(query, m_device, query);
+FrameBuffer& FrameBufferCache::getOrCreate(vk::RenderPass renderPass, const gpu::FrameBufferFormat& formats,
+    const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height) {
+
+    FrameBufferCacheQuery query {
+        .colorFormat = formats.color,
+        .color = views.color,
+        .depthFormat = formats.depth,
+        .depth = views.depth,
+        .width = width,
+        .height = height
+    };
+
+    auto [it, result] = m_cache.tryEmplace(query, m_device, renderPass, views, width, height);
     return it->second;
 }
 

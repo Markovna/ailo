@@ -135,9 +135,9 @@ ailo::resource_ptr<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
     query.vertexBindingsCount = m_boundVertexLayout.bindingsCount;
     query.programHandle = m_boundProgram.getHandle().getId();
     for (size_t i = 0; i < query.renderPassKey.colors.size(); i++) {
-        query.renderPassKey.colors[i] = m_renderPassQuery.attachments[i].format;
+        query.renderPassKey.colors[i] = m_frameBufferFormat.color[i];
     }
-    query.renderPassKey.depth = m_renderPassQuery.attachments[kMaxColorAttachments].format;
+    query.renderPassKey.depth = m_frameBufferFormat.depth;
 
     auto ptr = m_cache.get(query);
     if (ptr) {

@@ -6,7 +6,7 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
     std::array<vk::AttachmentReference, kMaxColorAttachments> colorAttachmentRefs;
 
     uint32_t attachmentCount = 0;
-    for (size_t i = 0; i < kMaxColorAttachments; i++) {
+    for (size_t i = 0; i < colorAttachmentRefs.size(); i++) {
         auto& attachmentRef = colorAttachmentRefs[i];
 
         if (!query.attachmentsUsed.test(i)) {
@@ -74,7 +74,24 @@ RenderPass::~RenderPass() {
     m_device.destroyRenderPass(m_renderPass);
 }
 
-RenderPass& RenderPassCache::getOrCreate(const RenderPassCacheQuery& query) {
+RenderPass& RenderPassCache::getOrCreate(const RenderPassDescription& description,
+                                         const gpu::FrameBufferFormat& format) {
+    RenderPassCacheQuery query {};
+    for (uint32_t i = 0; i < format.color.size(); i++) {
+        auto& colorAttachmentDesc = query.attachments[i];
+        colorAttachmentDesc.format = format.color[i];
+        colorAttachmentDesc.loadOp = description.color[i].load;
+        colorAttachmentDesc.storeOp = description.color[i].store;
+        query.attachmentsUsed.set(i, format.color[i] != vk::Format::eUndefined);
+    }
+
+    constexpr auto depthAttachmentIndex = kMaxColorAttachments;
+    auto& depthAttachmentDesc = query.attachments[depthAttachmentIndex];
+    depthAttachmentDesc.format = format.depth;
+    depthAttachmentDesc.loadOp = description.depth.load;
+    depthAttachmentDesc.storeOp = description.depth.store;
+    query.attachmentsUsed.set(depthAttachmentIndex);
+
     auto [it, result] = m_cache.tryEmplace(query, m_device, query);
     return it->second;
 }
