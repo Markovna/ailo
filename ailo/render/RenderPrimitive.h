@@ -6,6 +6,7 @@
 #include "RenderAPI.h"
 
 namespace ailo {
+class VertexBuffer;
 
 class Shader;
 
@@ -20,19 +21,33 @@ class BufferObject {
   BufferHandle m_handle;
 };
 
+class VertexBuffer {
+public:
+ VertexBuffer(Engine&, VertexInputDescription& description, size_t byteSize);
+ void updateBuffer(Engine&, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
+ void destroy(Engine&);
+
+ BufferHandle getBuffer() const { return m_bufferHandle; }
+ VertexBufferLayoutHandle getLayout() const { return m_layoutHandle; }
+
+private:
+ VertexBufferLayoutHandle m_layoutHandle;
+ BufferHandle m_bufferHandle;
+};
+
 class RenderPrimitive {
  public:
   explicit RenderPrimitive(
-        BufferObject* vertexBuffer = nullptr,
+        VertexBuffer* vertexBuffer = nullptr,
         BufferObject* indexBuffer = nullptr,
         Material* material = nullptr,
         size_t indexOffset = 0,
         size_t indexCount = 0);
 
-  const BufferObject* getVertexBuffer() const { return m_vertexBuffer; }
+  const VertexBuffer* getVertexBuffer() const { return m_vertexBuffer; }
   const BufferObject* getIndexBuffer() const { return m_indexBuffer; }
 
-  void setVertexBuffer(BufferObject* buffer) { m_vertexBuffer = buffer; }
+  void setVertexBuffer(VertexBuffer* buffer) { m_vertexBuffer = buffer; }
   void setIndexBuffer(BufferObject* buffer, size_t offset, size_t count);
 
   auto getIndexCount() const { return m_indexCount; }
@@ -42,7 +57,7 @@ class RenderPrimitive {
   void setMaterial(Material* material);
 
  private:
-  BufferObject* m_vertexBuffer;
+  VertexBuffer* m_vertexBuffer;
   BufferObject* m_indexBuffer;
   Material* m_material;
   size_t m_indexOffset;

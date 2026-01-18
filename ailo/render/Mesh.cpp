@@ -269,9 +269,9 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         transform.transform = meshData.transform;
 
         // Create vertex buffer
-        mesh.vertexBuffer = std::make_unique<BufferObject>(
+        mesh.vertexBuffer = std::make_unique<VertexBuffer>(
             engine,
-            BufferBinding::VERTEX,
+            vertexInput,
             sizeof(Vertex) * meshData.vertices.size()
         );
         mesh.vertexBuffer->updateBuffer(engine, meshData.vertices.data(), sizeof(Vertex) * meshData.vertices.size());
@@ -299,7 +299,6 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         mesh.primitives.push_back(primitive);
 
         mesh.materials.push_back(std::move(material));
-        mesh.vertexInput = vertexInput;
     }
 
     return entities;

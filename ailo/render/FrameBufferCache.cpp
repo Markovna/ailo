@@ -7,7 +7,7 @@ FrameBuffer::FrameBuffer(
     const FrameBufferCacheQuery& query)
         : m_device(device) {
 
-    std::array<vk::ImageView, kMaxColorAttachments + 1> attachments;
+    std::array<vk::ImageView, query.color.size() + 1> attachments;
     std::copy_n(query.color.begin(), query.attachmentCount, attachments.begin());
     attachments[query.attachmentCount] = query.depth;
 

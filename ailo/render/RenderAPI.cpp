@@ -19,10 +19,10 @@ RenderAPI::RenderAPI(GLFWwindow* window)
     m_descriptorPool(createDescriptorPoolS(*m_device)),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
     m_framebufferCache(*m_device),
-    m_renderPassCache(*m_device) {
+    m_renderPassCache(*m_device),
+    m_pipelineCache(*m_device, m_graphicsPipelines) {
 
     createSwapchain();
-    createRenderPass();
 }
 
 RenderAPI::~RenderAPI() = default;
@@ -35,6 +35,7 @@ void RenderAPI::shutdown() {
 
     m_framebufferCache.clear();
     m_renderPassCache.clear();
+    m_pipelineCache.clear();
 
     m_commands.destroy();
 
@@ -44,7 +45,6 @@ void RenderAPI::shutdown() {
 
     vmaDestroyAllocator(m_Allocator);
 
-    m_device->destroyRenderPass(m_renderPass);
     m_device->destroyDescriptorPool(m_descriptorPool);
     m_device->destroyCommandPool(m_commandPool);
 }
@@ -104,6 +104,30 @@ void RenderAPI::cleanupDescriptorSets() {
 
 void RenderAPI::waitIdle() {
     m_device->waitIdle();
+}
+
+VertexBufferLayoutHandle RenderAPI::createVertexBufferLayout(const VertexInputDescription& description) {
+    auto [handle, vbl] = m_vertexBufferLayouts.emplace();
+    for(size_t i = 0; i < vbl.attributes.size(); i++) {
+        if (i < description.attributes.size()) {
+            vbl.attributes[i] = description.attributes[i];
+            continue;
+        }
+
+        vbl.attributes[i].binding = std::numeric_limits<uint32_t>::max();
+    }
+
+    for (size_t i = 0; i < description.bindings.size(); i++) {
+        vbl.bindings[i] = description.bindings[i];
+    }
+    vbl.attributesCount = static_cast<uint32_t>(description.attributes.size());
+    vbl.bindingsCount = static_cast<uint32_t>(description.bindings.size());
+
+    return handle;
+}
+
+void RenderAPI::destroyVertexBufferLayout(VertexBufferLayoutHandle handle) {
+    m_vertexBufferLayouts.erase(handle);
 }
 
 // Buffer management
@@ -229,10 +253,13 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 
 TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
     auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), format, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
+    ptr->acquire(ptr);
     return ptr.getHandle();
 }
 
 void RenderAPI::destroyTexture(const TextureHandle& handle) {
+    if (!handle) { return; }
+
     auto& texture = m_textures.get(handle);
     texture.release();
 }
@@ -412,7 +439,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 }
 
 void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets) {
-  auto& currentPipeline = m_pipelines.get(m_currentPipeline);
+  auto pipelineLayout = m_pipelineCache.pipelineLayout();
   assert(descriptorSetHandle);
   auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
 
@@ -423,7 +450,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
   auto& commands = m_commands.get();
   commands->bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
-        currentPipeline.layout,
+        pipelineLayout,
         setIndex,
         1,
         &descriptorSet.descriptorSet,
@@ -434,227 +461,17 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
     descriptorSet.boundFence = commands.getFenceStatusShared();
 }
 
-void RenderAPI::createRenderPass() {
-    // Create render pass
-    auto& colorTarget = m_swapChain->getColorTarget();
-    auto& depthTarget = m_swapChain->getDepthTarget();
-
-    vk::AttachmentDescription colorAttachment{};
-    colorAttachment.format = colorTarget.format;
-    colorAttachment.samples = vk::SampleCountFlagBits::e1;
-    colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-    colorAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-    colorAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-    colorAttachment.initialLayout = vk::ImageLayout::eUndefined;
-    colorAttachment.finalLayout = vk::ImageLayout::ePresentSrcKHR;
-
-    vk::AttachmentDescription depthAttachment{};
-    depthAttachment.format = depthTarget.format;
-    depthAttachment.samples = vk::SampleCountFlagBits::e1;
-    depthAttachment.loadOp = vk::AttachmentLoadOp::eClear;
-    depthAttachment.storeOp = vk::AttachmentStoreOp::eDontCare;
-    depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-    depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-    depthAttachment.initialLayout = vk::ImageLayout::eUndefined;
-    depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-    vk::AttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
-
-    vk::AttachmentReference depthAttachmentRef{};
-    depthAttachmentRef.attachment = 1;
-    depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-
-    vk::SubpassDescription subpass{};
-    subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-
-    vk::SubpassDependency dependency{};
-    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependency.dstSubpass = 0;
-    dependency.srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
-    dependency.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-    dependency.dstStageMask = vk::PipelineStageFlagBits::eFragmentShader | vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests;
-    dependency.dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-
-    std::array<vk::AttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-    vk::RenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    m_renderPass = m_device->createRenderPass(renderPassInfo);
-}
-
 // Pipeline management
 
-PipelineHandle RenderAPI::createGraphicsPipeline(const PipelineDescription& description) {
-    auto [handle, pipeline] = m_pipelines.emplace();
-    const ShaderDescription& shader = description.shader;
-
-    // Load shaders
-
-    vk::ShaderModule vertShaderModule = createShaderModule(shader.vertexShader);
-    vk::ShaderModule fragShaderModule = createShaderModule(shader.fragmentShader);
-
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.stage = vk::ShaderStageFlagBits::eVertex;
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName = "main";
-
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.stage = vk::ShaderStageFlagBits::eFragment;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
-
-    auto vertexInput = description.vertexInput;
-    // Vertex input
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInput.bindings.size());
-    vertexInputInfo.pVertexBindingDescriptions = vertexInput.bindings.data();
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInput.attributes.size());
-    vertexInputInfo.pVertexAttributeDescriptions = vertexInput.attributes.data();
-
-    // Input assembly
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
-    inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-    // Viewport state
-    vk::PipelineViewportStateCreateInfo viewportState{};
-    viewportState.viewportCount = 1;
-    viewportState.scissorCount = 1;
-
-    auto& raster = shader.raster;
-
-    // Rasterization
-    vk::PipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.depthClampEnable = VK_FALSE;
-    rasterizer.rasterizerDiscardEnable = VK_FALSE;
-    rasterizer.polygonMode = vk::PolygonMode::eFill;
-    rasterizer.lineWidth = 1.0f;
-    rasterizer.cullMode = vkutils::getCullMode(raster.cullingMode);
-    rasterizer.frontFace = raster.inverseFrontFace ? vk::FrontFace::eClockwise : vk::FrontFace::eCounterClockwise;
-    rasterizer.depthBiasEnable = VK_FALSE;
-
-    // Multisampling
-    vk::PipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-    // Depth and stencil testing
-    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = raster.depthWriteEnable;
-    depthStencil.depthCompareOp = vkutils::getCompareOperation(raster.depthCompareOp);
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_FALSE;
-
-    // Color blending
-    vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                                          vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    colorBlendAttachment.blendEnable = raster.blendEnable;
-    colorBlendAttachment.colorBlendOp = vkutils::getBlendOp(raster.rgbBlendOp);
-    colorBlendAttachment.alphaBlendOp = vkutils::getBlendOp(raster.alphaBlendOp);
-    colorBlendAttachment.srcColorBlendFactor = vkutils::getBlendFunction(raster.srcRgbBlendFunc);
-    colorBlendAttachment.srcAlphaBlendFactor = vkutils::getBlendFunction(raster.srcAlphaBlendFunc);
-    colorBlendAttachment.dstColorBlendFactor = vkutils::getBlendFunction(raster.dstRgbBlendFunc);
-    colorBlendAttachment.dstAlphaBlendFactor = vkutils::getBlendFunction(raster.dstAlphaBlendFunc);
-
-    vk::PipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-
-    // Dynamic state
-    std::array dynamicStates = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor
-    };
-    vk::PipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates = dynamicStates.data();
-
-    std::vector<vk::DescriptorSetLayout> setLayouts;
-    auto& layout = shader.layout;
-    for(auto& set : layout) {
-      std::vector<vk::DescriptorSetLayoutBinding> bindings;
-      for(auto& binding : set) {
-        vk::DescriptorSetLayoutBinding vkBinding;
-        vkBinding.binding = binding.binding;
-        vkBinding.descriptorType = binding.descriptorType;
-        vkBinding.stageFlags = binding.stageFlags;
-        vkBinding.descriptorCount = 1;
-        bindings.push_back(vkBinding);
-      }
-
-      vk::DescriptorSetLayoutCreateInfo layoutInfo {};
-      layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-      layoutInfo.pBindings = bindings.data();
-
-      auto descriptorSetLayout = m_device->createDescriptorSetLayout(layoutInfo);
-      setLayouts.push_back(descriptorSetLayout);
-    }
-
-    // Pipeline layout
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.setLayoutCount = setLayouts.size();
-    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
-
-    pipeline.layout = m_device->createPipelineLayout(pipelineLayoutInfo);
-
-    for(auto descriptorSetLayout : setLayouts) {
-        m_device->destroyDescriptorSetLayout(descriptorSetLayout);
-    }
-
-    // Create graphics pipeline
-    vk::GraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.stageCount = 2;
-    pipelineInfo.pStages = shaderStages;
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState = &multisampling;
-    pipelineInfo.pDepthStencilState = &depthStencil;
-    pipelineInfo.pColorBlendState = &colorBlending;
-    pipelineInfo.pDynamicState = &dynamicState;
-    pipelineInfo.layout = pipeline.layout;
-    pipelineInfo.renderPass = m_renderPass;
-    pipelineInfo.subpass = 0;
-
-    auto result = m_device->createGraphicsPipeline(nullptr, pipelineInfo);
-    if (result.result != vk::Result::eSuccess) {
-        throw std::runtime_error("failed to create graphics pipeline!");
-    }
-    pipeline.pipeline = result.value;
-
-    // Cleanup shader modules
-    m_device->destroyShaderModule(vertShaderModule);
-    m_device->destroyShaderModule(fragShaderModule);
-
-    return handle;
+ProgramHandle RenderAPI::createProgram(const ShaderDescription& description) {
+    auto ptr = resource_ptr<gpu::Program>::make(m_programs, *m_device, description);
+    ptr->acquire(ptr);
+    return ptr.getHandle();
 }
 
-void RenderAPI::destroyPipeline(const PipelineHandle& handle) {
-    if(!handle) { return; }
-
-    auto& pipeline = m_pipelines.get(handle);
-
-    m_device->destroyPipeline(pipeline.pipeline);
-    m_device->destroyPipelineLayout(pipeline.layout);
-
-    m_pipelines.erase(handle);
+void RenderAPI::destroyProgram(const ProgramHandle& handle) {
+    auto& program = m_programs.get(handle);
+    program.release();
 }
 
 // Command recording
@@ -664,25 +481,24 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     auto& depthTarget = m_swapChain->getDepthTarget();
     RenderPassCacheQuery renderPassCacheQuery {};
 
-    auto& colorAttachmentDesc = renderPassCacheQuery.colors[0];
+    auto& colorAttachmentDesc = renderPassCacheQuery.attachments[0];
     colorAttachmentDesc.format = colorTarget.format;
-    colorAttachmentDesc.loadOp = description.loadOp[0];
-    colorAttachmentDesc.storeOp = description.storeOp[0];
+    colorAttachmentDesc.loadOp = description.color[0].load;
+    colorAttachmentDesc.storeOp = description.color[0].store;
     renderPassCacheQuery.attachmentsUsed.set(0);
 
-    const auto depthIndex = kMaxColorAttachments;
-    auto& depthAttachmentDesc = renderPassCacheQuery.depth;
+    constexpr auto depthAttachmentIndex = kMaxColorAttachments;
+    auto& depthAttachmentDesc = renderPassCacheQuery.attachments[depthAttachmentIndex];
     depthAttachmentDesc.format = depthTarget.format;
-    depthAttachmentDesc.loadOp = description.loadOp[depthIndex];
-    depthAttachmentDesc.storeOp = description.storeOp[depthIndex];
-    renderPassCacheQuery.attachmentsUsed.set(depthIndex);
-
-    CommandBuffer& commandBuffer = m_commands.get();
-
-    colorTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
-    depthTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    depthAttachmentDesc.loadOp = description.depth.load;
+    depthAttachmentDesc.storeOp = description.depth.store;
+    renderPassCacheQuery.attachmentsUsed.set(depthAttachmentIndex);
 
     auto& renderPass = m_renderPassCache.getOrCreate(renderPassCacheQuery);
+
+    CommandBuffer& commandBuffer = m_commands.get();
+    colorTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
+    depthTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
     FrameBufferCacheQuery frameBufferCacheQuery {
         .renderPass = renderPass.getHandle(),
@@ -695,6 +511,7 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
 
     auto& frameBuffer = m_framebufferCache.getOrCreate(frameBufferCacheQuery);
 
+    m_pipelineCache.bindRenderPass(renderPass.getHandle(), renderPassCacheQuery);
     vk::Extent2D extent { colorTarget.width, colorTarget.height };
     vk::RenderPassBeginInfo renderPassInfo{};
     renderPassInfo.renderPass = renderPass.getHandle();
@@ -732,11 +549,12 @@ void RenderAPI::endRenderPass() {
     commands->endRenderPass();
 }
 
-void RenderAPI::bindPipeline(const PipelineHandle& handle) {
-    auto& currentPipeline = m_pipelines.get(handle);
-    auto& commands = m_commands.get();
-    commands->bindPipeline(vk::PipelineBindPoint::eGraphics, currentPipeline.pipeline);
-    m_currentPipeline = handle;
+void RenderAPI::bindPipeline(const PipelineState& state) {
+    auto& program = m_programs.get(state.program);
+    auto& vertexLayout = m_vertexBufferLayouts.get(state.vertexBufferLayout);
+
+    m_pipelineCache.bindProgram(program.getSharedPtr());
+    m_pipelineCache.bindVertexLayout(vertexLayout);
 }
 
 void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
@@ -755,6 +573,10 @@ void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexT
 
 void RenderAPI::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset) {
     auto& commands = m_commands.get();
+    auto pipeline = m_pipelineCache.getOrCreate();
+    assert(pipeline);
+
+    commands->bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->getHandle());
     commands->drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, 0);
 }
 

@@ -23,7 +23,7 @@ private:
     RenderAPI* m_renderAPI;
 
     // Resources
-    PipelineHandle m_pipeline;
+    ProgramHandle m_program;
     DescriptorSetHandle m_descriptorSet;
     DescriptorSetLayoutHandle m_descriptorSetLayout;
 
@@ -31,6 +31,7 @@ private:
     BufferHandle m_uniformBuffer;
 
     // Dynamic buffers (resized as needed)
+    VertexBufferLayoutHandle m_vertexLayoutHandle;
     BufferHandle m_vertexBuffer;
     BufferHandle m_indexBuffer;
     uint64_t m_vertexBufferSize = 0;

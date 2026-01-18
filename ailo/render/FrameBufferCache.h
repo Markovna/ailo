@@ -5,12 +5,13 @@
 
 #include "common/LRUCache.h"
 #include "utils/Utils.h"
+#include "vulkan/Resources.h"
 
 namespace ailo {
 
 struct FrameBufferCacheQuery {
     vk::RenderPass renderPass;
-    std::array<vk::ImageView, kMaxColorAttachments> color;
+    PerColorAttachment<vk::ImageView> color;
     uint32_t attachmentCount;
     vk::ImageView depth;
     uint32_t width {};

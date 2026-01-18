@@ -14,7 +14,7 @@ void BufferObject::destroy(Engine& engine) {
   engine.getRenderAPI()->destroyBuffer(m_handle);
 }
 
-RenderPrimitive::RenderPrimitive(BufferObject* vertexBuffer, BufferObject* indexBuffer, Material* material, size_t indexOffset,
+RenderPrimitive::RenderPrimitive(VertexBuffer* vertexBuffer, BufferObject* indexBuffer, Material* material, size_t indexOffset,
   size_t indexCount) : m_vertexBuffer(vertexBuffer)
                       , m_indexBuffer(indexBuffer)
                       , m_material(material)
@@ -32,4 +32,18 @@ const Material* RenderPrimitive::getMaterial() const {
 }
 
 void RenderPrimitive::setMaterial(Material* material) { m_material = material; }
+
+VertexBuffer::VertexBuffer(Engine& engine, VertexInputDescription& description, size_t byteSize) {
+  m_layoutHandle = engine.getRenderAPI()->createVertexBufferLayout(description);
+  m_bufferHandle = engine.getRenderAPI()->createBuffer(BufferBinding::VERTEX, byteSize);
+}
+
+void VertexBuffer::updateBuffer(Engine& engine, const void* data, uint64_t byteSize, uint64_t byteOffset) {
+  engine.getRenderAPI()->updateBuffer(m_bufferHandle, data, byteSize, byteOffset);
+}
+
+void VertexBuffer::destroy(Engine& engine) {
+  engine.getRenderAPI()->destroyVertexBufferLayout(m_layoutHandle);
+  engine.getRenderAPI()->destroyBuffer(m_bufferHandle);
+}
 }

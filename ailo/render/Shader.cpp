@@ -9,29 +9,6 @@
 
 namespace ailo {
 
-void Shader::bindPipeline(Engine& engine, const VertexInputDescription& vertexInput) const {
-    PipelineCacheKey key;
-    for (auto& binding : vertexInput.bindings) {
-        key.vertexBindings[binding.binding] = binding;
-    }
-
-    for (auto& attribute : vertexInput.attributes) {
-        key.vertexAttributes[attribute.binding] = attribute;
-    }
-
-    auto backend = engine.getRenderAPI();
-
-    auto search = m_pipelines.find(key);
-    if (search == m_pipelines.end()) {
-        auto pipeline = backend->createGraphicsPipeline({.shader = m_description, .vertexInput = vertexInput});
-        auto [it, success] = m_pipelines.insert({key, pipeline});
-
-        search = it;
-    }
-
-    backend->bindPipeline(search->second);
-}
-
 DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) const {
     if (setIndex >= m_descriptorSetLayouts.size()) {
         return {};
@@ -45,9 +22,7 @@ void Shader::destroy(Engine& engine) {
         engine.getRenderAPI()->destroyDescriptorSetLayout(layout);
     }
 
-    for (auto& pipeline : m_pipelines | std::views::values) {
-        engine.getRenderAPI()->destroyPipeline(pipeline);
-    }
+    engine.getRenderAPI()->destroyProgram(m_program);
 }
 
 ShaderDescription& Shader::getDefaultShaderDescription() {
@@ -86,6 +61,8 @@ Shader::Shader(Engine& engine, const ShaderDescription& description)
     for (auto& layout : m_description.layout) {
         m_descriptorSetLayouts.push_back(engine.getRenderAPI()->createDescriptorSetLayout(layout));
     }
+
+    m_program = engine.getRenderAPI()->createProgram(description);
 }
 
 }

@@ -14,7 +14,6 @@ public:
     }
 };
 
-
 template<typename T>
 class UniqueVkHandle {
 public:

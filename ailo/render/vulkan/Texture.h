@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 
-#include "render/ResourceContainer.h"
+#include "render/ResourcePtr.h"
 
 namespace ailo::gpu {
 

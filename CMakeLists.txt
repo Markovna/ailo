@@ -68,16 +68,18 @@ add_executable(ailo
         ailo/render/VulkanDevice.cpp
         ailo/render/VulkanDevice.h
         ailo/render/Constants.h
-        ailo/render/ResourceContainer.cpp
         ailo/render/ResourceContainer.h
         ailo/render/vulkan/Texture.cpp
         ailo/render/vulkan/Texture.h
-        ailo/common/LRUCache.cpp
         ailo/common/LRUCache.h
         ailo/render/RenderPassCache.cpp
         ailo/render/RenderPassCache.h
         ailo/render/PipelineCache.cpp
         ailo/render/PipelineCache.h
+        ailo/render/Program.cpp
+        ailo/render/Program.h
+        ailo/render/vulkan/Resources.cpp
+        ailo/render/vulkan/Resources.h
 )
 
 # Link libraries

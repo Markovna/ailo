@@ -8,180 +8,20 @@
 
 #include <vector>
 #include <optional>
-#include <bitset>
 
-#include "VulkanConstants.h"
+#include "render/vulkan/Resources.h"
 #include "VulkanDevice.h"
 #include "vulkan/Texture.h"
+#include "Program.h"
 #include "ResourceContainer.h"
 #include "CommandBuffer.h"
 #include "FrameBufferCache.h"
+#include "PipelineCache.h"
 #include "RenderPassCache.h"
 
 namespace ailo {
 
-namespace gpu {
 
-struct Pipeline;
-struct Buffer;
-struct DescriptorSet;
-class Texture;
-struct DescriptorSetLayout;
-
-}
-
-using PipelineHandle = Handle<gpu::Pipeline>;
-using BufferHandle = Handle<gpu::Buffer>;
-using DescriptorSetHandle = Handle<gpu::DescriptorSet>;
-using TextureHandle = Handle<gpu::Texture>;
-using DescriptorSetLayoutHandle = Handle<gpu::DescriptorSetLayout>;
-
-enum class BufferBinding : uint8_t {
-  UNKNOWN,
-  VERTEX,
-  INDEX,
-  UNIFORM,
-};
-
-enum class CullingMode : uint8_t {
-  NONE,
-  FRONT,
-  BACK,
-  FRONT_AND_BACK
-};
-
-enum class BlendOperation : uint8_t {
-  ADD,
-  SUBTRACT,
-  REVERSE_SUBTRACT,
-  MIN,
-  MAX
-};
-
-enum class BlendFunction : uint8_t {
-  ZERO,
-  ONE,
-  SRC_COLOR,
-  ONE_MINUS_SRC_COLOR,
-  DST_COLOR,
-  ONE_MINUS_DST_COLOR,
-  SRC_ALPHA,
-  ONE_MINUS_SRC_ALPHA,
-  DST_ALPHA,
-  ONE_MINUS_DST_ALPHA,
-  SRC_ALPHA_SATURATE
-};
-
-enum class CompareOp : uint8_t {
-  NEVER = 0,
-  LESS,
-  EQUAL,
-  LESS_OR_EQUAL,
-  GREATER,
-  NOT_EQUAL,
-  GREATER_OR_EQUAL,
-  ALWAYS
-};
-
-class Acquirable {
-public:
-    void setFence(const std::shared_ptr<FenceStatus>& fence) { m_fenceStatus = fence; }
-    bool isAcquired() const { return m_fenceStatus && !m_fenceStatus->isSignaled(); }
-
-private:
-    std::shared_ptr<FenceStatus> m_fenceStatus;
-};
-
-namespace gpu {
-
-struct Buffer {
-    vk::Buffer buffer;
-    uint64_t size;
-    VmaAllocation vmaAllocation;
-    VmaAllocationInfo allocationInfo;
-    BufferBinding binding;
-};
-
-struct StageBuffer : public Acquirable {
-    vk::Buffer buffer;
-    uint64_t size;
-    VmaAllocation vmaAllocation;
-    void* mapping;
-};
-
-struct Pipeline {
-    vk::Pipeline pipeline;
-    vk::PipelineLayout layout;
-};
-
-struct DescriptorSetLayout {
-    using bitmask_t = std::bitset<64>;
-
-    vk::DescriptorSetLayout layout;
-    bitmask_t dynamicBindings;
-};
-
-struct DescriptorSet {
-    vk::DescriptorSet descriptorSet;
-    DescriptorSetLayout::bitmask_t boundBindings;
-    DescriptorSetLayout::bitmask_t dynamicBindings;
-    DescriptorSetLayoutHandle layoutHandle;
-    std::shared_ptr<FenceStatus> boundFence;
-
-    bool isBound() const { return boundFence && !boundFence->isSignaled(); }
-};
-
-struct RenderTarget {
-    std::array<TextureHandle, 8> colorAttachments;
-    TextureHandle depthAttachment;
-};
-
-}
-
-struct RenderPassDescription {
-    std::array<vk::AttachmentLoadOp, kMaxColorAttachments + 1> loadOp;
-    std::array<vk::AttachmentStoreOp, kMaxColorAttachments + 1> storeOp;
-};
-
-struct VertexInputDescription {
-    std::vector<vk::VertexInputBindingDescription> bindings;
-    std::vector<vk::VertexInputAttributeDescription> attributes;
-};
-
-struct RasterDescription {
-    CullingMode cullingMode = CullingMode::FRONT;
-    bool inverseFrontFace = false;
-    bool blendEnable = false;
-    bool depthWriteEnable = true;
-    BlendOperation rgbBlendOp;
-    BlendOperation alphaBlendOp;
-    BlendFunction srcRgbBlendFunc;
-    BlendFunction srcAlphaBlendFunc;
-    BlendFunction dstRgbBlendFunc;
-    BlendFunction dstAlphaBlendFunc;
-    CompareOp depthCompareOp = CompareOp::LESS;
-};
-
-struct DescriptorSetLayoutBinding {
-    uint32_t binding;
-    vk::DescriptorType descriptorType;
-    vk::ShaderStageFlags stageFlags;
-};
-
-struct ShaderDescription {
-    using ShaderCode = std::vector<char>;
-    using SetLayout = std::vector<DescriptorSetLayoutBinding>;
-
-    ShaderCode vertexShader;
-    ShaderCode fragmentShader;
-    RasterDescription raster;
-    std::vector<SetLayout> layout;
-};
-
-struct PipelineDescription {
-  ShaderDescription shader;
-  VertexInputDescription vertexInput;
-};
 
 class SwapChain;
 
@@ -199,6 +39,9 @@ public:
     void waitIdle();
 
     // Buffer management
+    VertexBufferLayoutHandle createVertexBufferLayout(const VertexInputDescription& description);
+    void destroyVertexBufferLayout(VertexBufferLayoutHandle);
+
     BufferHandle createVertexBuffer(const void* data, uint64_t size);
     BufferHandle createIndexBuffer(const void* data, uint64_t size);
     BufferHandle createBuffer(BufferBinding, uint64_t size);
@@ -218,14 +61,15 @@ public:
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
 
-    // Pipeline management
-    PipelineHandle createGraphicsPipeline(const PipelineDescription& description);
-    void destroyPipeline(const PipelineHandle& handle);
+    // Program management
+
+    ProgramHandle createProgram(const ShaderDescription& description);
+    void destroyProgram(const ProgramHandle& handle);
 
     // Command recording (call between beginFrame and endFrame)
     void beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
     void endRenderPass();
-    void bindPipeline(const PipelineHandle& handle);
+    void bindPipeline(const PipelineState& state);
     void bindVertexBuffer(const BufferHandle& handle);
     // FIXME: remove indexType from here, save it on creation instead
     void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
@@ -241,9 +85,10 @@ private:
     using Buffer = gpu::Buffer;
     using DescriptorSet = gpu::DescriptorSet;
     using Texture = gpu::Texture;
-    using Pipeline = gpu::Pipeline;
+    using Program = gpu::Program;
     using DescriptorSetLayout = gpu::DescriptorSetLayout;
     using StageBuffer = gpu::StageBuffer;
+    using VertexBufferLayout = gpu::VertexBufferLayout;
 
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
     static vk::DescriptorPool createDescriptorPoolS(vk::Device device);
@@ -256,8 +101,6 @@ private:
     void recreateSwapchain();
 
     void cleanupDescriptorSets();
-
-    void createRenderPass();
 
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
     vk::ShaderModule createShaderModule(const std::vector<char>& code);
@@ -279,8 +122,6 @@ private:
 
     friend class SwapChain;
 
-    vk::RenderPass m_renderPass;
-
     // Command buffers
     vk::CommandPool m_commandPool;
     CommandsPool m_commands;
@@ -290,21 +131,22 @@ private:
 
     VmaAllocator m_Allocator = nullptr;
 
-    // Current render state
-    PipelineHandle m_currentPipeline;
-
     std::vector<StageBuffer> m_stageBuffers;
     std::vector<DescriptorSet> m_descriptorSetsToDestroy;
+
     // resources
-    ResourceContainer<Pipeline> m_pipelines;
     ResourceContainer<Buffer> m_buffers;
     ResourceContainer<DescriptorSetLayout> m_descriptorSetLayouts;
     ResourceContainer<DescriptorSet> m_descriptorSets;
     ResourceContainer<Texture> m_textures;
+    ResourceContainer<Program> m_programs;
+    ResourceContainer<Pipeline> m_graphicsPipelines;
+    ResourceContainer<VertexBufferLayout> m_vertexBufferLayouts;
 
     std::unique_ptr<SwapChain> m_swapChain;
     FrameBufferCache m_framebufferCache;
     RenderPassCache m_renderPassCache;
+    PipelineCache m_pipelineCache;
 };
 
 } // namespace ailo

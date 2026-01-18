@@ -48,13 +48,12 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   prepare(*backend, scene);
 
   RenderPassDescription renderPass {};
-  renderPass.loadOp[0] = vk::AttachmentLoadOp::eClear;
-  renderPass.storeOp[0] = vk::AttachmentStoreOp::eStore;
-
-  renderPass.loadOp[kMaxColorAttachments] = vk::AttachmentLoadOp::eClear;
-  renderPass.storeOp[kMaxColorAttachments] = vk::AttachmentStoreOp::eDontCare;
+  renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
+  renderPass.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare };
 
   backend->beginRenderPass(renderPass);
+
+  PipelineState pipelineState {};
 
   uint32_t bufferOffset = 0;
   auto meshView = scene.view<Mesh>();
@@ -66,14 +65,16 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
       auto material = primitive.getMaterial();
       auto shader = material->getShader();
 
-      shader->bindPipeline(engine, mesh.vertexInput);
+      pipelineState.program = shader->program();
+      pipelineState.vertexBufferLayout = vertexBuffer->getLayout();
+      backend->bindPipeline(pipelineState);
 
       backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
       backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
       material->bindDescriptorSet(*backend);
 
       backend->bindIndexBuffer(indexBuffer->getHandle());
-      backend->bindVertexBuffer(vertexBuffer->getHandle());
+      backend->bindVertexBuffer(vertexBuffer->getBuffer());
       backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
     }
 

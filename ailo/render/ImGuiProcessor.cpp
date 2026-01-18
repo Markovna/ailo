@@ -28,9 +28,9 @@ void ImGuiProcessor::shutdown() {
 
     // Destroy all textures
     for (ImTextureData* tex : ImGui::GetPlatformIO().Textures) {
-      if (tex->RefCount == 1) {
+      if (tex->Status != ImTextureStatus_WantCreate && tex->RefCount == 1) {
         auto texHandleId = tex->GetTexID();
-        ailo::TextureHandle texHandle(texHandleId);
+        TextureHandle texHandle(texHandleId);
         m_renderAPI->destroyTexture(texHandle);
       }
     }
@@ -40,7 +40,7 @@ void ImGuiProcessor::shutdown() {
     m_renderAPI->destroyBuffer(m_uniformBuffer);
     m_renderAPI->destroyDescriptorSet(m_descriptorSet);
     m_renderAPI->destroyDescriptorSetLayout(m_descriptorSetLayout);
-    m_renderAPI->destroyPipeline(m_pipeline);
+    m_renderAPI->destroyProgram(m_program);
 }
 
 void ImGuiProcessor::createPipeline() {
@@ -65,45 +65,9 @@ void ImGuiProcessor::createPipeline() {
     m_descriptorSet = m_renderAPI->createDescriptorSet(m_descriptorSetLayout);
     m_renderAPI->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
 
-    // Define vertex input description matching ImDrawVert structure
-    VertexInputDescription vertexInput{};
-
-    // Binding description
-    vk::VertexInputBindingDescription binding{};
-    binding.binding = 0;
-    binding.stride = sizeof(ImDrawVert);
-    binding.inputRate = vk::VertexInputRate::eVertex;
-    vertexInput.bindings.push_back(binding);
-
-    // Attribute descriptions
-    // Position (vec2 at location 0)
-    vk::VertexInputAttributeDescription posAttr{};
-    posAttr.location = 0;
-    posAttr.binding = 0;
-    posAttr.format = vk::Format::eR32G32Sfloat;
-    posAttr.offset = offsetof(ImDrawVert, pos);
-    vertexInput.attributes.push_back(posAttr);
-
-    // UV (vec2 at location 1)
-    vk::VertexInputAttributeDescription uvAttr{};
-    uvAttr.location = 1;
-    uvAttr.binding = 0;
-    uvAttr.format = vk::Format::eR32G32Sfloat;
-    uvAttr.offset = offsetof(ImDrawVert, uv);
-    vertexInput.attributes.push_back(uvAttr);
-
-    // Color (vec4 at location 2, packed as RGBA32)
-    vk::VertexInputAttributeDescription colorAttr{};
-    colorAttr.location = 2;
-    colorAttr.binding = 0;
-    colorAttr.format = vk::Format::eR8G8B8A8Unorm;
-    colorAttr.offset = offsetof(ImDrawVert, col);
-    vertexInput.attributes.push_back(colorAttr);
-
     // Create the graphics pipeline
-    m_pipeline = m_renderAPI->createGraphicsPipeline(
-    ailo::PipelineDescription {
-            .shader = {
+    m_program = m_renderAPI->createProgram(
+        ShaderDescription {
                 .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
                 .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv"),
                     .raster = ailo::RasterDescription {
@@ -120,16 +84,17 @@ void ImGuiProcessor::createPipeline() {
                     },
                     .layout {
                        { bindings }
-                    },
-            },
-            .vertexInput = vertexInput
+                    }
         }
     );
 }
 
 void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, uint32_t fbWidth, uint32_t fbHeight) {
     // Bind pipeline
-    m_renderAPI->bindPipeline(m_pipeline);
+    m_renderAPI->bindPipeline(PipelineState{
+        .program = m_program,
+        .vertexBufferLayout = m_vertexLayoutHandle
+    });
 
     // Bind descriptor set
     m_renderAPI->bindDescriptorSet(m_descriptorSet, 0);
@@ -242,6 +207,45 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
         m_vertexBuffer = m_renderAPI->createVertexBuffer(nullptr, m_vertexBufferSize);
     }
 
+    if (!m_vertexLayoutHandle) {
+        // Define vertex input description matching ImDrawVert structure
+        VertexInputDescription vertexInput{};
+
+        // Binding description
+        vk::VertexInputBindingDescription binding{};
+        binding.binding = 0;
+        binding.stride = sizeof(ImDrawVert);
+        binding.inputRate = vk::VertexInputRate::eVertex;
+        vertexInput.bindings.push_back(binding);
+
+        // Attribute descriptions
+        // Position (vec2 at location 0)
+        vk::VertexInputAttributeDescription posAttr{};
+        posAttr.location = 0;
+        posAttr.binding = 0;
+        posAttr.format = vk::Format::eR32G32Sfloat;
+        posAttr.offset = offsetof(ImDrawVert, pos);
+        vertexInput.attributes.push_back(posAttr);
+
+        // UV (vec2 at location 1)
+        vk::VertexInputAttributeDescription uvAttr{};
+        uvAttr.location = 1;
+        uvAttr.binding = 0;
+        uvAttr.format = vk::Format::eR32G32Sfloat;
+        uvAttr.offset = offsetof(ImDrawVert, uv);
+        vertexInput.attributes.push_back(uvAttr);
+
+        // Color (vec4 at location 2, packed as RGBA32)
+        vk::VertexInputAttributeDescription colorAttr{};
+        colorAttr.location = 2;
+        colorAttr.binding = 0;
+        colorAttr.format = vk::Format::eR8G8B8A8Unorm;
+        colorAttr.offset = offsetof(ImDrawVert, col);
+        vertexInput.attributes.push_back(colorAttr);
+
+        m_vertexLayoutHandle = m_renderAPI->createVertexBufferLayout(vertexInput);
+    }
+
     // Create or resize index buffer if needed
     if (!m_indexBuffer || m_indexBufferSize < indexSize) {
         if (m_indexBuffer) {
@@ -281,11 +285,8 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
     m_renderAPI->updateBuffer(m_indexBuffer, indices.data(), indexSize);
 
     RenderPassDescription renderPass {};
-    renderPass.loadOp[0] = vk::AttachmentLoadOp::eLoad;
-    renderPass.storeOp[0] = vk::AttachmentStoreOp::eStore;
-
-    renderPass.loadOp[kMaxColorAttachments] = vk::AttachmentLoadOp::eClear;
-    renderPass.storeOp[kMaxColorAttachments] = vk::AttachmentStoreOp::eDontCare;
+    renderPass.color[0] = { vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore };
+    renderPass.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare };
 
     m_renderAPI->beginRenderPass(renderPass);
     // Setup render state

@@ -15,7 +15,7 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
             continue;
         }
 
-        auto& attachmentDesc = query.colors[i];
+        auto& attachmentDesc = query.attachments[i];
         attachmentRef.attachment = attachmentCount;
         attachmentRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
 
@@ -35,10 +35,11 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
     depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
     auto& depthAttachment = attachments[attachmentCount++];
-    depthAttachment.format = query.depth.format;
+    auto& depthQuery = query.attachments[kMaxColorAttachments];
+    depthAttachment.format = depthQuery.format;
     depthAttachment.samples = vk::SampleCountFlagBits::e1;
-    depthAttachment.loadOp = query.depth.loadOp;
-    depthAttachment.storeOp = query.depth.storeOp;
+    depthAttachment.loadOp = depthQuery.loadOp;
+    depthAttachment.storeOp = depthQuery.storeOp;
     depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
     depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
     depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
@@ -67,7 +68,6 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
     renderPassInfo.pDependencies = &dependency;
 
     m_renderPass = m_device.createRenderPass(renderPassInfo);
-
 }
 
 RenderPass::~RenderPass() {

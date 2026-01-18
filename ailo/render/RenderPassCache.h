@@ -18,9 +18,8 @@ struct AttachmentDescription {
 };
 
 struct RenderPassCacheQuery {
-    std::array<AttachmentDescription, kMaxColorAttachments> colors;
-    std::bitset<kMaxColorAttachments + 1> attachmentsUsed;
-    AttachmentDescription depth;
+    std::array<AttachmentDescription, kMaxColorAttachments + 1> attachments {};
+    std::bitset<kMaxColorAttachments + 1> attachmentsUsed {};
 
     bool operator==(const RenderPassCacheQuery& other) const = default;
 };
@@ -28,10 +27,7 @@ struct RenderPassCacheQuery {
 struct RenderPassCacheQueryHash {
     size_t operator()(const RenderPassCacheQuery& query) const {
         size_t seed = 0;
-        utils::hash_combine(seed, query.depth.loadOp);
-        utils::hash_combine(seed, query.depth.storeOp);
-        utils::hash_combine(seed, query.depth.format);
-        for (auto& color : query.colors) {
+        for (auto& color : query.attachments) {
             utils::hash_combine(seed, color.loadOp);
             utils::hash_combine(seed, color.storeOp);
             utils::hash_combine(seed, color.format);
