@@ -25,19 +25,6 @@ struct RenderPassCacheQuery {
     bool operator==(const RenderPassCacheQuery& other) const = default;
 };
 
-struct RenderPassCacheQueryHash {
-    size_t operator()(const RenderPassCacheQuery& query) const {
-        size_t seed = 0;
-        for (auto& color : query.attachments) {
-            utils::hash_combine(seed, color.loadOp);
-            utils::hash_combine(seed, color.storeOp);
-            utils::hash_combine(seed, color.format);
-        }
-        utils::hash_combine(seed, query.attachmentsUsed);
-        return seed;
-    }
-};
-
 class RenderPass {
 public:
     RenderPass(vk::Device device, const RenderPassCacheQuery& query);
@@ -52,6 +39,21 @@ private:
 };
 
 class RenderPassCache {
+    using key_type = RenderPassCacheQuery;
+
+    struct RenderPassCacheQueryHash {
+        size_t operator()(const RenderPassCacheQuery& query) const {
+            size_t seed = 0;
+            for (auto& color : query.attachments) {
+                utils::hash_combine(seed, color.loadOp);
+                utils::hash_combine(seed, color.storeOp);
+                utils::hash_combine(seed, color.format);
+            }
+            utils::hash_combine(seed, query.attachmentsUsed);
+            return seed;
+        }
+    };
+
 public:
     static constexpr size_t kDefaultCacheSize = 32;
 
@@ -61,7 +63,7 @@ public:
     void clear();
 
 private:
-    LRUCache<RenderPassCacheQuery, RenderPass, RenderPassCacheQueryHash> m_cache { kDefaultCacheSize };
+    LRUCache<key_type, RenderPass, RenderPassCacheQueryHash> m_cache { kDefaultCacheSize };
     vk::Device m_device;
 };
 }

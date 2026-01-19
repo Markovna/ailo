@@ -29,8 +29,8 @@ static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
 static ailo::MouseButton glfwButtonToMouseButton(int glfwButton);
 static ailo::ModifierKey glfwModsToModifierKey(int glfwMods);
 
-const uint32_t WIDTH = 1200;
-const uint32_t HEIGHT = 900;
+const uint32_t WIDTH = 2400;
+const uint32_t HEIGHT = 1400;
 
 void Application::run() {
   init();
@@ -83,42 +83,22 @@ void Application::init() {
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
 
-  // Load texture
-  int texWidth, texHeight, texChannels;
-  stbi_uc* pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_BaseColor.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-  // stbi_uc* pixels = stbi_load("assets/models/camera/Camera_Base_color.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-  if (!pixels) {
-    throw std::runtime_error("failed to load texture image!");
-  }
-
-  // Create texture
-  m_texture = std::make_unique<ailo::Texture>(*m_engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
-  m_texture->updateImage(*m_engine, pixels, texWidth * texHeight * 4);
-  stbi_image_free(pixels);
-
-  // Load texture
-  pixels = stbi_load("assets/models/gameboy/Gameboy_low_Gameboy_Normal.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-  // pixels = stbi_load("assets/models/camera/Camera_Normal_DirectX.png", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-  if (!pixels) {
-    throw std::runtime_error("failed to load texture image!");
-  }
-
-  m_normalMapTexture = std::make_unique<ailo::Texture>(*m_engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
-  m_normalMapTexture->updateImage(*m_engine, pixels, texWidth * texHeight * 4);
-  stbi_image_free(pixels);
+  // Load textures
+  // m_texture = ailo::Texture::createFromFile(*m_engine, "assets/models/gameboy/Gameboy_low_Gameboy_BaseColor.png");
+  // m_normalMapTexture = ailo::Texture::createFromFile(*m_engine, "assets/models/gameboy/Gameboy_low_Gameboy_Normal.png");
 
   m_camera = std::make_unique<ailo::Camera>();
 
   ailo::MeshReader reader;
 
-  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/gameboy/SM_Gameboy.fbx");
+  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
   auto meshView = m_scene->view<ailo::Mesh>();
   for(const auto& [entity, mesh] : meshView.each()) {
     for (auto& material : mesh.materials) {
-      material->setTexture(0, m_texture.get());
-      material->setTexture(1, m_normalMapTexture.get());
+      // material->setTexture(0, m_texture.get());
+      // material->setTexture(1, m_normalMapTexture.get());
     }
   }
 }
@@ -236,7 +216,7 @@ void Application::updateTransforms() {
 
   m_camera->view = glm::lookAt(m_cameraTarget + cameraPos, m_cameraTarget, up);
 
-  m_camera->projection = glm::perspective(glm::radians(45.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
+  m_camera->projection = glm::perspective(glm::radians(70.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 
@@ -287,8 +267,13 @@ void Application::cleanup() {
     }
   }
   m_scene.reset();
-  m_texture->destroy(*m_engine);
-  m_normalMapTexture->destroy(*m_engine);
+  if (m_texture) {
+    m_texture->destroy(*m_engine);
+  }
+
+  if (m_normalMapTexture) {
+    m_normalMapTexture->destroy(*m_engine);
+  }
 
   m_engine.reset();
 

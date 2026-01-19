@@ -8,7 +8,6 @@
 #include <iostream>
 #include <vector>
 #include <filesystem>
-#include <stb_image/stb_image.h>
 
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
@@ -54,22 +53,7 @@ static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& t
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
 
-    // Load image using stb_image
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(fullPath.string().c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-
-    if (!pixels) {
-        std::cerr << "Warning: Failed to load texture: " << fullPath << std::endl;
-        return nullptr;
-    }
-
-    // Create texture
-    auto texture = std::make_unique<Texture>(engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight);
-    texture->updateImage(engine, pixels, texWidth * texHeight * 4);
-
-    stbi_image_free(pixels);
-
-    return texture;
+    return Texture::createFromFile(engine, fullPath.string(), true);
 }
 
 // Recursive function to traverse scene hierarchy and extract meshes with transforms
@@ -184,11 +168,12 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     std::string modelDirectory = modelPath.parent_path().string();
 
     // Process materials and load textures
-    std::vector<Texture*> textures;
-    textures.resize(aiscene->mNumMaterials, nullptr);
+    std::vector<std::tuple<Texture*, Texture*>> textures;
+    textures.resize(aiscene->mNumMaterials);
 
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* material = aiscene->mMaterials[i];
+        auto& [diffuse, normalMap] = textures[i];
 
         // Try to get the diffuse texture
         if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
@@ -196,7 +181,18 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
             if (material->GetTexture(aiTextureType_DIFFUSE, 0, &texturePath) == AI_SUCCESS) {
                 auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
                 if (texture) {
-                    textures[i] = texture.get();
+                    diffuse = texture.get();
+                    loadedTextures.push_back(std::move(texture));
+                }
+            }
+        }
+
+        if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
+            aiString texturePath;
+            if (material->GetTexture(aiTextureType_NORMALS, 0, &texturePath) == AI_SUCCESS) {
+                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
+                if (texture) {
+                    normalMap = texture.get();
                     loadedTextures.push_back(std::move(texture));
                 }
             }
@@ -287,8 +283,14 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         auto material = std::make_unique<Material>(engine, shader);
 
         // Assign texture to material if available
-        if (meshData.materialIndex < textures.size() && textures[meshData.materialIndex]) {
-            material->setTexture(0, textures[meshData.materialIndex]);
+        if (meshData.materialIndex < textures.size()) {
+            auto& [diffuse, normalMap] = textures[meshData.materialIndex];
+            if (diffuse) {
+                material->setTexture(0, diffuse);
+            }
+            if (normalMap) {
+                material->setTexture(1, normalMap);
+            }
         }
 
         // Create a single primitive for this mesh

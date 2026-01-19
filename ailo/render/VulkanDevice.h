@@ -11,6 +11,7 @@ class VulkanDevice {
 public:
     explicit VulkanDevice(GLFWwindow* window);
     ~VulkanDevice();
+    vk::SampleCountFlagBits getMaxUsableSampleCount();
 
     vk::Device& device() { return m_device; }
     vk::PhysicalDevice& physicalDevice() { return m_physicalDevice; }
@@ -43,6 +44,7 @@ private:
     vk::Instance m_instance;
     vk::SurfaceKHR m_surface;
     vk::PhysicalDevice m_physicalDevice;
+    vk::SampleCountFlagBits m_msaaSamples = vk::SampleCountFlagBits::e1;
     vk::Device m_device;
     vk::Queue m_graphicsQueue;
     vk::Queue m_presentQueue;

@@ -37,7 +37,7 @@ FrameBuffer::~FrameBuffer() {
 FrameBuffer& FrameBufferCache::getOrCreate(vk::RenderPass renderPass, const gpu::FrameBufferFormat& formats,
     const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height) {
 
-    FrameBufferCacheQuery query {
+    CacheKey query {
         .colorFormat = formats.color,
         .color = views.color,
         .depthFormat = formats.depth,

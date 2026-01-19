@@ -1,18 +1,21 @@
 #include "Texture.h"
 
+#include <iostream>
+#include <ostream>
+
 #include "VulkanUtils.h"
 
 namespace ailo::gpu {
 
-Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
-    : m_device(device), format(format), width(width), height(height), aspect(aspect) {
+Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
+    : m_device(device), format(format), width(width), height(height), aspect(aspect), levels(levels) {
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
     imageInfo.extent.width = width;
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = levels > 1 ? levels : 1;
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
     imageInfo.tiling = vk::ImageTiling::eOptimal;
@@ -32,7 +35,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
     memory = device.allocateMemory(allocInfo);
     device.bindImageMemory(image, memory, 0);
 
-    imageView = createImageView(device, image, format, aspect);
+    imageView = createImageView(device, image, format, levels, aspect);
 
     if (usage & vk::ImageUsageFlagBits::eSampled) {
         vk::SamplerCreateInfo samplerInfo{};
@@ -59,11 +62,11 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
 }
 
 Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags) {
-    imageView = createImageView(device, image, format, aspectFlags);
+    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags), levels(1) {
+    imageView = createImageView(device, image, format, levels, aspectFlags);
 }
 
-vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::Format format,
+vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels,
     vk::ImageAspectFlags aspectFlags) {
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image = image;
@@ -71,7 +74,7 @@ vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::F
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = levels > 1 ? levels : 1;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
@@ -113,7 +116,7 @@ void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout 
     barrier.image = image;
     barrier.subresourceRange.aspectMask = aspect;
     barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.levelCount = levels > 1 ? levels : 1;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
@@ -122,6 +125,8 @@ void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout 
 
     barrier.srcAccessMask = srcAccess;
     barrier.dstAccessMask = dstAccess;
+
+    assert(srcStage != vk::PipelineStageFlagBits::eNone && "invalid layout transition!");
 
     commandBuffer.pipelineBarrier(
             srcStage, dstStage,

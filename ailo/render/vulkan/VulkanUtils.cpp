@@ -61,6 +61,8 @@ std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::I
       return { vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer };
     case vk::ImageLayout::ePresentSrcKHR:
       return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::eShaderReadOnlyOptimal:
+      return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eFragmentShader };
     default: return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eNone };
   }
 }
@@ -75,6 +77,8 @@ std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionDstAccess(vk::I
       return { vk::AccessFlagBits::eTransferRead, vk::PipelineStageFlagBits::eTransfer };
     case vk::ImageLayout::eTransferDstOptimal:
       return { vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer };
+    case vk::ImageLayout::eShaderReadOnlyOptimal:
+      return { vk::AccessFlagBits::eShaderRead, vk::PipelineStageFlagBits::eFragmentShader };
     case vk::ImageLayout::ePresentSrcKHR:
     case vk::ImageLayout::eUndefined:
       return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eTopOfPipe };

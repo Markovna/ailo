@@ -38,6 +38,8 @@ public:
         return *ptr;
     }
 
+    void clear() { m_resources.clear(); }
+
 private:
     dod::slot_map<ResourceType> m_resources {};
 };

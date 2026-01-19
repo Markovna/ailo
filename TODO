@@ -5,10 +5,14 @@ TODO:
 *  Resource management: resource class to manage resource creation and
    destruction (shaders, materials, textures)
 
-*  Do not specify vertex input when creating a graphics pipeline. Instead,
-   the vulkan pipeline object should be created and cached when calling
-   draw function after binding the vertex buffer. Because descriptor set
-   is using pipeline layout when binding, the actual vulkan descriptor
-   binding api should also be called during draw. It will also allow to
-   not specify descriptor set layout when creating the pipeline.
+*  Optimization: shared materials
 
+*  Optimization: do not bind descriptor set if it's already bound
+
+*  Shader variants
+
+*  Mipmaps
+
+*  Multisampling
+
+*  Shadow mapping

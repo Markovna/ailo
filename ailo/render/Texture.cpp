@@ -1,8 +1,10 @@
 #include "Texture.h"
 
+#include "stb_image/stb_image.h"
+
 namespace ailo {
 
-Texture::Texture(Engine& engine, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter)
+Texture::Texture(Engine& engine, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, uint8_t levels)
     : m_handle(engine.getRenderAPI()->createTexture(format, width, height, filter))
 { }
 
@@ -19,4 +21,19 @@ void Texture::destroy(Engine& engine) {
     engine.getRenderAPI()->destroyTexture(m_handle);
 }
 
+std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, bool mipmaps) {
+    // Load texture
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
+
+    uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
+    auto tex = std::make_unique<Texture>(engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, vk::Filter::eLinear, mipmaps ? 0 : mipLevels);
+    tex->updateImage(engine, pixels, texWidth * texHeight * 4);
+    stbi_image_free(pixels);
+    return tex;
+}
 }

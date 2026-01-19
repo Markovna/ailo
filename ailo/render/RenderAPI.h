@@ -49,7 +49,7 @@ public:
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
     // Texture management
-    TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear);
+    TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear, uint8_t levels = 0);
     void destroyTexture(const TextureHandle& handle);
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0);
 
@@ -147,6 +147,7 @@ private:
     FrameBufferCache m_framebufferCache;
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
+
 };
 
 } // namespace ailo

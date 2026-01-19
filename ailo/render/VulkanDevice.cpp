@@ -88,6 +88,7 @@ VulkanDevice::VulkanDevice(GLFWwindow* window)
     m_physicalDevice = physicalDeviceSearchResult.physicalDevice;
     m_graphicsQueueFamilyIndex = physicalDeviceSearchResult.graphicsQueueFamilyIndex;
     m_presentQueueFamilyIndex = physicalDeviceSearchResult.presentQueueFamilyIndex;
+    m_msaaSamples = getMaxUsableSampleCount();
 
     uint32_t queueCreateInfoCount = 1;
     std::array<vk::DeviceQueueCreateInfo, 2> queueCreateInfos;
@@ -144,13 +145,27 @@ VulkanDevice::~VulkanDevice() {
     m_instance.destroy();
 }
 
+vk::SampleCountFlagBits VulkanDevice::getMaxUsableSampleCount() {
+    vk::PhysicalDeviceProperties properties = m_physicalDevice.getProperties();
+
+    vk::SampleCountFlags counts = properties.limits.framebufferColorSampleCounts & properties.limits.framebufferDepthSampleCounts;
+    if (counts & vk::SampleCountFlagBits::e64) { return vk::SampleCountFlagBits::e64; }
+    if (counts & vk::SampleCountFlagBits::e32) { return vk::SampleCountFlagBits::e32; }
+    if (counts & vk::SampleCountFlagBits::e16) { return vk::SampleCountFlagBits::e16; }
+    if (counts & vk::SampleCountFlagBits::e8) { return vk::SampleCountFlagBits::e8; }
+    if (counts & vk::SampleCountFlagBits::e4) { return vk::SampleCountFlagBits::e4; }
+    if (counts & vk::SampleCountFlagBits::e2) { return vk::SampleCountFlagBits::e2; }
+
+    return vk::SampleCountFlagBits::e1;
+}
+
 void VulkanDevice::createInstance() {
     vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName = "Ailo";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "Ailo Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_3;
 
     vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;

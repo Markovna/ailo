@@ -28,7 +28,6 @@ RenderAPI::RenderAPI(GLFWwindow* window)
 RenderAPI::~RenderAPI() = default;
 
 void RenderAPI::shutdown() {
-
     m_device->waitIdle();
 
     cleanupSwapchain();
@@ -36,6 +35,14 @@ void RenderAPI::shutdown() {
     m_framebufferCache.clear();
     m_renderPassCache.clear();
     m_pipelineCache.clear();
+
+    m_buffers.clear();
+    m_descriptorSetLayouts.clear();
+    m_descriptorSets.clear();
+    m_textures.clear();
+    m_programs.clear();
+    m_graphicsPipelines.clear();
+    m_vertexBufferLayouts.clear();
 
     m_commands.destroy();
 
@@ -251,8 +258,8 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 
 // Texture management
 
-TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter) {
-    auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), format, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
+TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, uint8_t levels) {
+    auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), format, levels, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
     ptr->acquire(ptr);
     return ptr.getHandle();
 }
@@ -276,9 +283,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 
     vk::CommandBuffer commandBuffer = *m_commands.get();
 
-    // Transition image layout to transfer destination
-    transitionImageLayout(commandBuffer, texture.image, texture.format,
-                         vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    texture.transitionLayout(commandBuffer, vk::ImageLayout::eTransferDstOptimal);
 
     if(width == 0) width = texture.width;
     if(height == 0) height = texture.height;
@@ -286,8 +291,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset);
 
     // Transition image layout to shader read
-    transitionImageLayout(commandBuffer, texture.image, texture.format,
-                         vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+    texture.transitionLayout(commandBuffer, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
 // Descriptor set management
@@ -599,14 +603,14 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     // Create a descriptor pool that can allocate descriptor sets
     // We'll allocate enough for a reasonable number of uniform buffers and textures
     std::array poolSizes {
-        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBuffer, 100 },
-        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBufferDynamic, 100 },
-        vk::DescriptorPoolSize {vk::DescriptorType::eCombinedImageSampler, 100 }
+        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBuffer, 500 },
+        vk::DescriptorPoolSize {vk::DescriptorType::eUniformBufferDynamic, 500 },
+        vk::DescriptorPoolSize {vk::DescriptorType::eCombinedImageSampler, 500 }
     };
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 100;
+    poolInfo.maxSets = 1000;
     poolInfo.flags |= vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
 
     return device.createDescriptorPool(poolInfo);

@@ -31,7 +31,7 @@ add_executable(ailo
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-        ailo/Engine.cpp
+    ailo/Engine.cpp
     ailo/Engine.h
     ailo/Application.cpp
     ailo/Application.h
@@ -62,24 +62,24 @@ add_executable(ailo
     ailo/render/UniqueVkHandle.h
     ailo/render/SwapChain.cpp
     ailo/render/SwapChain.h
-        ailo/render/FrameBufferCache.cpp
-        ailo/render/FrameBufferCache.h
-        ailo/render/VulkanConstants.h
-        ailo/render/VulkanDevice.cpp
-        ailo/render/VulkanDevice.h
-        ailo/render/Constants.h
-        ailo/render/ResourceContainer.h
-        ailo/render/vulkan/Texture.cpp
-        ailo/render/vulkan/Texture.h
-        ailo/common/LRUCache.h
-        ailo/render/RenderPassCache.cpp
-        ailo/render/RenderPassCache.h
-        ailo/render/PipelineCache.cpp
-        ailo/render/PipelineCache.h
-        ailo/render/Program.cpp
-        ailo/render/Program.h
-        ailo/render/vulkan/Resources.cpp
-        ailo/render/vulkan/Resources.h
+    ailo/render/FrameBufferCache.cpp
+    ailo/render/FrameBufferCache.h
+    ailo/render/VulkanConstants.h
+    ailo/render/VulkanDevice.cpp
+    ailo/render/VulkanDevice.h
+    ailo/render/Constants.h
+    ailo/render/ResourceContainer.h
+    ailo/render/vulkan/Texture.cpp
+    ailo/render/vulkan/Texture.h
+    ailo/common/LRUCache.h
+    ailo/render/RenderPassCache.cpp
+    ailo/render/RenderPassCache.h
+    ailo/render/PipelineCache.cpp
+    ailo/render/PipelineCache.h
+    ailo/render/Program.cpp
+    ailo/render/Program.h
+    ailo/render/vulkan/Resources.cpp
+    ailo/render/vulkan/Resources.h
 )
 
 # Link libraries

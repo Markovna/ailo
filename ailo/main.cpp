@@ -3,10 +3,6 @@
 #include <iostream>
 #include <stdexcept>
 
-
-template <typename T>
-struct MyAlloc : std::allocator<T> {};
-
 int main() {
     Application app;
 

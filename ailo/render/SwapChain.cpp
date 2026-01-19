@@ -14,7 +14,7 @@ SwapChain::SwapChain(VulkanDevice& device) {
     vk::Extent2D extent = device.getSwapExtent();
     vk::Format depthFormat = device.getDepthFormat();
 
-    m_depth.emplace(vkDevice, device.physicalDevice(), depthFormat, extent.width, extent.height, vk::Filter{}, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageAspectFlagBits::eDepth);
+    m_depth.emplace(vkDevice, device.physicalDevice(), depthFormat, 1, extent.width, extent.height, vk::Filter{}, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageAspectFlagBits::eDepth);
 
     auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
 

@@ -22,7 +22,7 @@ layout (set = 0, binding = 1, std140) uniform perLight {
 };
 
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
-layout(set = 2, binding = 1) uniform sampler2D normalMap;
+//layout(set = 2, binding = 1) uniform sampler2D normalMap;
 
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
@@ -75,12 +75,13 @@ vec3 directionalLight(vec3 lightDirection, vec4 lightColorIntensity, vec3 surfac
 }
 
 void main() {
-    vec3 normal = texture(normalMap, fragTexCoord).rgb;
-    normal = normalize(normal);
-    vec3 surfaceNormal = normalize(fragTBN * normal);
+    // with normal map
+    //vec3 normal = texture(normalMap, fragTexCoord).rgb;
+    //normal = normalize(normal);
+    //vec3 surfaceNormal = normalize(fragTBN * normal);
 
     // without normal map
-    //vec3 surfaceNormal = normalize(fragNormalWorld);
+    vec3 surfaceNormal = normalize(fragNormalWorld);
 
     vec3 cameraPosWorld = view.viewInverse[3].xyz;
     vec3 viewDir = normalize(cameraPosWorld - fragPosWorld);

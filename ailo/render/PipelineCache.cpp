@@ -9,7 +9,7 @@ ailo::Pipeline::Pipeline(
     vk::Device device,
     const resource_ptr<gpu::Program>& programPtr,
     vk::RenderPass renderPass,
-    const PipelineCacheQuery& key)
+    const gpu::VertexBufferLayout& vertexInput)
         : m_device(device),
         m_programPtr(programPtr) {
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
@@ -26,10 +26,10 @@ ailo::Pipeline::Pipeline(
 
     // Vertex input
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.vertexBindingDescriptionCount = key.vertexBindingsCount;
-    vertexInputInfo.pVertexBindingDescriptions = key.virtexBindings.data();
-    vertexInputInfo.vertexAttributeDescriptionCount = key.vertexAttributesCount;
-    vertexInputInfo.pVertexAttributeDescriptions = key.vertexAttributes.data();
+    vertexInputInfo.vertexBindingDescriptionCount = vertexInput.bindingsCount;
+    vertexInputInfo.pVertexBindingDescriptions = vertexInput.bindings.data();
+    vertexInputInfo.vertexAttributeDescriptionCount = vertexInput.attributesCount;
+    vertexInputInfo.pVertexAttributeDescriptions = vertexInput.attributes.data();
 
     // Input assembly
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -120,31 +120,33 @@ ailo::Pipeline::~Pipeline() {
 }
 
 ailo::PipelineCache::PipelineCache(vk::Device device, ResourceContainer<Pipeline>& pipelines) :
-    m_pipelines(&pipelines), m_cache(kDefaultCacheSize), m_device(device), m_boundVertexLayout() {
+    m_pipelines(&pipelines), m_cache(kDefaultCacheSize), m_device(device), m_pipelineState() {
 }
 
 void ailo::PipelineCache::bindProgram(const resource_ptr<gpu::Program>& program) {
-    m_boundProgram = program;
+    m_pipelineState.program = program;
 }
 
 ailo::resource_ptr<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
+    auto& state = m_pipelineState;
+
     PipelineCacheQuery query;
-    query.vertexAttributes = m_boundVertexLayout.attributes;
-    query.virtexBindings = m_boundVertexLayout.bindings;
-    query.vertexAttributesCount = m_boundVertexLayout.attributesCount;
-    query.vertexBindingsCount = m_boundVertexLayout.bindingsCount;
-    query.programHandle = m_boundProgram.getHandle().getId();
+    query.vertexAttributes = state.vertexLayout.attributes;
+    query.virtexBindings = state.vertexLayout.bindings;
+    query.vertexAttributesCount = state.vertexLayout.attributesCount;
+    query.vertexBindingsCount = state.vertexLayout.bindingsCount;
+    query.programHandle = state.program.getHandle().getId();
     for (size_t i = 0; i < query.renderPassKey.colors.size(); i++) {
-        query.renderPassKey.colors[i] = m_frameBufferFormat.color[i];
+        query.renderPassKey.colors[i] = state.frameBufferFormat.color[i];
     }
-    query.renderPassKey.depth = m_frameBufferFormat.depth;
+    query.renderPassKey.depth = state.frameBufferFormat.depth;
 
     auto ptr = m_cache.get(query);
     if (ptr) {
         return *ptr;
     }
 
-    resource_ptr<Pipeline> pipeline = resource_ptr<Pipeline>::make(*m_pipelines, m_device, m_boundProgram, m_boundRenderPass, query);
+    resource_ptr<Pipeline> pipeline = resource_ptr<Pipeline>::make(*m_pipelines, m_device, m_pipelineState.program, m_pipelineState.renderPass, m_pipelineState.vertexLayout);
     auto [it, result] = m_cache.tryEmplace(query, pipeline);
     assert(result);
     assert(it->second);
