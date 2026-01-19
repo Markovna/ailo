@@ -33,7 +33,7 @@ layout(location = 4) in mat3 fragTBN;
 layout(location = 0) out vec4 outColor;
 
 // TODO: make this a uniform
-const float blinnPhongExponent = 512.0;
+const float blinnPhongExponent = 128.0;
 
 const int POINT_LIGHT_TYPE = 0;
 const int SPOT_LIGHT_TYPE = 1;

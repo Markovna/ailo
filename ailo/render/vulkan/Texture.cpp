@@ -8,14 +8,18 @@
 namespace ailo::gpu {
 
 Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
-    : m_device(device), format(format), width(width), height(height), aspect(aspect), levels(levels) {
+    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))) {
+
+    if (m_levels > 1) {
+        usage |= vk::ImageUsageFlagBits::eTransferSrc;
+    }
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
     imageInfo.extent.width = width;
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = levels > 1 ? levels : 1;
+    imageInfo.mipLevels = m_levels;
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
     imageInfo.tiling = vk::ImageTiling::eOptimal;
@@ -35,7 +39,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
     memory = device.allocateMemory(allocInfo);
     device.bindImageMemory(image, memory, 0);
 
-    imageView = createImageView(device, image, format, levels, aspect);
+    imageView = createImageView(device, image, format, m_levels, aspect);
 
     if (usage & vk::ImageUsageFlagBits::eSampled) {
         vk::SamplerCreateInfo samplerInfo{};
@@ -55,15 +59,15 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
         samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
+        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
 
         sampler = device.createSampler(samplerInfo);
     }
 }
 
 Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags), levels(1) {
-    imageView = createImageView(device, image, format, levels, aspectFlags);
+    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags), m_levels(1) {
+    imageView = createImageView(device, image, format, m_levels, aspectFlags);
 }
 
 vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels,
@@ -74,7 +78,7 @@ vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::F
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = levels > 1 ? levels : 1;
+    viewInfo.subresourceRange.levelCount = levels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
@@ -104,39 +108,59 @@ Texture::~Texture() {
 }
 
 void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout newLayout) {
-    if (layout == newLayout) {
-        return;
+    vk::ImageSubresourceRange range{};
+    range.aspectMask = aspect;
+    range.baseMipLevel = 0;
+    range.levelCount = m_levels;
+    range.baseArrayLayer = 0;
+    range.layerCount = 1;
+    transitionLayout(commandBuffer, newLayout, range);
+}
+
+void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout newLayout, vk::ImageSubresourceRange range) {
+    range.baseMipLevel = std::min(range.baseMipLevel, uint32_t(m_levels - 1));
+    range.levelCount = std::min(range.levelCount, m_levels - range.baseMipLevel);
+
+    vk::ImageLayout layout = getLayout(range.baseMipLevel);
+    uint8_t baseLevel = 0;
+
+    while (baseLevel < range.levelCount) {
+        uint8_t level = baseLevel + 1;
+        while (level < range.levelCount && layout == getLayout(range.baseMipLevel + level)) {
+            level++;
+        }
+
+        if (layout != newLayout) {
+            auto [srcAccess, srcStage] = vkutils::getTransitionSrcAccess(layout);
+            auto [dstAccess, dstStage] = vkutils::getTransitionDstAccess(newLayout);
+
+            vk::ImageSubresourceRange subRange = range;
+            subRange.baseMipLevel = range.baseMipLevel + baseLevel;
+            subRange.levelCount = level - baseLevel;
+
+            vk::ImageMemoryBarrier barrier{};
+            barrier.oldLayout = layout;
+            barrier.newLayout = newLayout;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image;
+            barrier.subresourceRange = subRange;
+            barrier.srcAccessMask = srcAccess;
+            barrier.dstAccessMask = dstAccess;
+
+            commandBuffer.pipelineBarrier(
+                    srcStage, dstStage,
+                    {},
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier
+                );
+        }
+
+        baseLevel = level;
+        layout = getLayout(range.baseMipLevel + baseLevel);
     }
 
-    vk::ImageMemoryBarrier barrier{};
-    barrier.oldLayout = layout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = aspect;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = levels > 1 ? levels : 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    auto [srcAccess, srcStage] = vkutils::getTransitionSrcAccess(layout);
-    auto [dstAccess, dstStage] = vkutils::getTransitionDstAccess(newLayout);
-
-    barrier.srcAccessMask = srcAccess;
-    barrier.dstAccessMask = dstAccess;
-
-    assert(srcStage != vk::PipelineStageFlagBits::eNone && "invalid layout transition!");
-
-    commandBuffer.pipelineBarrier(
-            srcStage, dstStage,
-            {},
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
-        );
-
-    layout = newLayout;
-
+    setLayout(range.baseMipLevel, range.levelCount, newLayout);
 }
 }

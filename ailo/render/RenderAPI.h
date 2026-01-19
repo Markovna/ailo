@@ -52,6 +52,7 @@ public:
     TextureHandle createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter = vk::Filter::eLinear, uint8_t levels = 0);
     void destroyTexture(const TextureHandle& handle);
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0);
+    void generateMipmaps(const TextureHandle& handle);
 
     // Descriptor set management
     DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
@@ -103,13 +104,10 @@ private:
     void cleanupDescriptorSets();
 
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
-    vk::ShaderModule createShaderModule(const std::vector<char>& code);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     StageBuffer allocateStageBuffer(uint32_t capacity);
     void destroyStageBuffers();
     void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
-    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-    void transitionImageLayout(vk::CommandBuffer commandBuffer, vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0);
 
 private:

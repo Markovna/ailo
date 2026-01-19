@@ -5,6 +5,8 @@ TODO:
 *  Resource management: resource class to manage resource creation and
    destruction (shaders, materials, textures)
 
+*  Refactoring: move stage buffers to a separate class
+
 *  Optimization: shared materials
 
 *  Optimization: do not bind descriptor set if it's already bound

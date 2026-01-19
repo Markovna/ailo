@@ -266,6 +266,10 @@ vk::Format VulkanDevice::getDepthFormat() const {
     return vk::Format::eUndefined;
 }
 
+vk::FormatProperties VulkanDevice::getFormatProperties(vk::Format format) const {
+    return m_physicalDevice.getFormatProperties(format);
+}
+
 void VulkanDevice::setupDebugMessenger() {
 #if AILO_VK_ENABLED(AILO_VK_ENABLE_VALIDATION_LAYERS)
 

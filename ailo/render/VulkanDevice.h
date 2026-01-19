@@ -27,6 +27,7 @@ public:
     vk::PresentModeKHR getPresentMode() const;
     vk::Extent2D getSwapExtent() const;
     vk::Format getDepthFormat() const;
+    vk::FormatProperties getFormatProperties(vk::Format format) const;
 
     vk::Device operator*() { return m_device; }
     vk::Device* operator->() { return &m_device; }
