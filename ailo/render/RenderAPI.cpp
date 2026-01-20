@@ -530,29 +530,40 @@ void RenderAPI::destroyProgram(const ProgramHandle& handle) {
 // Command recording
 
 void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
-    auto& colorTarget = m_swapChain->getColorTarget();
-    auto& depthTarget = m_swapChain->getDepthTarget();
+    auto colorTarget = m_swapChain->getColorTarget();
+    auto resolveTarget = m_swapChain->getResolveTarget();
+    auto depthTarget = m_swapChain->getDepthTarget();
 
     gpu::FrameBufferFormat fbFormat {
-        .color = { colorTarget.format },
-        .depth = depthTarget.format
+        .color = { colorTarget->format },
+        .depth = depthTarget->format,
+        .samples = vk::SampleCountFlagBits::e1
     };
 
     gpu::FrameBufferImageView fbImageView {
-        .color = { colorTarget.imageView },
-        .depth = depthTarget.imageView
+        .color = { colorTarget->imageView },
+        .depth = depthTarget->imageView
     };
 
+    if (resolveTarget) {
+        fbImageView.resolve[0] = resolveTarget->imageView;
+        fbFormat.hasResolve[0] = true;
+        fbFormat.samples = colorTarget->getSamples();
+    }
+
     auto& renderPass = m_renderPassCache.getOrCreate(description, fbFormat);
-    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, colorTarget.width, colorTarget.height);
+    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, colorTarget->width, colorTarget->height);
 
     CommandBuffer& commandBuffer = m_commands.get();
-    colorTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
-    depthTarget.transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    colorTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
+    depthTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    if (resolveTarget) {
+        resolveTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
+    }
 
     m_pipelineCache.bindRenderPass(renderPass, fbFormat);
 
-    vk::Extent2D extent { colorTarget.width, colorTarget.height };
+    vk::Extent2D extent { colorTarget->width, colorTarget->height };
     vk::Rect2D rect { { 0, 0 }, extent};
 
     vk::RenderPassBeginInfo renderPassInfo{};
@@ -560,10 +571,15 @@ void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::Cl
     renderPassInfo.framebuffer = frameBuffer;
     renderPassInfo.renderArea = rect;
 
-    std::array<vk::ClearValue, fbImageView.color.size() + 1> clearValues;
+    std::array<vk::ClearValue, 2 * fbImageView.color.size() + 1> clearValues;
     uint32_t clearValuesCount = 0;
     for (size_t i = 0; i < fbImageView.color.size(); i++) {
         if (fbImageView.color[i] != VK_NULL_HANDLE) {
+            clearValues[clearValuesCount++].color = clearColor;
+        }
+    }
+    for (size_t i = 0; i < fbImageView.resolve.size(); i++) {
+        if (fbImageView.resolve[i] != VK_NULL_HANDLE) {
             clearValues[clearValuesCount++].color = clearColor;
         }
     }

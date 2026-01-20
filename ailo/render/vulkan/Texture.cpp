@@ -1,14 +1,11 @@
 #include "Texture.h"
 
-#include <iostream>
-#include <ostream>
-
 #include "VulkanUtils.h"
 
 namespace ailo::gpu {
 
-Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect)
-    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))) {
+Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
+    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))), m_samples(samples) {
 
     if (m_levels > 1) {
         usage |= vk::ImageUsageFlagBits::eTransferSrc;
@@ -25,7 +22,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
     imageInfo.tiling = vk::ImageTiling::eOptimal;
     imageInfo.initialLayout = vk::ImageLayout::eUndefined;
     imageInfo.usage = usage;
-    imageInfo.samples = vk::SampleCountFlagBits::e1;
+    imageInfo.samples = m_samples;
     imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
     image = device.createImage(imageInfo);

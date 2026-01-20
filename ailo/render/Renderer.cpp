@@ -36,8 +36,8 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
   // prepare lights data
-  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(0.5f, 9.0f, 1.0f, 15);
-  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(0.0f, 9.0f, 0.0f, 1);
+  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 9.0f);
   m_lightUniformsBufferData.direction = glm::vec3(0.0f, 1.0f, 0.0f);
   m_lightUniformsBufferData.type = 0; // 0 - point, 1 - spot
   m_lightUniformsBufferData.scaleOffset = getSpotLightScaleOffset(glm::radians(22.0), glm::radians(29.0));

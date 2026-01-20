@@ -11,7 +11,6 @@ class VulkanDevice {
 public:
     explicit VulkanDevice(GLFWwindow* window);
     ~VulkanDevice();
-    vk::SampleCountFlagBits getMaxUsableSampleCount();
 
     vk::Device& device() { return m_device; }
     vk::PhysicalDevice& physicalDevice() { return m_physicalDevice; }
@@ -32,6 +31,8 @@ public:
     vk::Device operator*() { return m_device; }
     vk::Device* operator->() { return &m_device; }
 
+    auto getMSAASamples() const { return m_msaaSamples; }
+
 private:
     void createInstance();
 
@@ -39,6 +40,8 @@ private:
                            VkDebugUtilsMessageTypeFlagsEXT messageType,
                            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData);
     void setupDebugMessenger();
+
+    vk::SampleCountFlagBits getMaxUsableSampleCount();
 
 private:
     GLFWwindow* m_window;

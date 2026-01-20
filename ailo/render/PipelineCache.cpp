@@ -9,7 +9,9 @@ ailo::Pipeline::Pipeline(
     vk::Device device,
     const resource_ptr<gpu::Program>& programPtr,
     vk::RenderPass renderPass,
-    const gpu::VertexBufferLayout& vertexInput)
+    const gpu::VertexBufferLayout& vertexInput,
+    const gpu::FrameBufferFormat& format
+    )
         : m_device(device),
         m_programPtr(programPtr) {
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
@@ -55,7 +57,7 @@ ailo::Pipeline::Pipeline(
     // Multisampling
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.rasterizationSamples = format.samples;
 
     // Depth and stencil testing
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
@@ -146,7 +148,7 @@ ailo::resource_ptr<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
         return *ptr;
     }
 
-    resource_ptr<Pipeline> pipeline = resource_ptr<Pipeline>::make(*m_pipelines, m_device, m_pipelineState.program, m_pipelineState.renderPass, m_pipelineState.vertexLayout);
+    resource_ptr<Pipeline> pipeline = resource_ptr<Pipeline>::make(*m_pipelines, m_device, m_pipelineState.program, m_pipelineState.renderPass, m_pipelineState.vertexLayout, m_pipelineState.frameBufferFormat);
     auto [it, result] = m_cache.tryEmplace(query, pipeline);
     assert(result);
     assert(it->second);

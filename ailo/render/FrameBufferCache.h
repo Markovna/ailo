@@ -25,12 +25,13 @@ private:
 class FrameBufferCache {
 private:
     struct CacheKey {
-        PerColorAttachment<vk::Format> colorFormat;
+        // TODO: replace with render target id
         PerColorAttachment<vk::ImageView> color;
-        vk::Format depthFormat;
+        PerColorAttachment<vk::ImageView> resolve;
         vk::ImageView depth;
         uint32_t width {};
         uint32_t height {};
+        vk::SampleCountFlagBits samples {};
 
         bool operator==(const CacheKey& other) const = default;
     };
@@ -38,16 +39,14 @@ private:
     struct CacheKeyHash {
         std::size_t operator()(const CacheKey& key) const {
             size_t seed = 0;
-            for (auto& format : key.colorFormat) {
-                utils::hash_combine(seed, static_cast<VkFormat>(format));
-            }
-            for (auto& imageView : key.color) {
-                utils::hash_combine(seed, static_cast<VkImageView>(imageView));
+            for (size_t i = 0; i < key.color.size(); i++) {
+                utils::hash_combine(seed, static_cast<VkImageView>(key.color[i]));
+                utils::hash_combine(seed, static_cast<VkImageView>(key.resolve[i]));
             }
             utils::hash_combine(seed, static_cast<VkImageView>(key.depth));
-            utils::hash_combine(seed, static_cast<VkFormat>(key.depthFormat));
             utils::hash_combine(seed, key.width);
             utils::hash_combine(seed, key.height);
+            utils::hash_combine(seed, key.samples);
             return seed;
         }
     };

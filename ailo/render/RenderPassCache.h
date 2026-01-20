@@ -20,7 +20,8 @@ struct AttachmentDescription {
 
 struct RenderPassCacheQuery {
     std::array<AttachmentDescription, kMaxColorAttachments + 1> attachments {};
-    std::bitset<kMaxColorAttachments + 1> attachmentsUsed {};
+    std::bitset<kMaxColorAttachments> hasResolve {};
+    vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
 
     bool operator==(const RenderPassCacheQuery& other) const = default;
 };
@@ -49,7 +50,8 @@ class RenderPassCache {
                 utils::hash_combine(seed, color.storeOp);
                 utils::hash_combine(seed, color.format);
             }
-            utils::hash_combine(seed, query.attachmentsUsed);
+            utils::hash_combine(seed, query.hasResolve);
+            utils::hash_combine(seed, query.samples);
             return seed;
         }
     };

@@ -9,15 +9,22 @@ FrameBuffer::FrameBuffer(
     uint32_t width, uint32_t height)
         : m_device(device) {
 
-    std::array<vk::ImageView, views.color.size() + 1> attachments;
+    std::array<vk::ImageView, 2 * views.color.size() + 1> attachments;
     uint32_t attachmentCount = 0;
     for (size_t i = 0; i < views.color.size(); i++) {
         if (views.color[i] != VK_NULL_HANDLE) {
             attachments[attachmentCount++] = views.color[i];
         }
     }
+    for (size_t i = 0; i < views.resolve.size(); i++) {
+        if (views.resolve[i] != VK_NULL_HANDLE) {
+            attachments[attachmentCount++] = views.resolve[i];
+        }
+    }
 
-    attachments[attachmentCount++] = views.depth;
+    if (views.depth != VK_NULL_HANDLE) {
+        attachments[attachmentCount++] = views.depth;
+    }
 
     vk::FramebufferCreateInfo framebufferInfo{};
     framebufferInfo.renderPass = renderPass;
@@ -38,12 +45,11 @@ FrameBuffer& FrameBufferCache::getOrCreate(vk::RenderPass renderPass, const gpu:
     const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height) {
 
     CacheKey query {
-        .colorFormat = formats.color,
         .color = views.color,
-        .depthFormat = formats.depth,
         .depth = views.depth,
         .width = width,
-        .height = height
+        .height = height,
+        .samples = formats.samples
     };
 
     auto [it, result] = m_cache.tryEmplace(query, m_device, renderPass, views, width, height);

@@ -12,7 +12,7 @@ namespace ailo {
 
 class Pipeline : public enable_resource_ptr<Pipeline> {
 public:
-    Pipeline(vk::Device device, const resource_ptr<gpu::Program>& program, vk::RenderPass renderPass, const gpu::VertexBufferLayout& vertexInput);
+    Pipeline(vk::Device device, const resource_ptr<gpu::Program>& program, vk::RenderPass renderPass, const gpu::VertexBufferLayout& vertexInput, const gpu::FrameBufferFormat& format);
     ~Pipeline();
 
     vk::Pipeline operator*() const noexcept { return m_pipeline; }

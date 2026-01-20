@@ -137,10 +137,13 @@ struct DescriptorSet {
 struct FrameBufferFormat {
     PerColorAttachment<vk::Format> color {};
     vk::Format depth = vk::Format::eUndefined;
+    ColorAttachmentMask hasResolve {};
+    vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
 };
 
 struct FrameBufferImageView {
     PerColorAttachment<vk::ImageView> color {};
+    PerColorAttachment<vk::ImageView> resolve {};
     vk::ImageView depth {};
 };
 

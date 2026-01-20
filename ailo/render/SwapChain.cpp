@@ -8,13 +8,10 @@
 namespace ailo {
 
 SwapChain::SwapChain(VulkanDevice& device) {
-    vk::Device vkDevice = device.device();
     vk::SurfaceFormatKHR surfaceFormat = device.getSurfaceFormat();
     vk::PresentModeKHR presentMode = device.getPresentMode();
     vk::Extent2D extent = device.getSwapExtent();
     vk::Format depthFormat = device.getDepthFormat();
-
-    m_depth.emplace(vkDevice, device.physicalDevice(), depthFormat, 1, extent.width, extent.height, vk::Filter{}, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageAspectFlagBits::eDepth);
 
     auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
 
@@ -48,14 +45,36 @@ SwapChain::SwapChain(VulkanDevice& device) {
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = nullptr;
 
-    m_swapchain = vkDevice.createSwapchainKHR(createInfo);
-    auto swapchainImages = vkDevice.getSwapchainImagesKHR(m_swapchain);
+    m_swapchain = device->createSwapchainKHR(createInfo);
+    auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
     m_colors.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
-        m_colors.emplace_back(vkDevice, image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor);
+        m_colors.emplace_back(*device, image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor);
 
         vk::SemaphoreCreateInfo semaphoreInfo{};
-        m_renderFinishedSemaphores.push_back(vkDevice.createSemaphore(semaphoreInfo));
+        m_renderFinishedSemaphores.push_back(device->createSemaphore(semaphoreInfo));
+    }
+
+    auto samples = vk::SampleCountFlagBits::e4;
+    samples = std::min(samples, device.getMSAASamples());
+    
+    m_depth.emplace(
+        *device, device.physicalDevice(),
+        depthFormat, 1, extent.width, extent.height, vk::Filter{},
+        vk::ImageUsageFlagBits::eDepthStencilAttachment,
+        vk::ImageAspectFlagBits::eDepth,
+        samples);
+
+    if (samples != vk::SampleCountFlagBits::e1) {
+        m_msaa.reserve(m_colors.size());
+        for (size_t i = 0; i < m_colors.size(); i++) {
+            m_msaa.emplace_back(
+                *device, device.physicalDevice(),
+                surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
+                vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+                vk::ImageAspectFlagBits::eColor,
+                samples);
+        }
     }
 }
 
