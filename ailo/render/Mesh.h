@@ -12,7 +12,7 @@ class Engine;
 struct Mesh {
     std::unique_ptr<VertexBuffer> vertexBuffer;
     std::unique_ptr<BufferObject> indexBuffer;
-    std::vector<std::unique_ptr<Material>> materials;
+    std::vector<std::shared_ptr<Material>> materials;
 
     std::vector<RenderPrimitive> primitives;
 };

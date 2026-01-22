@@ -17,8 +17,10 @@ layout (set = 0, binding = 0, std140) uniform perView {
    vec4 ambientLightColorIntensity;
 } view;
 
-layout (set = 0, binding = 1, std140) uniform perLight {
-    LightUniform light;
+#define DYNAMIC_LIGHTS_COUNT 3
+layout (set = 0, binding = 1, std140)
+uniform perLight {
+    LightUniform lights[DYNAMIC_LIGHTS_COUNT];
 };
 
 layout(set = 2, binding = 0) uniform sampler2D texSampler;
@@ -44,7 +46,7 @@ float getAngleAttenuation(vec3 lightDir, vec3 posToLight, vec2 scaleOffset) {
     return attenuation * attenuation;
 }
 
-vec3 pointLight(LightUniform light, vec3 surfaceNormal, vec3 viewDir) {
+vec3 getPointLight(LightUniform light, vec3 surfaceNormal, vec3 viewDir) {
     vec3 lightPos = light.positionRadius.xyz;
     float radius = light.positionRadius.w;
 
@@ -87,7 +89,10 @@ void main() {
     vec3 viewDir = normalize(cameraPosWorld - fragPosWorld);
 
     vec3 directionalLight = directionalLight(view.lightDirection, view.lightColorIntensity, surfaceNormal, viewDir);
-    vec3 pointLight = pointLight(light, surfaceNormal, viewDir);
+    vec3 pointLight = vec3(0.0);
+    for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
+        pointLight += getPointLight(lights[i], surfaceNormal, viewDir);
+    }
 
     vec3 ambientLight = view.ambientLightColorIntensity.rgb * view.ambientLightColorIntensity.w;
 

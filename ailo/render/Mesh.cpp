@@ -167,13 +167,18 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     std::filesystem::path modelPath(path);
     std::string modelDirectory = modelPath.parent_path().string();
 
+    // Create shader (shared by all meshes)
+    auto shader = engine.loadShader(Shader::getDefaultShaderDescription());
+
+    std::vector<std::shared_ptr<Material>> materials;
+    materials.resize(aiscene->mNumMaterials);
+
     // Process materials and load textures
-    std::vector<std::tuple<Texture*, Texture*>> textures;
-    textures.resize(aiscene->mNumMaterials);
 
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* material = aiscene->mMaterials[i];
-        auto& [diffuse, normalMap] = textures[i];
+        Texture* diffuse = nullptr;
+        Texture* normalMap = nullptr;
 
         // Try to get the diffuse texture
         if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
@@ -196,6 +201,15 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
                     loadedTextures.push_back(std::move(texture));
                 }
             }
+        }
+
+
+        materials[i] = std::make_shared<Material>(engine, shader);
+        if (diffuse) {
+            materials[i]->setTexture(0, diffuse);
+        }
+        if (normalMap) {
+            materials[i]->setTexture(1, normalMap);
         }
     }
 
@@ -249,8 +263,6 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     tangentAttr.offset = offsetof(Vertex, tangent);
     vertexInput.attributes.push_back(tangentAttr);
 
-    // Create shader (shared by all meshes)
-    auto shader = engine.loadShader(Shader::getDefaultShaderDescription());
 
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
@@ -280,17 +292,11 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         );
         mesh.indexBuffer->updateBuffer(engine, meshData.indices.data(), sizeof(uint16_t) * meshData.indices.size());
 
-        auto material = std::make_unique<Material>(engine, shader);
+        auto material = materials[meshData.materialIndex];
 
         // Assign texture to material if available
-        if (meshData.materialIndex < textures.size()) {
-            auto& [diffuse, normalMap] = textures[meshData.materialIndex];
-            if (diffuse) {
-                material->setTexture(0, diffuse);
-            }
-            if (normalMap) {
-                material->setTexture(1, normalMap);
-            }
+        if (meshData.materialIndex < materials.size()) {
+            mesh.materials.emplace_back(materials[meshData.materialIndex]);
         }
 
         // Create a single primitive for this mesh
@@ -300,7 +306,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         primitive.setMaterial(material.get());
         mesh.primitives.push_back(primitive);
 
-        mesh.materials.push_back(std::move(material));
+        mesh.materials.emplace_back(material);
     }
 
     return entities;

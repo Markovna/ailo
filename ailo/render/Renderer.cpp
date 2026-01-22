@@ -36,11 +36,14 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
   // prepare lights data
-  m_lightUniformsBufferData.lightPositionRadius = glm::vec4(0.0f, 9.0f, 0.0f, 1);
-  m_lightUniformsBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 9.0f);
-  m_lightUniformsBufferData.direction = glm::vec3(0.0f, 1.0f, 0.0f);
-  m_lightUniformsBufferData.type = 0; // 0 - point, 1 - spot
-  m_lightUniformsBufferData.scaleOffset = getSpotLightScaleOffset(glm::radians(22.0), glm::radians(29.0));
+  for (size_t i = 0; i < kLightUniformArraySize; i++) {
+    auto& light = m_lightUniformsBufferData[i];
+    light.lightPositionRadius = glm::vec4(i * 4.0f, 9.0f, 0.0f, 1);
+    light.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 9.0f);
+    light.direction = glm::vec3(0.0f, 1.0f, 0.0f);
+    light.type = 0; // 0 - point, 1 - spot
+    light.scaleOffset = getSpotLightScaleOffset(glm::radians(22.0), glm::radians(29.0));
+  }
 
   RenderAPI* backend = engine.getRenderAPI();
 
@@ -150,7 +153,7 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   }
 
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
-  backend.updateBuffer(m_lightsUniformBufferHandle, &m_lightUniformsBufferData, sizeof(m_lightUniformsBufferData));
+  backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 }
 

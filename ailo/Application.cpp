@@ -263,7 +263,7 @@ void Application::cleanup() {
     mesh.vertexBuffer->destroy(*m_engine);
     mesh.indexBuffer->destroy(*m_engine);
     for (auto& material : mesh.materials) {
-      material->destroy(*m_engine);
+      // material->destroy(*m_engine);
     }
   }
   m_scene.reset();

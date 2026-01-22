@@ -17,8 +17,10 @@ layout (set = 0, binding = 0, std140) uniform perView {
    vec4 ambientLightColorIntensity;
 } view;
 
-layout (set = 0, binding = 1, std140) uniform perLight {
-    LightUniform light;
+#define DYNAMIC_LIGHTS_COUNT 3
+layout (set = 0, binding = 1, std140)
+uniform perLight {
+    LightUniform lights[DYNAMIC_LIGHTS_COUNT];
 };
 
 layout (set = 1, binding = 0, std140) uniform perObject {

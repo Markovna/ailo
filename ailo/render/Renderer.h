@@ -95,7 +95,7 @@ private:
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
-  LightUniform m_lightUniformsBufferData {};
+  std::array<LightUniform, kLightUniformArraySize> m_lightUniformsBufferData {};
 
   BufferHandle m_objectsUniformBufferHandle;
   BufferHandle m_viewUniformBufferHandle;
