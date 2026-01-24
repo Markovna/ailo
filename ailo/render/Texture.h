@@ -14,7 +14,7 @@ public:
 
     TextureHandle getHandle() const { return m_handle; }
 
-    static std::unique_ptr<Texture> createFromFile(Engine&, const std::string& path, bool mipmaps = false);
+    static std::unique_ptr<Texture> createFromFile(Engine&, const std::string& path, vk::Format format, bool mipmaps = false);
 
 private:
     TextureHandle m_handle;

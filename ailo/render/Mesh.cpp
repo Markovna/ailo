@@ -19,7 +19,7 @@ struct Vertex {
     glm::vec3 color;
     glm::vec2 texCoord;
     glm::vec3 normal;
-    glm::vec3 tangent;
+    glm::vec4 tangent;
 };
 
 // Helper function to convert aiMatrix4x4 to glm::mat4
@@ -41,7 +41,7 @@ struct MeshData {
 };
 
 // Helper function to load texture from file
-static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory) {
+static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
     // Construct full texture path
     std::filesystem::path fullPath;
 
@@ -53,7 +53,7 @@ static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& t
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
 
-    return Texture::createFromFile(engine, fullPath.string(), true);
+    return Texture::createFromFile(engine, fullPath.string(), format, true);
 }
 
 // Recursive function to traverse scene hierarchy and extract meshes with transforms
@@ -108,22 +108,35 @@ static void processNode(
 
             if (aiMesh->mNormals) {
                 vertex.normal = glm::vec3(
-                    (aiMesh->mNormals[v].x + 1.0f) * 0.5f,
-                    (aiMesh->mNormals[v].y + 1.0f) * 0.5f,
-                    (aiMesh->mNormals[v].z + 1.0f) * 0.5f
+                    (aiMesh->mNormals[v].x),
+                    (aiMesh->mNormals[v].y),
+                    (aiMesh->mNormals[v].z)
                 );
             } else {
                 vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
             }
 
             if (aiMesh->mTangents) {
-                vertex.tangent = glm::vec3(
-                    (aiMesh->mTangents[v].x + 1.0f) * 0.5f,
-                    (aiMesh->mTangents[v].y + 1.0f) * 0.5f,
-                    (aiMesh->mTangents[v].z + 1.0f) * 0.5f
+                vertex.tangent = glm::vec4(
+                    (aiMesh->mTangents[v].x),
+                    (aiMesh->mTangents[v].y),
+                    (aiMesh->mTangents[v].z),
+                    1.0
                 );
+
+                glm::vec3 calculatedBitangent = glm::cross(
+                    glm::vec3(vertex.normal),
+                    glm::vec3(vertex.tangent)
+                );
+                glm::vec3 biTangent = {
+                    aiMesh->mBitangents[i].x,
+                    aiMesh->mBitangents[i].y,
+                    aiMesh->mBitangents[i].z
+                };
+
+                vertex.tangent.w = (glm::dot(calculatedBitangent, biTangent) > 0.0f) ? 1.0f : -1.0f;
             } else {
-                vertex.tangent = glm::vec3(0.0f, 0.0f, 0.0f);
+                vertex.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
             }
 
             meshData.vertices.push_back(vertex);
@@ -136,7 +149,6 @@ static void processNode(
                 meshData.indices.push_back(static_cast<uint16_t>(face.mIndices[j]));
             }
         }
-
         meshDataList.push_back(std::move(meshData));
     }
 
@@ -156,8 +168,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         aiProcess_Triangulate |
         aiProcess_FlipUVs |
         aiProcess_GenNormals |
-        aiProcess_CalcTangentSpace |
-        aiProcess_JoinIdenticalVertices);
+        aiProcess_CalcTangentSpace);
 
     if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode) {
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
@@ -179,6 +190,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         aiMaterial* material = aiscene->mMaterials[i];
         Texture* diffuse = nullptr;
         Texture* normalMap = nullptr;
+        Texture* metallicRoughnessMap = nullptr;
 
         // Try to get the diffuse texture
         if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
@@ -195,9 +207,20 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
             aiString texturePath;
             if (material->GetTexture(aiTextureType_NORMALS, 0, &texturePath) == AI_SUCCESS) {
-                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
+                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory, vk::Format::eR8G8B8A8Unorm);
                 if (texture) {
                     normalMap = texture.get();
+                    loadedTextures.push_back(std::move(texture));
+                }
+            }
+        }
+
+        if (material->GetTextureCount(aiTextureType_GLTF_METALLIC_ROUGHNESS) > 0) {
+            aiString texturePath;
+            if (material->GetTexture(aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &texturePath) == AI_SUCCESS) {
+                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
+                if (texture) {
+                    metallicRoughnessMap = texture.get();
                     loadedTextures.push_back(std::move(texture));
                 }
             }
@@ -210,6 +233,10 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         }
         if (normalMap) {
             materials[i]->setTexture(1, normalMap);
+        }
+        if (metallicRoughnessMap) {
+            materials[i]->setTexture(2, metallicRoughnessMap);
+
         }
     }
 
@@ -259,7 +286,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     vk::VertexInputAttributeDescription tangentAttr{};
     tangentAttr.binding = 0;
     tangentAttr.location = 4;
-    tangentAttr.format = vk::Format::eR32G32B32Sfloat;
+    tangentAttr.format = vk::Format::eR32G32B32A32Sfloat;
     tangentAttr.offset = offsetof(Vertex, tangent);
     vertexInput.attributes.push_back(tangentAttr);
 

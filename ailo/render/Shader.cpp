@@ -27,8 +27,8 @@ void Shader::destroy(Engine& engine) {
 
 ShaderDescription& Shader::getDefaultShaderDescription() {
     static ShaderDescription shaderDescription {
-        .vertexShader = os::readFile("shaders/shader.vert.spv"),
-        .fragmentShader = os::readFile("shaders/shader.frag.spv"),
+        .vertexShader = os::readFile("shaders/pbr.vert.spv"),
+        .fragmentShader = os::readFile("shaders/pbr.frag.spv"),
         .raster = RasterDescription {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
@@ -46,6 +46,11 @@ ShaderDescription& Shader::getDefaultShaderDescription() {
                   },
                     {
                         .binding = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                    },
+                    {
+                        .binding = 2,
                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                         .stageFlags = vk::ShaderStageFlagBits::eFragment,
                     }

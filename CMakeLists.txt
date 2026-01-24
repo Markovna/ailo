@@ -113,18 +113,42 @@ endif()
 
 # Shader compilation function
 function(add_shader TARGET SHADER)
-    get_filename_component(FILE_NAME ${SHADER} NAME)
-    get_filename_component(FILE_EXT ${FILE_NAME} LAST_EXT)
-    string(REPLACE "." "_" SHADER_NAME ${FILE_NAME})
+    # Parse optional arguments: NAME and DEFINES
+    set(options "")
+    set(oneValueArgs NAME)
+    set(multiValueArgs DEFINES)
+    cmake_parse_arguments(SHADER_ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(SPIRV "${CMAKE_BINARY_DIR}/shaders/${FILE_NAME}.spv")
+    get_filename_component(FILE_NAME ${SHADER} NAME_WE)
+    get_filename_component(FILE_EXT ${SHADER} EXT)
+    string(SUBSTRING ${FILE_EXT} 1 -1 FILE_EXT)  # Remove the dot
+
+    # Use custom name if provided, otherwise use filename
+    if(SHADER_ARG_NAME)
+        set(OUTPUT_NAME ${SHADER_ARG_NAME})
+    else()
+        set(OUTPUT_NAME ${FILE_NAME})
+    endif()
+
+    # Add defines suffix if defines are provided
+    if(SHADER_ARG_DEFINES)
+        string(REPLACE ";" "_" DEFINES_SUFFIX "${SHADER_ARG_DEFINES}")
+    endif()
+
+    set(SPIRV ${CMAKE_BINARY_DIR}/shaders/${OUTPUT_NAME}.${FILE_EXT}.spv)
+
+    # Build define flags for glslc
+    set(DEFINE_FLAGS "")
+    foreach(DEFINE ${SHADER_ARG_DEFINES})
+        list(APPEND DEFINE_FLAGS "-D${DEFINE}")
+    endforeach()
 
     add_custom_command(
-        OUTPUT ${SPIRV}
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/"
-        COMMAND ${GLSLC} ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
-        DEPENDS ${CMAKE_SOURCE_DIR}/${SHADER}
-        COMMENT "Compiling shader ${FILE_NAME}"
+            OUTPUT ${SPIRV}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/"
+            COMMAND ${GLSLC} -I${CMAKE_SOURCE_DIR}/shaders ${DEFINE_FLAGS} ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
+            DEPENDS ${CMAKE_SOURCE_DIR}/${SHADER}
+            COMMENT "Compiling shader ${OUTPUT_NAME}.${FILE_EXT}.spv with defines: ${SHADER_ARG_DEFINES}"
     )
 
     set_source_files_properties(${SPIRV} PROPERTIES GENERATED TRUE)
@@ -136,3 +160,5 @@ add_shader(ailo shaders/shader.vert)
 add_shader(ailo shaders/shader.frag)
 add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
+add_shader(ailo shaders/pbr.vert)
+add_shader(ailo shaders/pbr.frag NAME pbr DEFINES USE_NORMAL_MAP)

@@ -28,7 +28,7 @@ void Texture::destroy(Engine& engine) {
     engine.getRenderAPI()->destroyTexture(m_handle);
 }
 
-std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, bool mipmaps) {
+std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
     // Load texture
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -38,7 +38,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
 
     uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
-    auto tex = std::make_unique<Texture>(engine, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, vk::Filter::eLinear, mipmaps ? mipLevels : 1);
+    auto tex = std::make_unique<Texture>(engine, format, texWidth, texHeight, vk::Filter::eLinear, mipmaps ? mipLevels : 1);
     tex->updateImage(engine, pixels, texWidth * texHeight * 4);
     stbi_image_free(pixels);
     if (mipmaps) {

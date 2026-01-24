@@ -32,7 +32,7 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.4f);
-  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(3.0f, 5.0f, -3.0f));
+  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 1.0f, 1.0f));
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
   // prepare lights data
