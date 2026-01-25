@@ -9,19 +9,20 @@ float D_GGX(float roughness, float NoH, const vec3 n, const vec3 h) {
     return saturateMediump(d);
 }
 
-float DistributionGGX(float roughness, float NoH) {
-    float a = roughness;
-    float a2 = a * a;
-    float NoH2 = NoH * NoH;
+// from learn-opengl
+float DistributionGGX(float roughness, float NoH)
+{
+    float a2 = roughness * roughness;
+    float NoH2 = NoH*NoH;
 
-    float nom = a2;
     float denom = (NoH2 * (a2 - 1.0) + 1.0);
-    denom = PI * denom * denom;
+    denom = denom * denom;
 
-    return nom / denom;
+    return (a2 / denom) * (1.0 / PI);
 }
 
 float distribution(float roughness, float NoH, const vec3 n, const vec3 h) {
+    return DistributionGGX(roughness, NoH);
     return D_GGX(roughness, NoH, n, h);
 }
 
@@ -49,19 +50,19 @@ vec3 F_Schlick(const vec3 f0, float f90, float VoH) {
  }
 
  vec3 F_Schlick(const vec3 f0, float VoH) {
-     float f = pow(1.0 - VoH, 5.0);
+     float f = pow5(1.0 - VoH);
      return f + f0 * (1.0 - f);
  }
 
- float F_Schlick(float f0, float f90, float VoH) {
-     return f0 + (f90 - f0) * pow5(1.0 - VoH);
- }
+float F_Schlick(float f0, float f90, float VoH) {
+    return f0 + (f90 - f0) * pow5(1.0 - VoH);
+}
 
 // Disney BRDF
-float Fd_Burley(float NoV, float NoL, float LoH, float roughness) {
+float Fd_Burley(float roughness, float NoV, float NoL, float LoH) {
     float f90 = 0.5 + 2.0 * roughness * LoH * LoH;
-    float lightScatter = F_Schlick(NoL, 1.0, f90);
-    float viewScatter = F_Schlick(NoV, 1.0, f90);
+    float lightScatter = F_Schlick(1.0, f90, NoL);
+    float viewScatter  = F_Schlick(1.0, f90, NoV);
     return lightScatter * viewScatter * (1.0 / PI);
 }
 
@@ -74,8 +75,8 @@ vec3 fresnel(const vec3 f0, float LoH) {
 }
 
 float diffuse(float roughness, float NoV, float NoL, float LoH) {
-    return Fd_Lambert();
-    //return Fd_Burley(roughness, NoV, NoL, LoH);
+    //return Fd_Lambert();
+    return Fd_Burley(roughness, NoV, NoL, LoH);
 }
 
 float visibility(float roughness, float NoV, float NoL) {

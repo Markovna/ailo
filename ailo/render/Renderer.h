@@ -17,7 +17,7 @@ struct PerViewUniforms {
 };
 
 struct LightUniform {
-  glm::vec4 lightPositionRadius;
+  glm::vec4 lightPositionFalloff;
   glm::vec4 lightColorIntensity;
   glm::vec3 direction;
   uint32_t type; // 0-point, 1-spot

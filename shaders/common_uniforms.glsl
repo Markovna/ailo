@@ -1,4 +1,3 @@
-
 struct ViewUniform {
    mat4 projection;
    mat4 view;
@@ -9,7 +8,7 @@ struct ViewUniform {
 };
 
 struct LightUniform {
-    vec4 positionRadius;
+    vec4 positionFalloff;
     vec4 colorIntensity;
     vec3 direction;
     uint type;
@@ -22,7 +21,10 @@ struct ObjectUniform {
     mat4 modelInverseTranspose;
 };
 
-#define DYNAMIC_LIGHTS_COUNT 3
+#define DYNAMIC_LIGHTS_COUNT 2
+
+const int POINT_LIGHT_TYPE = 0;
+const int SPOT_LIGHT_TYPE = 1;
 
 layout (set = 0, binding = 0, std140)
 uniform perFrame_view {

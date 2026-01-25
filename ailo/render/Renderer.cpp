@@ -31,15 +31,17 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.4f);
-  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(1.0f, 1.0f, 1.0f));
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.8f);
+  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(0.5f, 0.5f, 0.5f));
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
   // prepare lights data
   for (size_t i = 0; i < kLightUniformArraySize; i++) {
     auto& light = m_lightUniformsBufferData[i];
-    light.lightPositionRadius = glm::vec4(i * 4.0f, 9.0f, 0.0f, 1);
-    light.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 9.0f);
+    float radius = 2.0f;
+
+    light.lightPositionFalloff = glm::vec4(i * 4.0f, 1.0f, 0.8f, 1.0f / (radius * radius));
+    light.lightColorIntensity = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
     light.direction = glm::vec3(0.0f, 1.0f, 0.0f);
     light.type = 0; // 0 - point, 1 - spot
     light.scaleOffset = getSpotLightScaleOffset(glm::radians(22.0), glm::radians(29.0));
@@ -54,7 +56,7 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
   renderPass.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare };
 
-  backend->beginRenderPass(renderPass, vk::ClearColorValue(1.0f, 1.0f, 1.0f, 1.0f));
+  backend->beginRenderPass(renderPass, vk::ClearColorValue(0.1f, 0.1f, 0.3f, 1.0f));
 
   PipelineState pipelineState {};
 

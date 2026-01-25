@@ -16,8 +16,8 @@ layout(set = 2, binding = 2) uniform sampler2D metallicRoughnessMap;
 
 layout(location = 0) out vec4 outColor;
 
-vec3 shading_view;
 mat3 shading_tangentToWorld;
+vec3 shading_view;
 vec3 shading_normal;
 float shading_NoV;
 
@@ -25,8 +25,40 @@ struct Light {
     vec4 colorIntensity;
     vec3 l;
     float NoL;
+    vec3 position;
     float attenuation;
+    vec3 direction;
 };
+
+struct Pixel {
+    vec3 f0;
+    float reflectance;
+    vec3 diffuseColor;
+    float perceptualRoughness;
+    vec3 baseColor;
+    float metallic;
+    float roughness;
+};
+
+void getPixel(out Pixel pixel) {
+    vec3 baseColor = texture(baseColorMap, fragUV).rgb;
+
+    vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
+    float metallic = metallicRoughness.b;
+    float roughness = metallicRoughness.g;
+
+    pixel.baseColor = baseColor;
+    pixel.perceptualRoughness = roughness;
+    pixel.roughness = roughness * roughness;
+    pixel.metallic = metallic;
+
+    pixel.diffuseColor = baseColor.rgb * (1.0 - metallic);
+
+    const float reflectance = 0.5;
+    pixel.reflectance = 0.16 * reflectance * reflectance;
+
+    pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
+}
 
 vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float NoH, float LoH) {
     float D = distribution(roughness, NoH, shading_normal, h);
@@ -36,28 +68,68 @@ vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float 
     return (D * V) * F;
 }
 
-vec3 surfaceShading(vec3 baseColor, float metallic, float perceptualRoughness, const Light light, float occlusion) {
+vec3 surfaceShading(const Pixel pixel, const Light light, float occlusion) {
     vec3 h = normalize(shading_view + light.l);
-    float NoV = abs(shading_NoV) + 1e-5;
+    //float NoV = max(abs(shading_NoV), 1e-5);
+    float NoV = max(shading_NoV, 1e-5);
     float NoL = light.NoL;
     float NoH = clamp01(dot(shading_normal, h));
     float LoH = clamp01(dot(light.l, h));
 
-    float reflectance = 0.5;
-    reflectance = 0.16 * reflectance * reflectance;
+    vec3 Fr = specularLobe(pixel.f0, pixel.roughness, h, NoV, NoL, NoH, LoH);
+    vec3 Fd = pixel.diffuseColor * diffuse(pixel.roughness, NoV, NoL, LoH);
 
-    vec3 f0 = baseColor.rgb * metallic + reflectance * (1.0 - metallic);
-
-    float roughness = perceptualRoughness * perceptualRoughness ;
-
-    vec3 Fr = specularLobe(f0, roughness, h, NoV, NoL, NoH, LoH);
-
-    vec3 diffuseColor = baseColor.rgb * (1.0 - metallic);
-    vec3 Fd = diffuseColor * diffuse(roughness, NoV, NoL, LoH);
-
-    vec3 color = Fd + Fr;// * energyCompensation;
+    vec3 color = Fd + Fr;// * pixel.energyCompensation;
     return (color * light.colorIntensity.rgb) *
                 (light.colorIntensity.w * light.attenuation * NoL * occlusion);
+}
+
+float getSquareFalloffAttenuation(float distanceSquare, float falloff) {
+    float factor = distanceSquare * falloff;
+    float smoothFactor = clamp01(1.0 - factor * factor);
+    // We would normally divide by the square distance here
+    // but we do it at the call site
+    return smoothFactor * smoothFactor;
+}
+
+float getDistanceAttenuation(const vec3 posToLight, const vec3 posToCamera, float falloff) {
+    float distanceSquare = dot(posToLight, posToLight);
+    float attenuation = getSquareFalloffAttenuation(distanceSquare, falloff);
+
+    // light far attenuation
+    // attenuation *= clamp01(view.lightFarAttenuationParams.x - dot(posToCamera, posToCamera) * view.lightFarAttenuationParams.y);
+    return attenuation / max(distanceSquare, 1e-4);
+}
+
+float getAngleAttenuation(const vec3 lightDir, const vec3 l, const vec2 scaleOffset) {
+     float cd = dot(lightDir, l);
+     float attenuation = clamp01(cd * scaleOffset.x + scaleOffset.y);
+     return attenuation * attenuation;
+ }
+
+Light getLight(int index) {
+    vec3 position = lights[index].positionFalloff.xyz;
+    float falloff = lights[index].positionFalloff.w;
+    vec3 direction = lights[index].direction;
+    vec2 scaleOffset = lights[index].scaleOffset;
+    vec4 colorIntensity = lights[index].colorIntensity;
+
+    vec3 posToLight = position - fragPosWorld;
+    vec3 posToCamera = view.viewInverse[3].xyz - fragPosWorld;
+
+    Light light;
+    light.colorIntensity = colorIntensity;
+    light.l = normalize(posToLight);
+    light.NoL = clamp01(dot(shading_normal, light.l));
+    light.attenuation = getDistanceAttenuation(posToLight, posToCamera, falloff);
+    light.position = position;
+    light.direction = direction;
+
+    if(lights[index].type == SPOT_LIGHT_TYPE) {
+        light.attenuation *= getAngleAttenuation(-direction, light.l, scaleOffset);
+    }
+
+    return light;
 }
 
 Light getDirectionalLight() {
@@ -69,12 +141,6 @@ Light getDirectionalLight() {
     return light;
 }
 
-vec3 directionToRgb(vec3 dir) {
-    return vec3(0.5 + 0.5 * dir.xyz);
-}
-
-const float blinnPhongExponent = 128.0;
-
 vec3 blingPhong(const Light light) {
     vec3 h = normalize(shading_view + light.l);
     float NoL = light.NoL;
@@ -82,6 +148,7 @@ vec3 blingPhong(const Light light) {
 
     vec3 diffuseLight = light.colorIntensity.rgb * light.colorIntensity.w * NoL;
 
+    const float blinnPhongExponent = 128.0;
     float blinnTerm = pow(NoH, blinnPhongExponent);
     vec3 specularLight = diffuseLight * blinnTerm;
     return diffuseLight + specularLight;
@@ -95,8 +162,7 @@ void main() {
     shading_tangentToWorld = mat3(t, b, n);
 
     vec3 sv = view.projection[2].w != 0.0 ? // is perspective projection?
-            (view.viewInverse[3].xyz - fragPosWorld) :
-             view.viewInverse[2].xyz;
+            (view.viewInverse[3].xyz - fragPosWorld) : view.viewInverse[2].xyz;
 
     shading_view = normalize(sv);
 
@@ -110,25 +176,20 @@ void main() {
 
     shading_NoV = dot(shading_normal, shading_view);
 
-    vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
-    float metallic = metallicRoughness.b;
-    float roughness = metallicRoughness.g;
+    Pixel pixel;
+    getPixel(pixel);
 
-    vec3 baseColor = texture(baseColorMap, fragUV).rgb;
-
-    baseColor = pow(baseColor, vec3(2.2));
-
+    vec3 color = vec3(0.0);
     Light directionalLight = getDirectionalLight();
+    color += surfaceShading(pixel, directionalLight, 1.0);
 
-    vec3 color = surfaceShading(baseColor.rgb, metallic, roughness, directionalLight, 1.0);
+    for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
+        Light light = getLight(i);
+        color += surfaceShading(pixel, light, 1.0);
+    }
 
-    vec3 ambient = vec3(0.04) * baseColor;
+    vec3 ambient = vec3(0.02) * pixel.baseColor;
     color += ambient;
-
-    // HDR tonemapping
-    // color = color / (color + vec3(1.0));
-
-    baseColor = pow(baseColor, vec3(1.0 / 2.2));
 
     outColor = vec4(color, 1.0);
 }

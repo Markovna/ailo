@@ -112,29 +112,24 @@ static void processNode(
                     (aiMesh->mNormals[v].y),
                     (aiMesh->mNormals[v].z)
                 );
-            } else {
-                vertex.normal = glm::vec3(0.0f, 0.0f, 0.0f);
             }
 
             if (aiMesh->mTangents) {
-                vertex.tangent = glm::vec4(
+                glm::vec3 tangent = glm::vec3(
                     (aiMesh->mTangents[v].x),
                     (aiMesh->mTangents[v].y),
-                    (aiMesh->mTangents[v].z),
-                    1.0
+                    (aiMesh->mTangents[v].z)
+                );
+                glm::vec3 biTangent = glm::vec3(
+                    aiMesh->mBitangents[v].x,
+                    aiMesh->mBitangents[v].y,
+                    aiMesh->mBitangents[v].z
                 );
 
-                glm::vec3 calculatedBitangent = glm::cross(
-                    glm::vec3(vertex.normal),
-                    glm::vec3(vertex.tangent)
-                );
-                glm::vec3 biTangent = {
-                    aiMesh->mBitangents[i].x,
-                    aiMesh->mBitangents[i].y,
-                    aiMesh->mBitangents[i].z
-                };
+                float dot = glm::dot(glm::cross(vertex.normal, tangent), biTangent);
 
-                vertex.tangent.w = (glm::dot(calculatedBitangent, biTangent) > 0.0f) ? 1.0f : -1.0f;
+                vertex.tangent = glm::vec4(tangent, dot);
+
             } else {
                 vertex.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
             }
@@ -289,7 +284,6 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
     tangentAttr.format = vk::Format::eR32G32B32A32Sfloat;
     tangentAttr.offset = offsetof(Vertex, tangent);
     vertexInput.attributes.push_back(tangentAttr);
-
 
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
