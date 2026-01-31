@@ -7,13 +7,13 @@
 
 namespace ailo {
 
-Texture::Texture(Engine& engine, vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, uint8_t levels)
-    : m_handle(engine.getRenderAPI()->createTexture(format, width, height, filter, levels)) {
+Texture::Texture(Engine& engine, TextureType type, vk::Format format, uint32_t width, uint32_t height, uint8_t levels)
+    : m_handle(engine.getRenderAPI()->createTexture(type, format, width, height, levels)) {
 }
 
 void Texture::updateImage(Engine& engine, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset,
-    uint32_t yOffset) {
-    engine.getRenderAPI()->updateTextureImage(m_handle, data, dataSize, width, height, xOffset, yOffset);
+    uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
+    engine.getRenderAPI()->updateTextureImage(m_handle, data, dataSize, width, height, xOffset, yOffset, baseLayer, layerCount);
 }
 
 void Texture::updateImage(Engine& engine, const void* data, size_t dataSize) {
@@ -38,7 +38,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
 
     uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
-    auto tex = std::make_unique<Texture>(engine, format, texWidth, texHeight, vk::Filter::eLinear, mipmaps ? mipLevels : 1);
+    auto tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
     tex->updateImage(engine, pixels, texWidth * texHeight * 4);
     stbi_image_free(pixels);
     if (mipmaps) {

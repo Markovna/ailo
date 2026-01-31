@@ -21,6 +21,7 @@
 #include <vector>
 #include <iostream>
 
+#include "OS.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
 
@@ -83,11 +84,74 @@ void Application::init() {
   m_imguiProcessor = std::make_unique<ailo::ImGuiProcessor>(renderAPI);
   m_imguiProcessor->init();
 
-  // Load textures
-  // m_texture = ailo::Texture::createFromFile(*m_engine, "assets/models/gameboy/Gameboy_low_Gameboy_BaseColor.png");
-  // m_normalMapTexture = ailo::Texture::createFromFile(*m_engine, "assets/models/gameboy/Gameboy_low_Gameboy_Normal.png");
-
   m_camera = std::make_unique<ailo::Camera>();
+
+  auto indexBuffer = ailo::MeshReader::getCubeIndexBuffer(*m_engine);
+  auto vertexBuffer = ailo::MeshReader::getCubeVertexBuffer(*m_engine);
+  auto skybox = m_scene->addEntity();
+  ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox);
+  skyboxMesh.vertexBuffer = std::move(vertexBuffer);
+  skyboxMesh.indexBuffer = std::move(indexBuffer);
+
+  auto skyboxShader = m_engine->loadShader(ailo::ShaderDescription {
+        .vertexShader = ailo::os::readFile("shaders/skybox.vert.spv"),
+        .fragmentShader = ailo::os::readFile("shaders/skybox.frag.spv"),
+        .raster = ailo::RasterDescription {
+            .cullingMode = ailo::CullingMode::FRONT,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = ailo::CompareOp::LESS_OR_EQUAL
+        },
+        .layout = {
+          ailo::DescriptorSetLayoutBindings::perView(),
+          ailo::DescriptorSetLayoutBindings::perObject(),
+            {
+                  {
+                      .binding = 0,
+                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                      .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                  },
+            },
+        }
+  });
+  auto skyboxMaterial = std::make_unique<ailo::Material>(*m_engine, skyboxShader);
+
+  ailo::RenderPrimitive rp(vertexBuffer.get(), indexBuffer.get(), skyboxMaterial.get(), 0, 36);
+  skyboxMesh.primitives.push_back(rp);
+
+  auto loadCubemapTex = [](ailo::Engine& engine, const std::array<std::string, 6>& path) {
+    int texWidth, texHeight;
+    stbi_info(path[0].c_str(), &texWidth, &texHeight, nullptr);
+
+    auto tex = std::make_unique<ailo::Texture>(engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32Sfloat, texWidth, texHeight);
+
+    for (int face = 0; face < 6; face++) {
+      int texChannels;
+      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb);
+      if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+      }
+
+      tex->updateImage(engine, pixels, texWidth * texHeight * texChannels * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
+
+      stbi_image_free(pixels);
+    }
+    return tex;
+  };
+
+  static auto cubemapTex = loadCubemapTex(
+      *m_engine,
+      {
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posx.jpg",
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negx.jpg",
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posy.jpg",
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negy.jpg",
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posz.jpg",
+        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negz.jpg"
+      });
+  skyboxMaterial->setTexture(0, cubemapTex.get());
+  skyboxMesh.materials.push_back(std::move(skyboxMaterial));
+
 
   ailo::MeshReader reader;
 

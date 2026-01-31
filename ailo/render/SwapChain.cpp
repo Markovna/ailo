@@ -59,7 +59,7 @@ SwapChain::SwapChain(VulkanDevice& device) {
     samples = std::min(samples, device.getMSAASamples());
     
     m_depth.emplace(
-        *device, device.physicalDevice(),
+        *device, device.physicalDevice(), TextureType::TEXTURE_2D,
         depthFormat, 1, extent.width, extent.height, vk::Filter{},
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth,
@@ -69,7 +69,7 @@ SwapChain::SwapChain(VulkanDevice& device) {
         m_msaa.reserve(m_colors.size());
         for (size_t i = 0; i < m_colors.size(); i++) {
             m_msaa.emplace_back(
-                *device, device.physicalDevice(),
+                *device, device.physicalDevice(), TextureType::TEXTURE_2D,
                 surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                 vk::ImageAspectFlagBits::eColor,

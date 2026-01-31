@@ -153,6 +153,85 @@ static void processNode(
     }
 }
 
+static constexpr glm::vec3 sCubeVertices[] = {
+    {-10.0f,  10.0f, -10.0f},
+    {-10.0f, -10.0f, -10.0f},
+    {10.0f, -10.0f, -10.0f},
+    {10.0f, -10.0f, -10.0f},
+    {10.0f,  10.0f, -10.0f},
+    {-10.0f,  10.0f, -10.0f},
+
+    {-10.0f, -10.0f,  10.0f},
+    {-10.0f, -10.0f, -10.0f},
+    {-10.0f,  10.0f, -10.0f},
+    {-10.0f,  10.0f, -10.0f},
+    {-10.0f,  10.0f,  10.0f},
+    {-10.0f, -10.0f,  10.0f},
+
+    {10.0f, -10.0f, -10.0f},
+    {10.0f, -10.0f,  10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {10.0f,  10.0f, -10.0f},
+    {10.0f, -10.0f, -10.0f},
+
+    {-10.0f, -10.0f,  10.0f},
+    {-10.0f,  10.0f,  10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {10.0f, -10.0f,  10.0f},
+    {-10.0f, -10.0f,  10.0f},
+
+    {-10.0f,  10.0f, -10.0f},
+    {10.0f,  10.0f, -10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {10.0f,  10.0f,  10.0f},
+    {-10.0f,  10.0f,  10.0f},
+    {-10.0f,  10.0f, -10.0f},
+
+    {-10.0f, -10.0f, -10.0f},
+    {-10.0f, -10.0f,  10.0f},
+    {10.0f, -10.0f, -10.0f},
+    {10.0f, -10.0f, -10.0f},
+    {-10.0f, -10.0f,  10.0f},
+    {10.0f, -10.0f,  10.0f},
+};
+
+static constexpr uint16_t sCubeIndices[] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+};
+
+std::unique_ptr<VertexBuffer> MeshReader::getCubeVertexBuffer(Engine& engine) {
+    vk::VertexInputBindingDescription binding{};
+    binding.binding = 0;
+    binding.stride = sizeof(glm::vec3);
+    binding.inputRate = vk::VertexInputRate::eVertex;
+
+    vk::VertexInputAttributeDescription posAttr{};
+    posAttr.binding = 0;
+    posAttr.location = 0;
+    posAttr.format = vk::Format::eR32G32B32Sfloat;
+    posAttr.offset = 0;
+
+    auto vb = std::make_unique<VertexBuffer>(
+        engine,
+        VertexInputDescription {
+            .bindings = { binding },
+            .attributes = { posAttr }
+        },
+        sizeof(sCubeVertices)
+    );
+
+    vb->updateBuffer(engine, sCubeVertices, sizeof(sCubeVertices));
+    return vb;
+}
+
+std::unique_ptr<BufferObject> MeshReader::getCubeIndexBuffer(Engine& engine) {
+    auto ib = std::make_unique<BufferObject>(engine, BufferBinding::INDEX, sizeof(sCubeIndices));
+    ib->updateBuffer(engine, sCubeIndices, sizeof(sCubeIndices));
+    return ib;
+}
+
 std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::string& path) {
     // Static container to keep textures alive
     static std::vector<std::unique_ptr<Texture>> loadedTextures;

@@ -75,6 +75,11 @@ enum class CompareOp : uint8_t {
   ALWAYS
 };
 
+enum class TextureType : uint8_t {
+    TEXTURE_2D,
+    TEXTURE_CUBEMAP
+};
+
 class Acquirable {
 public:
     void setFence(const std::shared_ptr<FenceStatus>& fence) { m_fenceStatus = fence; }

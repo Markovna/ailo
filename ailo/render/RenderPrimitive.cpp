@@ -33,7 +33,7 @@ const Material* RenderPrimitive::getMaterial() const {
 
 void RenderPrimitive::setMaterial(Material* material) { m_material = material; }
 
-VertexBuffer::VertexBuffer(Engine& engine, VertexInputDescription& description, size_t byteSize) {
+VertexBuffer::VertexBuffer(Engine& engine, const VertexInputDescription& description, size_t byteSize) {
   m_layoutHandle = engine.getRenderAPI()->createVertexBufferLayout(description);
   m_bufferHandle = engine.getRenderAPI()->createBuffer(BufferBinding::VERTEX, byteSize);
 }

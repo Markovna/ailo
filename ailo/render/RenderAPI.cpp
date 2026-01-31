@@ -258,8 +258,8 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 
 // Texture management
 
-TextureHandle RenderAPI::createTexture(vk::Format format, uint32_t width, uint32_t height, vk::Filter filter, uint8_t levels) {
-    auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), format, levels, width, height, filter, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
+TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, uint32_t width, uint32_t height, uint8_t levels) {
+    auto ptr = resource_ptr<Texture>::make(m_textures, *m_device, m_device.physicalDevice(), type, format, levels, width, height, vk::Filter::eLinear, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::ImageAspectFlagBits::eColor);
     ptr->acquire(ptr);
     return ptr.getHandle();
 }
@@ -271,7 +271,7 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
     texture.release();
 }
 
-void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
+void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
     auto& texture = m_textures.get(handle);
 
     // allocate stage buffer
@@ -288,7 +288,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     if(width == 0) width = texture.width;
     if(height == 0) height = texture.height;
 
-    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset);
+    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount);
 
     // Transition image layout to shader read
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eShaderReadOnlyOptimal);
@@ -699,15 +699,15 @@ void RenderAPI::recreateSwapchain() {
     createSwapchain();
 }
 
-void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset) {
+void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
     vk::BufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
     region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
     region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
+    region.imageSubresource.baseArrayLayer = baseLayer;
+    region.imageSubresource.layerCount = layerCount;
     region.imageOffset = vk::Offset3D{static_cast<int32_t>(xOffset), static_cast<int32_t>(yOffset), 0};
     region.imageExtent = vk::Extent3D{width, height, 1};
 

@@ -23,7 +23,7 @@ class BufferObject {
 
 class VertexBuffer {
 public:
- VertexBuffer(Engine&, VertexInputDescription& description, size_t byteSize);
+ VertexBuffer(Engine&, const VertexInputDescription& description, size_t byteSize);
  void updateBuffer(Engine&, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
  void destroy(Engine&);
 

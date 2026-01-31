@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "Resources.h"
 #include "render/ResourcePtr.h"
 
 namespace ailo::gpu {
@@ -9,7 +10,7 @@ namespace ailo::gpu {
 class Texture : public enable_resource_ptr<Texture> {
 public:
     Texture() = default;
-    Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels,
+    Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels,
         uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags,
         vk::SampleCountFlagBits = vk::SampleCountFlagBits::e1);
 
@@ -56,7 +57,9 @@ public:
 private:
     vk::Device m_device {};
     std::vector<vk::ImageLayout> m_rangeLayouts;
-    uint8_t m_levels = 0;
+    uint8_t m_levels = 1;
+    uint8_t m_layerCount = 1;
+    TextureType m_type = TextureType::TEXTURE_2D;
     vk::SampleCountFlagBits m_samples = vk::SampleCountFlagBits::e1;
 
     vk::ImageView createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels, vk::ImageAspectFlags aspectFlags);

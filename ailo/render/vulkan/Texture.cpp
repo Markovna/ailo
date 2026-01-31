@@ -4,12 +4,14 @@
 
 namespace ailo::gpu {
 
-Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
-    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))), m_samples(samples) {
+Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
+    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples) {
 
     if (m_levels > 1) {
         usage |= vk::ImageUsageFlagBits::eTransferSrc;
     }
+
+    m_layerCount = type == TextureType::TEXTURE_CUBEMAP ? 6 : 1;
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
@@ -17,13 +19,17 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = m_levels;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = m_layerCount;
     imageInfo.format = format;
     imageInfo.tiling = vk::ImageTiling::eOptimal;
     imageInfo.initialLayout = vk::ImageLayout::eUndefined;
     imageInfo.usage = usage;
     imageInfo.samples = m_samples;
     imageInfo.sharingMode = vk::SharingMode::eExclusive;
+
+    if (type == TextureType::TEXTURE_CUBEMAP) {
+        imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
+    }
 
     image = device.createImage(imageInfo);
 
@@ -63,7 +69,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, vk::Forma
 }
 
 Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags), m_levels(1) {
+    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags) {
     imageView = createImageView(device, image, format, m_levels, aspectFlags);
 }
 
@@ -71,13 +77,13 @@ vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::F
     vk::ImageAspectFlags aspectFlags) {
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image = image;
-    viewInfo.viewType = vk::ImageViewType::e2D;
+    viewInfo.viewType = m_type == TextureType::TEXTURE_2D ? vk::ImageViewType::e2D : vk::ImageViewType::eCube;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
     viewInfo.subresourceRange.levelCount = levels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.layerCount = m_layerCount;
 
     return device.createImageView(viewInfo);
 }
@@ -110,7 +116,7 @@ void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout 
     range.baseMipLevel = 0;
     range.levelCount = m_levels;
     range.baseArrayLayer = 0;
-    range.layerCount = 1;
+    range.layerCount = m_layerCount;
     transitionLayout(commandBuffer, newLayout, range);
 }
 

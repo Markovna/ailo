@@ -19,6 +19,10 @@ struct Mesh {
 
 class MeshReader {
 public:
+
+    static std::unique_ptr<VertexBuffer> getCubeVertexBuffer(Engine&);
+    static std::unique_ptr<BufferObject> getCubeIndexBuffer(Engine&);
+
     std::vector<Entity> read(Engine&, Scene&, const std::string& path);
 };
 

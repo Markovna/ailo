@@ -31,21 +31,24 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.8f);
-  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(0.5f, 0.5f, 0.5f));
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.6f);
+  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(0.136f, 0.652f, 0.746f));
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
-  // prepare lights data
-  for (size_t i = 0; i < kLightUniformArraySize; i++) {
-    auto& light = m_lightUniformsBufferData[i];
-    float radius = 2.0f;
+  float radius = 3.0f;
+  auto& light0 = m_lightUniformsBufferData[0];
+  light0.type = 0; // 0 - point, 1 - spot
+  light0.lightPositionFalloff = glm::vec4(-1.0, 1.5, 0.5f, 1.0f / (radius * radius));
+  light0.lightColorIntensity = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
 
-    light.lightPositionFalloff = glm::vec4(i * 4.0f, 1.0f, 0.8f, 1.0f / (radius * radius));
-    light.lightColorIntensity = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-    light.direction = glm::vec3(0.0f, 1.0f, 0.0f);
-    light.type = 0; // 0 - point, 1 - spot
-    light.scaleOffset = getSpotLightScaleOffset(glm::radians(22.0), glm::radians(29.0));
-  }
+  auto& light1 = m_lightUniformsBufferData[1];
+  light1 = light0;
+  light1.type = 1;
+  light1.lightPositionFalloff = glm::vec4(5.0, 1.5, 2.5f, 1.0f / (radius * radius));
+  light1.lightColorIntensity = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+  light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
+  light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
+
 
   RenderAPI* backend = engine.getRenderAPI();
 

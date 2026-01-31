@@ -6,13 +6,19 @@
 #define VARYING in
 #include "common_varyings.glsl"
 
-layout(set = 2, binding = 0) uniform sampler2D baseColorMap;
+#define MATERIAL_UNIFORM(x) layout(set = 2, binding = x)
+
+MATERIAL_UNIFORM(0) uniform sampler2D baseColorMap;
 
 #if defined(USE_NORMAL_MAP)
-layout(set = 2, binding = 1) uniform sampler2D normalMap;
+MATERIAL_UNIFORM(1) uniform sampler2D normalMap;
 #endif
 
-layout(set = 2, binding = 2) uniform sampler2D metallicRoughnessMap;
+MATERIAL_UNIFORM(2) uniform sampler2D metallicRoughnessMap;
+
+#if defined(HAS_SHADOWS)
+MATERIAL_UNIFORM(3) uniform sampler2D shadowMap;
+#endif
 
 layout(location = 0) out vec4 outColor;
 
@@ -42,6 +48,7 @@ struct Pixel {
 
 void getPixel(out Pixel pixel) {
     vec3 baseColor = texture(baseColorMap, fragUV).rgb;
+    baseColor = pow(baseColor, vec3(2.2));
 
     vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
     float metallic = metallicRoughness.b;
@@ -61,7 +68,7 @@ void getPixel(out Pixel pixel) {
 }
 
 vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float NoH, float LoH) {
-    float D = distribution(roughness, NoH, shading_normal, h);
+    float D = distribution(roughness, NoH, h);
     float V = visibility(roughness, NoV, NoL);
     vec3 F = fresnel(f0, LoH);
 
@@ -141,19 +148,6 @@ Light getDirectionalLight() {
     return light;
 }
 
-vec3 blingPhong(const Light light) {
-    vec3 h = normalize(shading_view + light.l);
-    float NoL = light.NoL;
-    float NoH = clamp01(dot(shading_normal, h));
-
-    vec3 diffuseLight = light.colorIntensity.rgb * light.colorIntensity.w * NoL;
-
-    const float blinnPhongExponent = 128.0;
-    float blinnTerm = pow(NoH, blinnPhongExponent);
-    vec3 specularLight = diffuseLight * blinnTerm;
-    return diffuseLight + specularLight;
-}
-
 void main() {
     vec3 n = fragNormalWorld;
     vec3 t = fragTangentWorld.xyz;
@@ -180,6 +174,7 @@ void main() {
     getPixel(pixel);
 
     vec3 color = vec3(0.0);
+
     Light directionalLight = getDirectionalLight();
     color += surfaceShading(pixel, directionalLight, 1.0);
 
@@ -188,8 +183,12 @@ void main() {
         color += surfaceShading(pixel, light, 1.0);
     }
 
-    vec3 ambient = vec3(0.02) * pixel.baseColor;
-    color += ambient;
+//    const vec3 diffuseIrradiance = vec3(0.2);
+//    const vec3 E = vec3(0.2);
+//    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E);
+//    vec3 ibl = Fd;
+//    color += ibl;
+
 
     outColor = vec4(color, 1.0);
 }

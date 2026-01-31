@@ -120,10 +120,10 @@ void ImGuiProcessor::updateTexture(ImTextureData* tex) {
   if (tex->Status == ImTextureStatus_WantCreate) {
     // Create texture
     auto textureHandle = m_renderAPI->createTexture(
+        TextureType::TEXTURE_2D,
         vk::Format::eR8Unorm,
         static_cast<uint32_t>(tex->Width),
-        static_cast<uint32_t>(tex->Height),
-        vk::Filter::eLinear
+        static_cast<uint32_t>(tex->Height)
     );
 
     tex->SetTexID((ImTextureID) textureHandle.getId());
