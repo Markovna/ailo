@@ -24,6 +24,7 @@
 #include "OS.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
+#include "resources/ResourcePtr.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
 static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
@@ -86,12 +87,8 @@ void Application::init() {
 
   m_camera = std::make_unique<ailo::Camera>();
 
-  auto indexBuffer = ailo::MeshReader::getCubeIndexBuffer(*m_engine);
-  auto vertexBuffer = ailo::MeshReader::getCubeVertexBuffer(*m_engine);
   auto skybox = m_scene->addEntity();
-  ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox);
-  skyboxMesh.vertexBuffer = std::move(vertexBuffer);
-  skyboxMesh.indexBuffer = std::move(indexBuffer);
+  ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox, ailo::MeshReader::createCubeMesh(*m_engine));
 
   auto skyboxShader = m_engine->loadShader(ailo::ShaderDescription {
         .vertexShader = ailo::os::readFile("shaders/skybox.vert.spv"),
@@ -114,10 +111,8 @@ void Application::init() {
             },
         }
   });
-  auto skyboxMaterial = std::make_unique<ailo::Material>(*m_engine, skyboxShader);
-
-  ailo::RenderPrimitive rp(vertexBuffer.get(), indexBuffer.get(), skyboxMaterial.get(), 0, 36);
-  skyboxMesh.primitives.push_back(rp);
+  auto skyboxMaterial = ailo::make_resource<ailo::Material>(*m_engine, *m_engine, skyboxShader);
+  skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
   auto loadCubemapTex = [](ailo::Engine& engine, const std::array<std::string, 6>& path) {
     int texWidth, texHeight;
@@ -150,7 +145,6 @@ void Application::init() {
         "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negz.jpg"
       });
   skyboxMaterial->setTexture(0, cubemapTex.get());
-  skyboxMesh.materials.push_back(std::move(skyboxMaterial));
 
 
   ailo::MeshReader reader;
@@ -158,13 +152,6 @@ void Application::init() {
   auto meshes = reader.read(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
-  auto meshView = m_scene->view<ailo::Mesh>();
-  for(const auto& [entity, mesh] : meshView.each()) {
-    for (auto& material : mesh.materials) {
-      // material->setTexture(0, m_texture.get());
-      // material->setTexture(1, m_normalMapTexture.get());
-    }
-  }
 }
 
 void Application::mainLoop() {
@@ -323,13 +310,6 @@ void Application::drawImGui() {
 void Application::cleanup() {
   m_imguiProcessor.reset();
 
-  for (const auto& [entity, mesh] : m_scene->view<ailo::Mesh>().each()) {
-    mesh.vertexBuffer->destroy(*m_engine);
-    mesh.indexBuffer->destroy(*m_engine);
-    for (auto& material : mesh.materials) {
-      // material->destroy(*m_engine);
-    }
-  }
   m_scene.reset();
   if (m_texture) {
     m_texture->destroy(*m_engine);

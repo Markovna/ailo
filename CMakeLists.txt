@@ -80,6 +80,8 @@ add_executable(ailo
     ailo/render/Program.h
     ailo/render/vulkan/Resources.cpp
     ailo/render/vulkan/Resources.h
+        ailo/resources/ResourcePtr.cpp
+        ailo/resources/ResourcePtr.h
 )
 
 # Link libraries

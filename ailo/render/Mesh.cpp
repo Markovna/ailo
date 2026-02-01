@@ -11,6 +11,7 @@
 
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
+#include "resources/ResourcePtr.h"
 
 namespace ailo {
 
@@ -201,7 +202,8 @@ static constexpr uint16_t sCubeIndices[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
 };
 
-std::unique_ptr<VertexBuffer> MeshReader::getCubeVertexBuffer(Engine& engine) {
+Mesh MeshReader::createCubeMesh(Engine& engine) {
+    Mesh mesh;
     vk::VertexInputBindingDescription binding{};
     binding.binding = 0;
     binding.stride = sizeof(glm::vec3);
@@ -213,7 +215,8 @@ std::unique_ptr<VertexBuffer> MeshReader::getCubeVertexBuffer(Engine& engine) {
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = 0;
 
-    auto vb = std::make_unique<VertexBuffer>(
+    auto vb = ailo::make_resource<VertexBuffer>(
+        engine,
         engine,
         VertexInputDescription {
             .bindings = { binding },
@@ -223,13 +226,14 @@ std::unique_ptr<VertexBuffer> MeshReader::getCubeVertexBuffer(Engine& engine) {
     );
 
     vb->updateBuffer(engine, sCubeVertices, sizeof(sCubeVertices));
-    return vb;
-}
 
-std::unique_ptr<BufferObject> MeshReader::getCubeIndexBuffer(Engine& engine) {
-    auto ib = std::make_unique<BufferObject>(engine, BufferBinding::INDEX, sizeof(sCubeIndices));
+    auto ib = ailo::make_resource<BufferObject>(engine, engine, BufferBinding::INDEX, sizeof(sCubeIndices));
     ib->updateBuffer(engine, sCubeIndices, sizeof(sCubeIndices));
-    return ib;
+
+    mesh.vertexBuffer = vb;
+    mesh.indexBuffer = ib;
+    mesh.primitives.emplace_back(std::shared_ptr<Material>(), 0, 36);
+    return mesh;
 }
 
 std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::string& path) {
@@ -267,9 +271,9 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         Texture* metallicRoughnessMap = nullptr;
 
         // Try to get the diffuse texture
-        if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0) {
+        if (material->GetTextureCount(aiTextureType_BASE_COLOR) > 0) {
             aiString texturePath;
-            if (material->GetTexture(aiTextureType_DIFFUSE, 0, &texturePath) == AI_SUCCESS) {
+            if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texturePath) == AI_SUCCESS) {
                 auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
                 if (texture) {
                     diffuse = texture.get();
@@ -301,7 +305,7 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         }
 
 
-        materials[i] = std::make_shared<Material>(engine, shader);
+        materials[i] = ailo::make_resource<Material>(engine, engine, shader);
         if (diffuse) {
             materials[i]->setTexture(0, diffuse);
         }
@@ -377,7 +381,8 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         transform.transform = meshData.transform;
 
         // Create vertex buffer
-        mesh.vertexBuffer = std::make_unique<VertexBuffer>(
+        mesh.vertexBuffer = ailo::make_resource<VertexBuffer>(
+            engine,
             engine,
             vertexInput,
             sizeof(Vertex) * meshData.vertices.size()
@@ -385,7 +390,8 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
         mesh.vertexBuffer->updateBuffer(engine, meshData.vertices.data(), sizeof(Vertex) * meshData.vertices.size());
 
         // Create index buffer
-        mesh.indexBuffer = std::make_unique<BufferObject>(
+        mesh.indexBuffer = ailo::make_resource<BufferObject>(
+            engine,
             engine,
             BufferBinding::INDEX,
             sizeof(uint16_t) * meshData.indices.size()
@@ -394,19 +400,9 @@ std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::st
 
         auto material = materials[meshData.materialIndex];
 
-        // Assign texture to material if available
-        if (meshData.materialIndex < materials.size()) {
-            mesh.materials.emplace_back(materials[meshData.materialIndex]);
-        }
-
         // Create a single primitive for this mesh
-        RenderPrimitive primitive;
-        primitive.setVertexBuffer(mesh.vertexBuffer.get());
-        primitive.setIndexBuffer(mesh.indexBuffer.get(), 0, meshData.indices.size());
-        primitive.setMaterial(material.get());
+        RenderPrimitive primitive(material, 0, meshData.indices.size());
         mesh.primitives.push_back(primitive);
-
-        mesh.materials.emplace_back(material);
     }
 
     return entities;

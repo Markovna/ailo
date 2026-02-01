@@ -14,24 +14,19 @@ void BufferObject::destroy(Engine& engine) {
   engine.getRenderAPI()->destroyBuffer(m_handle);
 }
 
-RenderPrimitive::RenderPrimitive(VertexBuffer* vertexBuffer, BufferObject* indexBuffer, Material* material, size_t indexOffset,
-  size_t indexCount) : m_vertexBuffer(vertexBuffer)
-                      , m_indexBuffer(indexBuffer)
-                      , m_material(material)
-                      , m_indexOffset(indexOffset)
-                      , m_indexCount(indexCount) { }
-
-void RenderPrimitive::setIndexBuffer(BufferObject* buffer, size_t offset, size_t count) {
-  m_indexBuffer = buffer;
-  m_indexCount = count;
-  m_indexOffset = offset;
-}
+RenderPrimitive::RenderPrimitive(std::shared_ptr<Material> material, size_t indexOffset,
+  size_t indexCount) : m_material(material), m_indexOffset(indexOffset), m_indexCount(indexCount)
+{ }
 
 const Material* RenderPrimitive::getMaterial() const {
-  return m_material;
+  return m_material.get();
 }
 
-void RenderPrimitive::setMaterial(Material* material) { m_material = material; }
+Material* RenderPrimitive::getMaterial() {
+  return m_material.get();
+}
+
+void RenderPrimitive::setMaterial(std::shared_ptr<Material> material) { m_material = material; }
 
 VertexBuffer::VertexBuffer(Engine& engine, const VertexInputDescription& description, size_t byteSize) {
   m_layoutHandle = engine.getRenderAPI()->createVertexBufferLayout(description);

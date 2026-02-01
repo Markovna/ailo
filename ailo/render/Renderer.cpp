@@ -151,9 +151,9 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
 
     index++;
 
-    for (auto& material : mesh.materials) {
-      material->updateTextures(backend);
-      material->updateBuffers(backend);
+    for(auto& primitive : mesh.primitives) {
+      primitive.getMaterial()->updateTextures(backend);
+      primitive.getMaterial()->updateBuffers(backend);
     }
   }
 
