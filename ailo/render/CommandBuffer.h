@@ -69,7 +69,7 @@ public:
     void reset();
 
     vk::Fence& getFence() { return m_fence; }
-    decltype(auto) getFenceStatusShared() { return m_fenceStatus; }
+    std::shared_ptr<FenceStatus> getFenceStatusShared() { return m_fenceStatus; }
 
 private:
     vk::CommandBuffer m_commandBuffer;

@@ -5,6 +5,8 @@ struct ViewUniform {
    vec3 lightDirection;
    vec4 lightColorIntensity;
    vec4 ambientLightColorIntensity;
+
+   float iblSpecularMaxLod;
 };
 
 struct LightUniform {
@@ -40,3 +42,6 @@ layout (set = 1, binding = 0, std140)
 uniform perObject {
     ObjectUniform object;
 };
+
+layout (set = 0, binding = 2)
+uniform samplerCube iblSpecular;

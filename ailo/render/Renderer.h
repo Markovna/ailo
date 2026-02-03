@@ -14,6 +14,8 @@ struct PerViewUniforms {
   float __padding0;
   glm::vec4 lightColorIntensity;
   glm::vec4 ambientLightColorIntensity;
+
+  float iblSpecularMaxLod;
 };
 
 struct LightUniform {
@@ -45,7 +47,8 @@ enum class DescriptorSetBindingPoints : uint8_t {
 
 enum class PerViewDescriptorBindings {
   FRAME_UNIFORMS = 0,
-  LIGHTS = 1
+  LIGHTS = 1,
+  IBL_SPECULAR_MAP = 2
 };
 
 class DescriptorSetLayoutBindings {
@@ -61,6 +64,11 @@ public:
         .binding = std::to_underlying(PerViewDescriptorBindings::LIGHTS),
         .descriptorType = vk::DescriptorType::eUniformBuffer,
         .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
+      },
+      {
+        .binding = std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP),
+        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .stageFlags = vk::ShaderStageFlagBits::eFragment
       }
     };
     return bindings;

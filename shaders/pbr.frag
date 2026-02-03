@@ -189,6 +189,7 @@ void main() {
 //    vec3 ibl = Fd;
 //    color += ibl;
 
+    vec3 diffuseIrradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
 
     outColor = vec4(color, 1.0);
 }

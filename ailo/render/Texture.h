@@ -13,11 +13,13 @@ public:
     void destroy(Engine&);
 
     TextureHandle getHandle() const { return m_handle; }
+    uint32_t getLevels() { return m_levels; }
 
     static std::unique_ptr<Texture> createFromFile(Engine&, const std::string& path, vk::Format format, bool mipmaps = false);
 
 private:
     TextureHandle m_handle;
+    uint8_t m_levels;
 };
 
 }

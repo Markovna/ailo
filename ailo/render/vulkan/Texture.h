@@ -7,7 +7,7 @@
 
 namespace ailo::gpu {
 
-class Texture : public enable_resource_ptr<Texture> {
+class  Texture : public enable_resource_ptr<Texture> {
 public:
     Texture() = default;
     Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels,
@@ -40,6 +40,8 @@ public:
         m_rangeLayouts.resize(level + 1, vk::ImageLayout::eUndefined);
         m_rangeLayouts[level] = layout;
     }
+
+    uint8_t getLayerCount() const { return m_layerCount; }
 
     vk::SampleCountFlagBits getSamples() const { return m_samples; }
 

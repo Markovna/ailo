@@ -17,11 +17,8 @@ struct Mesh {
 
 class MeshReader {
 public:
-    static std::shared_ptr<VertexBuffer> getCubeVertexBuffer(Engine&);
-    static std::shared_ptr<BufferObject> getCubeIndexBuffer(Engine&);
     static Mesh createCubeMesh(Engine&);
-
-    std::vector<Entity> read(Engine&, Scene&, const std::string& path);
+    static std::vector<Entity> instantiate(Engine&, Scene&, const std::string& path);
 };
 
 }

@@ -8,7 +8,7 @@
 namespace ailo {
 
 Texture::Texture(Engine& engine, TextureType type, vk::Format format, uint32_t width, uint32_t height, uint8_t levels)
-    : m_handle(engine.getRenderAPI()->createTexture(type, format, width, height, levels)) {
+    : m_handle(engine.getRenderAPI()->createTexture(type, format, width, height, levels)), m_levels(levels) {
 }
 
 void Texture::updateImage(Engine& engine, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset,

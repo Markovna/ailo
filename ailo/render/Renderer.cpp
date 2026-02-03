@@ -49,8 +49,12 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
+  auto iblTexture = scene.getIblTexture();
+  m_perViewUniformBufferData.iblSpecularMaxLod = iblTexture ? iblTexture->getLevels() - 1 : 1;
 
   RenderAPI* backend = engine.getRenderAPI();
+
+  backend->updateDescriptorSetTexture(m_viewDescriptorSet, iblTexture ? iblTexture->getHandle() : TextureHandle{}, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
   // prepare descriptor sets and uniform buffers
   prepare(*backend, scene);

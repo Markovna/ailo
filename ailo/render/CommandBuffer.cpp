@@ -1,6 +1,7 @@
 #include "CommandBuffer.h"
 
 namespace ailo {
+
 void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) const {
     m_commandBuffer.end();
 

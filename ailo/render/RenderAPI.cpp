@@ -312,7 +312,7 @@ void RenderAPI::generateMipmaps(const TextureHandle& handle) {
         srcRange.baseMipLevel = level - 1;
         srcRange.levelCount = 1u;
         srcRange.baseArrayLayer = 0u;
-        srcRange.layerCount = 1u;
+        srcRange.layerCount = texture.getLayerCount();
 
         vk::ImageSubresourceRange dstRange = srcRange;
         dstRange.baseMipLevel = level;
@@ -447,12 +447,14 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     auto& texture = m_textures.get(textureHandle);
 
+    // if (false) {
     if (descriptorSet.isBound()) {
         // re-create descriptor set
         m_descriptorSetsToDestroy.push_back(descriptorSet);
 
         DescriptorSet newDescriptorSet;
         createDescriptorSet(newDescriptorSet, descriptorSet.layoutHandle);
+        newDescriptorSet.boundBindings = descriptorSet.boundBindings;
 
         std::vector<vk::CopyDescriptorSet> copyDescriptors;
         for(size_t i = 0; i < descriptorSet.boundBindings.size(); i++) {
@@ -466,9 +468,11 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
             copyDescriptorSet.dstSet = newDescriptorSet.descriptorSet;
             copyDescriptorSet.dstBinding = i;
             copyDescriptorSet.dstArrayElement = 0;
+            copyDescriptorSet.descriptorCount = 1;
 
             copyDescriptors.push_back(copyDescriptorSet);
         }
+
         m_device->updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
 
         std::swap(descriptorSet, newDescriptorSet);

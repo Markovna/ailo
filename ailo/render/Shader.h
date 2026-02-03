@@ -17,6 +17,7 @@ class Shader {
     void destroy(Engine&);
 
     static ShaderDescription& getDefaultShaderDescription();
+    static ShaderDescription& getSkyboxShaderDescription();
 
  private:
     std::vector<DescriptorSetLayoutHandle> m_descriptorSetLayouts;

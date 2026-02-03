@@ -90,27 +90,7 @@ void Application::init() {
   auto skybox = m_scene->addEntity();
   ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox, ailo::MeshReader::createCubeMesh(*m_engine));
 
-  auto skyboxShader = m_engine->loadShader(ailo::ShaderDescription {
-        .vertexShader = ailo::os::readFile("shaders/skybox.vert.spv"),
-        .fragmentShader = ailo::os::readFile("shaders/skybox.frag.spv"),
-        .raster = ailo::RasterDescription {
-            .cullingMode = ailo::CullingMode::FRONT,
-            .inverseFrontFace = true,
-            .depthWriteEnable = true,
-            .depthCompareOp = ailo::CompareOp::LESS_OR_EQUAL
-        },
-        .layout = {
-          ailo::DescriptorSetLayoutBindings::perView(),
-          ailo::DescriptorSetLayoutBindings::perObject(),
-            {
-                  {
-                      .binding = 0,
-                      .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                      .stageFlags = vk::ShaderStageFlagBits::eFragment,
-                  },
-            },
-        }
-  });
+  auto skyboxShader = m_engine->loadShader(ailo::Shader::getSkyboxShaderDescription());
   auto skyboxMaterial = ailo::make_resource<ailo::Material>(*m_engine, *m_engine, skyboxShader);
   skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
@@ -118,38 +98,39 @@ void Application::init() {
     int texWidth, texHeight;
     stbi_info(path[0].c_str(), &texWidth, &texHeight, nullptr);
 
-    auto tex = std::make_unique<ailo::Texture>(engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32Sfloat, texWidth, texHeight);
+    constexpr int MAX_MIP_LEVELS = 4;
+    auto tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32A32Sfloat, texWidth, texHeight, MAX_MIP_LEVELS);
 
-    for (int face = 0; face < 6; face++) {
+    for (size_t face = 0; face < 6; face++) {
       int texChannels;
-      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb);
+      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
       if (!pixels) {
         throw std::runtime_error("failed to load texture image!");
       }
 
-      tex->updateImage(engine, pixels, texWidth * texHeight * texChannels * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
+      tex->updateImage(engine, pixels, texWidth * texHeight * 4 * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
 
       stbi_image_free(pixels);
     }
+    tex->generateMipmaps(engine);
     return tex;
   };
 
   static auto cubemapTex = loadCubemapTex(
       *m_engine,
       {
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posx.jpg",
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negx.jpg",
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posy.jpg",
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negy.jpg",
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_posz.jpg",
-        "C:/Users/abdus/Projects/ailo/assets/textures/yokohama/yokohama_negz.jpg"
+        "assets/textures/yokohama/yokohama_posx.jpg",
+        "assets/textures/yokohama/yokohama_negx.jpg",
+        "assets/textures/yokohama/yokohama_posy.jpg",
+        "assets/textures/yokohama/yokohama_negy.jpg",
+        "assets/textures/yokohama/yokohama_posz.jpg",
+        "assets/textures/yokohama/yokohama_negz.jpg"
       });
   skyboxMaterial->setTexture(0, cubemapTex.get());
 
+  m_scene->setIblTexture(cubemapTex);
 
-  ailo::MeshReader reader;
-
-  auto meshes = reader.read(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
+  auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
 }

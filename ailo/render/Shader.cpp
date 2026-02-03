@@ -60,6 +60,31 @@ ShaderDescription& Shader::getDefaultShaderDescription() {
     return shaderDescription;
 }
 
+ShaderDescription& Shader::getSkyboxShaderDescription() {
+    static ShaderDescription description {
+        .vertexShader = os::readFile("shaders/skybox.vert.spv"),
+        .fragmentShader = os::readFile("shaders/skybox.frag.spv"),
+        .raster = RasterDescription {
+            .cullingMode = ailo::CullingMode::FRONT,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = CompareOp::LESS_OR_EQUAL
+        },
+        .layout = {
+            DescriptorSetLayoutBindings::perView(),
+            DescriptorSetLayoutBindings::perObject(),
+              {
+                      {
+                          .binding = 0,
+                          .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                          .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                      },
+                },
+            }
+    };
+    return description;
+}
+
 Shader::Shader(Engine& engine, const ShaderDescription& description)
     : m_description(description) {
 

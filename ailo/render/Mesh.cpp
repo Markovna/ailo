@@ -236,7 +236,7 @@ Mesh MeshReader::createCubeMesh(Engine& engine) {
     return mesh;
 }
 
-std::vector<Entity> MeshReader::read(Engine& engine, Scene& scene, const std::string& path) {
+std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path) {
     // Static container to keep textures alive
     static std::vector<std::unique_ptr<Texture>> loadedTextures;
 
