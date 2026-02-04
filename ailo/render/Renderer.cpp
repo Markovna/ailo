@@ -1,4 +1,5 @@
 #include "Renderer.h"
+
 #include <ecs/Scene.h>
 
 #include "Mesh.h"
@@ -53,8 +54,6 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.iblSpecularMaxLod = iblTexture ? iblTexture->getLevels() - 1 : 1;
 
   RenderAPI* backend = engine.getRenderAPI();
-
-  backend->updateDescriptorSetTexture(m_viewDescriptorSet, iblTexture ? iblTexture->getHandle() : TextureHandle{}, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
   // prepare descriptor sets and uniform buffers
   prepare(*backend, scene);
@@ -164,6 +163,10 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
+
+  auto iblTexture = scene.getIblTexture();
+  auto iblTexHandle = iblTexture ? iblTexture->getHandle() : TextureHandle{};
+  backend.updateDescriptorSetTexture(m_viewDescriptorSet, iblTexHandle, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 }
 
 void Renderer::terminate(Engine& engine) {

@@ -68,7 +68,7 @@ public:
       {
         .binding = std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP),
         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-        .stageFlags = vk::ShaderStageFlagBits::eFragment
+        .stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex
       }
     };
     return bindings;
