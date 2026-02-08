@@ -82,7 +82,14 @@ add_executable(ailo
     ailo/render/vulkan/Resources.h
         ailo/resources/ResourcePtr.cpp
         ailo/resources/ResourcePtr.h
+        ailo/irradiance/IrradianceMapGenerator.cpp
+        ailo/irradiance/IrradianceMapGenerator.h
 )
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(ailo OpenMP::OpenMP_CXX)
+endif()
 
 # Link libraries
 target_link_libraries(ailo

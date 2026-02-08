@@ -183,13 +183,12 @@ void main() {
         color += surfaceShading(pixel, light, 1.0);
     }
 
-//    const vec3 diffuseIrradiance = vec3(0.2);
-//    const vec3 E = vec3(0.2);
-//    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E);
-//    vec3 ibl = Fd;
-//    color += ibl;
+    vec3 diffuseIrradiance = texture(iblSpecular, shading_normal).rgb;
 
-    vec3 diffuseIrradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
+    vec3 E = vec3(0.0);
+    //vec3 E = mix(pixel.dfg.xxx, pixel.dfg.yyy, pixel.f0);
+    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E);
+    color.rgb += Fd;
 
     outColor = vec4(color, 1.0);
 }
