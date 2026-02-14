@@ -47,4 +47,4 @@ layout (set = 0, binding = 2)
 uniform samplerCube iblSpecular;
 
 layout (set = 0, binding = 3)
-uniform samplerCube iblDFG;
+uniform sampler2D iblDFG;

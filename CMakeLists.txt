@@ -18,8 +18,9 @@ add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)
 add_subdirectory(third_party/entt)
 add_subdirectory(third_party/assimp)
-
 add_subdirectory(third_party/imgui)
+
+add_subdirectory(tools/resgen)
 
 # Add executable
 add_executable(ailo
@@ -80,16 +81,9 @@ add_executable(ailo
     ailo/render/Program.h
     ailo/render/vulkan/Resources.cpp
     ailo/render/vulkan/Resources.h
-        ailo/resources/ResourcePtr.cpp
-        ailo/resources/ResourcePtr.h
-        ailo/irradiance/IrradianceMapGenerator.cpp
-        ailo/irradiance/IrradianceMapGenerator.h
+    ailo/resources/ResourcePtr.cpp
+    ailo/resources/ResourcePtr.h
 )
-
-find_package(OpenMP)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(ailo OpenMP::OpenMP_CXX)
-endif()
 
 # Link libraries
 target_link_libraries(ailo
@@ -163,6 +157,64 @@ function(add_shader TARGET SHADER)
     set_source_files_properties(${SPIRV} PROPERTIES GENERATED TRUE)
     target_sources(${TARGET} PRIVATE ${SPIRV})
 endfunction()
+
+# Generate DFG LUT texture using resgen tool
+set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/assets/textures/dfg_lut.hdr)
+add_custom_command(
+        OUTPUT ${DFG_LUT_OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/assets/textures/"
+        COMMAND $<TARGET_FILE:resgen> ibl-dfg ${DFG_LUT_OUTPUT}
+        DEPENDS resgen
+        COMMENT "Generating DFG LUT texture"
+)
+target_sources(ailo PRIVATE ${DFG_LUT_OUTPUT})
+
+# Irradiance map generation function
+function(add_irradiance_map TARGET INPUT_HDR)
+    set(oneValueArgs NAME SIZE SAMPLES)
+    cmake_parse_arguments(IRR "" "${oneValueArgs}" "" ${ARGN})
+
+    get_filename_component(FILE_NAME ${INPUT_HDR} NAME_WE)
+
+    if(IRR_NAME)
+        set(OUTPUT_NAME ${IRR_NAME})
+    else()
+        set(OUTPUT_NAME ${FILE_NAME})
+    endif()
+
+    set(OPTIONAL_ARGS "")
+    if(IRR_SIZE)
+        list(APPEND OPTIONAL_ARGS ${IRR_SIZE})
+        if(IRR_SAMPLES)
+            list(APPEND OPTIONAL_ARGS ${IRR_SAMPLES})
+        endif()
+    endif()
+
+    set(OUTPUT_DIR ${CMAKE_BINARY_DIR}/assets/textures/${OUTPUT_NAME})
+    set(OUTPUT_BASE ${OUTPUT_DIR}/${OUTPUT_NAME}.hdr)
+
+    # The 6 cubemap face files that resgen produces
+    set(FACE_OUTPUTS
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_px.hdr
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_nx.hdr
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_py.hdr
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_ny.hdr
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_pz.hdr
+            ${OUTPUT_DIR}/${OUTPUT_NAME}_nz.hdr
+    )
+
+    add_custom_command(
+            OUTPUT ${FACE_OUTPUTS}
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
+            COMMAND $<TARGET_FILE:resgen> ibl-irradiance ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
+            DEPENDS resgen ${CMAKE_SOURCE_DIR}/${INPUT_HDR}
+            COMMENT "Generating irradiance map from ${INPUT_HDR}"
+    )
+
+    target_sources(${TARGET} PRIVATE ${FACE_OUTPUTS})
+endfunction()
+
+add_irradiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
 # Add shaders
 add_shader(ailo shaders/shader.vert)

@@ -29,18 +29,42 @@ void Texture::destroy(Engine& engine) {
 }
 
 std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
-    // Load texture
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    if (!pixels) {
-        throw std::runtime_error("failed to load texture image!");
+    bool isHdr = stbi_is_hdr(path.c_str());
+    std::cout << "Texture format: " << path.c_str() << " " << (isHdr ? "HDR" : "RGB") << std::endl;
+
+    std::unique_ptr<Texture> tex;
+    if (!isHdr) {
+        // Load texture
+        int texWidth, texHeight, texChannels;
+        int desiredChannels = STBI_rgb_alpha;
+
+        stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        if (!pixels) {
+            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels);
+        stbi_image_free(pixels);
+
+    } else {
+        int texWidth, texHeight, texChannels;
+        int desiredChannels = STBI_rgb_alpha;
+
+        float* pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        if (!pixels) {
+            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
+        stbi_image_free(pixels);
     }
 
-    uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-
-    auto tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
-    tex->updateImage(engine, pixels, texWidth * texHeight * 4);
-    stbi_image_free(pixels);
     if (mipmaps) {
         tex->generateMipmaps(engine);
     }

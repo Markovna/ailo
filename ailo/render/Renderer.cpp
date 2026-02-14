@@ -6,6 +6,7 @@
 #include "Shader.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
+#include "resources/ResourcePtr.h"
 
 namespace ailo {
 
@@ -53,10 +54,11 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   auto iblTexture = scene.getIblTexture();
   m_perViewUniformBufferData.iblSpecularMaxLod = iblTexture ? iblTexture->getLevels() - 1 : 1;
 
-  RenderAPI* backend = engine.getRenderAPI();
 
   // prepare descriptor sets and uniform buffers
-  prepare(*backend, scene);
+  prepare(engine, scene);
+
+  RenderAPI* backend = engine.getRenderAPI();
 
   RenderPassDescription renderPass {};
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
@@ -100,7 +102,9 @@ void Renderer::endFrame(Engine& engine) {
   backend->endFrame();
 }
 
-void Renderer::prepare(RenderAPI& backend, Scene& scene) {
+void Renderer::prepare(Engine& engine, Scene& scene) {
+  auto& backend = *engine.getRenderAPI();
+
   if(!m_viewUniformBufferHandle) {
     m_viewUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
   }
@@ -167,6 +171,12 @@ void Renderer::prepare(RenderAPI& backend, Scene& scene) {
   auto iblTexture = scene.getIblTexture();
   auto iblTexHandle = iblTexture ? iblTexture->getHandle() : TextureHandle{};
   backend.updateDescriptorSetTexture(m_viewDescriptorSet, iblTexHandle, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
+
+  if (!m_iblDfgLut) {
+    m_iblDfgLut = Texture::createFromFile(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
+  }
+
+  backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
 }
 
 void Renderer::terminate(Engine& engine) {

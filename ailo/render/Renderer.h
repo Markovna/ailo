@@ -48,7 +48,8 @@ enum class DescriptorSetBindingPoints : uint8_t {
 enum class PerViewDescriptorBindings {
   FRAME_UNIFORMS = 0,
   LIGHTS = 1,
-  IBL_SPECULAR_MAP = 2
+  IBL_SPECULAR_MAP = 2,
+  IBL_DFG_LUT = 3
 };
 
 class DescriptorSetLayoutBindings {
@@ -67,6 +68,11 @@ public:
       },
       {
         .binding = std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP),
+        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex
+      },
+      {
+        .binding = std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT),
         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
         .stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex
       }
@@ -97,7 +103,7 @@ public:
   void terminate(Engine&);
 
 private:
-  void prepare(RenderAPI& backend, Scene&);
+  void prepare(Engine&, Scene&);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
@@ -112,6 +118,7 @@ private:
   DescriptorSetHandle m_objectDescriptorSet;
   DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
   DescriptorSetLayoutHandle m_objectDescriptorSetLayout;
+  std::shared_ptr<Texture> m_iblDfgLut;
 };
 
 }

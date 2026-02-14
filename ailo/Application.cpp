@@ -5,6 +5,7 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -35,6 +36,7 @@ const uint32_t WIDTH = 2400;
 const uint32_t HEIGHT = 1400;
 
 void Application::run() {
+
   init();
   mainLoop();
   cleanup();
@@ -95,20 +97,27 @@ void Application::init() {
   skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
   auto loadCubemapTex = [](ailo::Engine& engine, const std::array<std::string, 6>& path) {
-    int texWidth, texHeight;
-    stbi_info(path[0].c_str(), &texWidth, &texHeight, nullptr);
-
+    //bool isHdr = stbi_is_hdr(path[0].c_str());
     constexpr int MAX_MIP_LEVELS = 4;
-    auto tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32A32Sfloat, texWidth, texHeight, MAX_MIP_LEVELS);
+    std::shared_ptr<ailo::Texture> tex;
 
+    assert(path.size() == 6);
     for (size_t face = 0; face < 6; face++) {
       int texChannels;
-      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+      int texWidth, texHeight;
+      int desiredChannels = STBI_rgb_alpha;
+
+      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
       if (!pixels) {
+        std::cerr << "failed to load texture image at '" << path[face] << "'! Reason " << stbi_failure_reason() << std::endl;
         throw std::runtime_error("failed to load texture image!");
       }
 
-      tex->updateImage(engine, pixels, texWidth * texHeight * 4 * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
+      if (!tex) {
+        tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32A32Sfloat, texWidth, texHeight, MAX_MIP_LEVELS);
+      }
+
+      tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
 
       stbi_image_free(pixels);
     }
@@ -128,7 +137,18 @@ void Application::init() {
       });
   skyboxMaterial->setTexture(0, cubemapTex.get());
 
-  m_scene->setIblTexture(cubemapTex);
+  static auto iblIrradiance = loadCubemapTex(
+    *m_engine,
+    {
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_px.hdr",
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nx.hdr",
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_py.hdr",
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_ny.hdr",
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_pz.hdr",
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nz.hdr"
+    });
+
+  m_scene->setIblTexture(iblIrradiance);
 
   auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
