@@ -96,8 +96,9 @@ void Application::init() {
   auto skyboxMaterial = ailo::make_resource<ailo::Material>(*m_engine, *m_engine, skyboxShader);
   skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
-  auto loadCubemapTex = [](ailo::Engine& engine, const std::array<std::string, 6>& path) {
-    //bool isHdr = stbi_is_hdr(path[0].c_str());
+  auto loadCubemapTex = [](ailo::Engine& engine, vk::Format format, const std::array<std::string, 6>& path) {
+    bool isHdr = stbi_is_hdr(path[0].c_str());
+
     constexpr int MAX_MIP_LEVELS = 4;
     std::shared_ptr<ailo::Texture> tex;
 
@@ -107,17 +108,28 @@ void Application::init() {
       int texWidth, texHeight;
       int desiredChannels = STBI_rgb_alpha;
 
-      float* pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+      uint32_t byteSize;
+
+      void* pixels;
+
+      if (isHdr) {
+        pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        byteSize = texWidth * texHeight * desiredChannels * sizeof(float);
+      } else {
+        pixels = stbi_load(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        byteSize = texWidth * texHeight * desiredChannels * sizeof(uint8_t);
+      }
+
       if (!pixels) {
         std::cerr << "failed to load texture image at '" << path[face] << "'! Reason " << stbi_failure_reason() << std::endl;
         throw std::runtime_error("failed to load texture image!");
       }
 
       if (!tex) {
-        tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, vk::Format::eR32G32B32A32Sfloat, texWidth, texHeight, MAX_MIP_LEVELS);
+        tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, format, ailo::TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
       }
 
-      tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels * sizeof(float), texWidth, texHeight, 0, 0, face, 1);
+      tex->updateImage(engine, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1);
 
       stbi_image_free(pixels);
     }
@@ -127,6 +139,7 @@ void Application::init() {
 
   static auto cubemapTex = loadCubemapTex(
       *m_engine,
+      vk::Format::eR8G8B8A8Srgb,
       {
         "assets/textures/yokohama/yokohama_posx.jpg",
         "assets/textures/yokohama/yokohama_negx.jpg",
@@ -139,6 +152,7 @@ void Application::init() {
 
   static auto iblIrradiance = loadCubemapTex(
     *m_engine,
+    vk::Format::eR32G32B32A32Sfloat,
     {
       "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_px.hdr",
       "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nx.hdr",

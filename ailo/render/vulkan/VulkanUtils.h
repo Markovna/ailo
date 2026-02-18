@@ -10,6 +10,7 @@ vk::BlendOp getBlendOp(BlendOperation);
 vk::BlendFactor getBlendFunction(BlendFunction);
 vk::CompareOp getCompareOperation(CompareOp);
 vk::BufferUsageFlagBits getBufferUsage(BufferBinding);
+vk::ImageUsageFlags getTextureUsage(TextureUsage);
 
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout);
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionDstAccess(vk::ImageLayout);

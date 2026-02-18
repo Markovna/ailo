@@ -1,5 +1,8 @@
 #include "RenderPassCache.h"
 
+#include <iostream>
+#include <ostream>
+
 namespace ailo {
 RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m_device(device) {
     std::array<vk::AttachmentDescription, 2 * kMaxColorAttachments + 1> attachments; // color / resolve / depth
@@ -60,15 +63,17 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
     depthAttachmentRef.attachment = depthQuery.format != vk::Format::eUndefined ? attachmentCount : VK_ATTACHMENT_UNUSED;
     depthAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
-    auto& depthAttachment = attachments[attachmentCount++];
-    depthAttachment.format = depthQuery.format;
-    depthAttachment.samples = query.samples;
-    depthAttachment.loadOp = depthQuery.loadOp;
-    depthAttachment.storeOp = depthQuery.storeOp;
-    depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
-    depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
-    depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-    depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    if (depthQuery.format != vk::Format::eUndefined) {
+        auto& depthAttachment = attachments[attachmentCount++];
+        depthAttachment.format = depthQuery.format;
+        depthAttachment.samples = query.samples;
+        depthAttachment.loadOp = depthQuery.loadOp;
+        depthAttachment.storeOp = depthQuery.storeOp;
+        depthAttachment.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
+        depthAttachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+        depthAttachment.initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+        depthAttachment.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    }
 
     vk::SubpassDescription subpass{};
     subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;

@@ -18,6 +18,7 @@ class Shader {
 
     static ShaderDescription& getDefaultShaderDescription();
     static ShaderDescription& getSkyboxShaderDescription();
+    static ShaderDescription& getHdrShader();
 
  private:
     std::vector<DescriptorSetLayoutHandle> m_descriptorSetLayouts;

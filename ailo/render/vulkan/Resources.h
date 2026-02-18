@@ -11,6 +11,7 @@ namespace ailo {
 class FenceStatus;
 
 namespace gpu {
+struct RenderTarget;
 struct VertexBufferLayout;
 
 class Program;
@@ -27,6 +28,7 @@ using VertexBufferLayoutHandle = Handle<gpu::VertexBufferLayout>;
 using DescriptorSetHandle = Handle<gpu::DescriptorSet>;
 using TextureHandle = Handle<gpu::Texture>;
 using DescriptorSetLayoutHandle = Handle<gpu::DescriptorSetLayout>;
+using RenderTargetHandle = Handle<gpu::RenderTarget>;
 
 enum class BufferBinding : uint8_t {
   UNKNOWN,
@@ -79,6 +81,21 @@ enum class TextureType : uint8_t {
     TEXTURE_2D,
     TEXTURE_CUBEMAP
 };
+
+enum class TextureUsage : uint16_t {
+    None = 0,
+    Sampled = 1 << 0,
+    Storage = 1 << 1,
+    ColorAttachment = 1 << 2,
+    DepthStencilAttachment = 1 << 3,
+};
+
+inline TextureUsage operator&(TextureUsage lhs, TextureUsage rhs) {
+    return static_cast<TextureUsage>(static_cast<uint16_t>(lhs) & static_cast<uint16_t>(rhs));
+}
+inline TextureUsage operator|(TextureUsage lhs, TextureUsage rhs) {
+    return static_cast<TextureUsage>(static_cast<uint16_t>(lhs) | static_cast<uint16_t>(rhs));
+}
 
 class Acquirable {
 public:
@@ -137,6 +154,15 @@ struct DescriptorSet {
     std::shared_ptr<FenceStatus> boundFence;
 
     bool isBound() const;
+};
+
+struct RenderTarget : public enable_resource_ptr<RenderTarget> {
+    PerColorAttachment<resource_ptr<Texture>> colors {};
+    PerColorAttachment<resource_ptr<Texture>> resolve {};
+    resource_ptr<Texture> depth {};
+    uint32_t width {};
+    uint32_t height {};
+    vk::SampleCountFlagBits samples {};
 };
 
 struct FrameBufferFormat {
@@ -209,5 +235,8 @@ struct PipelineState {
     Handle<gpu::VertexBufferLayout> vertexBufferLayout;
 };
 
+struct RenderPassState {
+    resource_ptr<gpu::RenderTarget> renderTarget {};
+};
 
 }

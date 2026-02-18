@@ -7,8 +7,8 @@
 
 namespace ailo {
 
-Texture::Texture(Engine& engine, TextureType type, vk::Format format, uint32_t width, uint32_t height, uint8_t levels)
-    : m_handle(engine.getRenderAPI()->createTexture(type, format, width, height, levels)), m_levels(levels) {
+Texture::Texture(Engine& engine, TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels)
+    : m_handle(engine.getRenderAPI()->createTexture(type, format, usage, width, height, levels)), m_levels(levels) {
 }
 
 void Texture::updateImage(Engine& engine, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset,
@@ -30,7 +30,6 @@ void Texture::destroy(Engine& engine) {
 
 std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
     bool isHdr = stbi_is_hdr(path.c_str());
-    std::cout << "Texture format: " << path.c_str() << " " << (isHdr ? "HDR" : "RGB") << std::endl;
 
     std::unique_ptr<Texture> tex;
     if (!isHdr) {
@@ -45,7 +44,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels);
         stbi_image_free(pixels);
 
@@ -60,7 +59,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
         stbi_image_free(pixels);
     }

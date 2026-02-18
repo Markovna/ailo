@@ -122,6 +122,7 @@ void ImGuiProcessor::updateTexture(ImTextureData* tex) {
     auto textureHandle = m_renderAPI->createTexture(
         TextureType::TEXTURE_2D,
         vk::Format::eR8Unorm,
+        TextureUsage::Sampled,
         static_cast<uint32_t>(tex->Width),
         static_cast<uint32_t>(tex->Height)
     );

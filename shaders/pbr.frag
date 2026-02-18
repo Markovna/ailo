@@ -25,6 +25,7 @@ layout(location = 0) out vec4 outColor;
 mat3 shading_tangentToWorld;
 vec3 shading_view;
 vec3 shading_normal;
+vec3 shading_reflected;
 float shading_NoV;
 
 struct Light {
@@ -44,11 +45,13 @@ struct Pixel {
     vec3 baseColor;
     float metallic;
     float roughness;
+//    vec3 energyCompensation;
+    vec3 dfg;
 };
 
 void getPixel(out Pixel pixel) {
     vec3 baseColor = texture(baseColorMap, fragUV).rgb;
-    baseColor = pow(baseColor, vec3(2.2));
+    //baseColor = pow(baseColor, vec3(2.2));
 
     vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
     float metallic = metallicRoughness.b;
@@ -65,6 +68,12 @@ void getPixel(out Pixel pixel) {
     pixel.reflectance = 0.16 * reflectance * reflectance;
 
     pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
+    pixel.dfg = textureLod(iblDFG, vec2(shading_NoV, pixel.perceptualRoughness), 0.0).rgb;
+    //pixel.energyCompensation = 1.0 + pixel.f0 * (1.0 / pixel.dfg.y - 1.0);
+}
+
+vec3 fresnelSchlickRoughness(float NoV, vec3 f0, float roughness) {
+    return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow5(clamp01(1.0 - NoV));
 }
 
 vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float NoH, float LoH) {
@@ -169,6 +178,7 @@ void main() {
 #endif
 
     shading_NoV = dot(shading_normal, shading_view);
+    shading_reflected = reflect(-shading_view, shading_normal);
 
     Pixel pixel;
     getPixel(pixel);
@@ -183,14 +193,34 @@ void main() {
         color += surfaceShading(pixel, light, 1.0);
     }
 
+    const float ambientLuminance = 0.3;
+
+    vec3 E = mix(pixel.dfg.yyy, pixel.dfg.xxx, pixel.f0);
+
+    vec3 reflected = mix(shading_reflected, shading_normal, pixel.roughness * pixel.roughness);
+    float radianceLod = view.iblSpecularMaxLod * pixel.perceptualRoughness * (2.0 - pixel.perceptualRoughness);
+    vec3 prefilteredRadiance = textureLod(iblSpecular, reflected, radianceLod).rgb;
+    vec3 Fr = E * prefilteredRadiance;
+
     vec3 diffuseIrradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
+    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E);
 
-    vec3 dfg = texture(iblDFG, vec2(shading_NoV, pixel.perceptualRoughness)).rgb;
+    color.rgb += ambientLuminance * (Fd + Fr);
 
-    const float iblLuminance = 0.4;
-    vec3 E = mix(dfg.xxx, dfg.yyy, pixel.f0);
-    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * iblLuminance;
-    color.rgb += Fd;
+//    float NoV = max(shading_NoV, 1e-5);
+//    vec3 kS = fresnelSchlickRoughness(NoV, pixel.f0, pixel.perceptualRoughness);
+//    vec3 irradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
+//    vec3 diffuse = pixel.diffuseColor * irradiance * (1.0 - kS);
+//
+//    vec3 R = shading_reflected;
+//    vec3 prefilteredColor = textureLod(iblSpecular, R, pixel.perceptualRoughness * view.iblSpecularMaxLod).rgb;
+//    vec2 envBRDF  = texture(iblDFG, vec2(NoV, pixel.perceptualRoughness)).rg;
+//    vec3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
+//
+//    color.rgb += ambientLuminance * (diffuse + specular);
+
+    // HDR tonemapping
+     color = color / (color + vec3(1.0));
 
     outColor = vec4(color, 1.0);
 }

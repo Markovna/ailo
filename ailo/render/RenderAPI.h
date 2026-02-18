@@ -49,7 +49,7 @@ public:
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
     // Texture management
-    TextureHandle createTexture(TextureType, vk::Format, uint32_t width, uint32_t height, uint8_t levels = 1);
+    TextureHandle createTexture(TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
     void destroyTexture(const TextureHandle& handle);
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1);
     void generateMipmaps(const TextureHandle& handle);
@@ -62,6 +62,9 @@ public:
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
 
+    RenderTargetHandle createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
+    void destroyRenderTarget(RenderTargetHandle&);
+
     // Program management
 
     ProgramHandle createProgram(const ShaderDescription& description);
@@ -69,6 +72,7 @@ public:
 
     // Command recording (call between beginFrame and endFrame)
     void beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    void beginRenderPass(const RenderTargetHandle&, const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
     void endRenderPass();
     void bindPipeline(const PipelineState& state);
     void bindVertexBuffer(const BufferHandle& handle);
@@ -76,6 +80,7 @@ public:
     void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
     void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets = { });
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0);
+    void draw(uint32_t vertexCount, uint32_t firstVertex = 0);
     void setViewport(float x, float y, float width, float height);
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
@@ -140,12 +145,13 @@ private:
     ResourceContainer<Program> m_programs;
     ResourceContainer<Pipeline> m_graphicsPipelines;
     ResourceContainer<VertexBufferLayout> m_vertexBufferLayouts;
+    ResourceContainer<gpu::RenderTarget> m_renderTargets;
 
     std::unique_ptr<SwapChain> m_swapChain;
     FrameBufferCache m_framebufferCache;
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
-
+    RenderPassState m_currentRenderPassState;
 };
 
 } // namespace ailo

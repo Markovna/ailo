@@ -47,6 +47,16 @@ vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
   return static_cast<vk::BufferUsageFlagBits>(0);
 }
 
+vk::ImageUsageFlags getTextureUsage(TextureUsage usage) {
+  vk::ImageUsageFlags usageFlags;
+  if ((usage & TextureUsage::Sampled) == TextureUsage::Sampled ) usageFlags |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+  if ((usage & TextureUsage::Storage) == TextureUsage::Storage) usageFlags |= vk::ImageUsageFlagBits::eStorage;
+  if ((usage & TextureUsage::ColorAttachment) == TextureUsage::ColorAttachment) usageFlags |= vk::ImageUsageFlagBits::eColorAttachment;
+  if ((usage & TextureUsage::DepthStencilAttachment) == TextureUsage::DepthStencilAttachment) usageFlags |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+
+  return usageFlags;
+}
+
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout layout) {
   switch (layout) {
     case vk::ImageLayout::eUndefined:

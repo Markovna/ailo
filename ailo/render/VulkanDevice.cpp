@@ -199,6 +199,7 @@ vk::SurfaceFormatKHR VulkanDevice::getSurfaceFormat() const {
     auto formats = m_physicalDevice.getSurfaceFormatsKHR(m_surface);
     auto findFormat = std::ranges::find_if(formats, [](const auto& format) {
         return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+        // return format.format == vk::Format::eR32G32B32A32Sfloat && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
     });
     if (findFormat == formats.end()) { return formats[0]; }
     return *findFormat;

@@ -408,11 +408,12 @@ void IrradianceMapGenerator::dfg(const std::string& path) {
     auto dataPtr = data;
 
     for (size_t y = 0; y < height; y++) {
-        const float h = (float) height;
+        const float h = static_cast<float>(height);
         const float coord = glm::clamp((h - y + 0.5f) / h, 0.0f, 1.0f);
         const float linear_roughness = coord * coord;
         for (size_t x = 0; x < width; x++) {
-            const float NoV = glm::clamp((x + 0.5f) / width, 0.0f, 1.0f);
+            const float w = static_cast<float>(width);
+            const float NoV = glm::clamp((x + 0.5f) / w, 0.0f, 1.0f);
             const glm::vec3 r = { DFV(NoV, linear_roughness, 1024), 0 };
             *dataPtr = r;
             dataPtr++;

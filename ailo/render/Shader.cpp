@@ -85,6 +85,31 @@ ShaderDescription& Shader::getSkyboxShaderDescription() {
     return description;
 }
 
+ShaderDescription& Shader::getHdrShader() {
+    static ShaderDescription description {
+        .vertexShader = os::readFile("shaders/hdr.vert.spv"),
+        .fragmentShader = os::readFile("shaders/hdr.frag.spv"),
+        .raster = RasterDescription {
+            .cullingMode = CullingMode::FRONT,
+            .inverseFrontFace = false,
+            .depthWriteEnable = false,
+            .depthCompareOp = CompareOp::LESS_OR_EQUAL
+        },
+        .layout = {
+            DescriptorSetLayoutBindings::perView(),
+            DescriptorSetLayoutBindings::perObject(),
+              {
+                      {
+                          .binding = 0,
+                          .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                          .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                      },
+                }
+        }
+    };
+    return description;
+}
+
 Shader::Shader(Engine& engine, const ShaderDescription& description)
     : m_description(description) {
 
