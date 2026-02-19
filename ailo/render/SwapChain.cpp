@@ -7,7 +7,7 @@
 
 namespace ailo {
 
-SwapChain::SwapChain(VulkanDevice& device) {
+SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& textures) {
     vk::SurfaceFormatKHR surfaceFormat = device.getSurfaceFormat();
     vk::PresentModeKHR presentMode = device.getPresentMode();
     vk::Extent2D extent = device.getSwapExtent();
@@ -49,7 +49,7 @@ SwapChain::SwapChain(VulkanDevice& device) {
     auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
     m_colors.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
-        m_colors.emplace_back(*device, image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor);
+        m_colors.emplace_back(resource_ptr<gpu::Texture>::make(textures, *device, image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor));
 
         vk::SemaphoreCreateInfo semaphoreInfo{};
         m_renderFinishedSemaphores.push_back(device->createSemaphore(semaphoreInfo));
@@ -58,7 +58,7 @@ SwapChain::SwapChain(VulkanDevice& device) {
     auto samples = vk::SampleCountFlagBits::e4;
     samples = std::min(samples, device.getMSAASamples());
     
-    m_depth.emplace(
+    m_depth = resource_ptr<gpu::Texture>::make(textures,
         *device, device.physicalDevice(), TextureType::TEXTURE_2D,
         depthFormat, 1, extent.width, extent.height, vk::Filter{},
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
@@ -68,12 +68,12 @@ SwapChain::SwapChain(VulkanDevice& device) {
     if (samples != vk::SampleCountFlagBits::e1) {
         m_msaa.reserve(m_colors.size());
         for (size_t i = 0; i < m_colors.size(); i++) {
-            m_msaa.emplace_back(
+            m_msaa.emplace_back(resource_ptr<gpu::Texture>::make(textures,
                 *device, device.physicalDevice(), TextureType::TEXTURE_2D,
                 surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                 vk::ImageAspectFlagBits::eColor,
-                samples);
+                samples));
         }
     }
 }
@@ -90,7 +90,7 @@ vk::Result SwapChain::acquireNextImage(vk::Device device, vk::Semaphore& semapho
 
 vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue) {
     auto& texture = m_colors[m_currentImageIndex];
-    texture.transitionLayout(commandBuffer.buffer(), vk::ImageLayout::ePresentSrcKHR);
+    texture->transitionLayout(commandBuffer.buffer(), vk::ImageLayout::ePresentSrcKHR);
 
     commandBuffer.submit(graphicsQueue, m_renderFinishedSemaphores[m_currentImageIndex]);
 

@@ -257,8 +257,6 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
     loadFromCpu(*commands, buffer, data, byteOffset, size);
 }
 
-// Texture management
-
 TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
     auto ptr = resource_ptr<Texture>::make(
         m_textures, *m_device, m_device.physicalDevice(),
@@ -280,10 +278,7 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
     auto& texture = m_textures.get(handle);
 
-    // allocate stage buffer
     auto stageBuffer = allocateStageBuffer(dataSize);
-
-    // mem copy to stage buffer
     memcpy(stageBuffer.mapping, data, dataSize);
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
 
@@ -296,7 +291,6 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
 
     copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount);
 
-    // Transition image layout to shader read
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
 
@@ -348,8 +342,6 @@ void RenderAPI::generateMipmaps(const TextureHandle& handle) {
 
     texture.transitionLayout(*m_commands.get(), oldLayout);
 }
-
-// Descriptor set management
 
 DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
     auto [handle, descriptorSetLayout] = m_descriptorSetLayouts.emplace();
@@ -547,8 +539,6 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
     descriptorSet.boundFence = commands.getFenceStatusShared();
 }
 
-// Pipeline management
-
 ProgramHandle RenderAPI::createProgram(const ShaderDescription& description) {
     auto ptr = resource_ptr<gpu::Program>::make(m_programs, *m_device, description);
     ptr->acquire(ptr);
@@ -559,8 +549,6 @@ void RenderAPI::destroyProgram(const ProgramHandle& handle) {
     auto& program = m_programs.get(handle);
     program.release();
 }
-
-// Command recording
 
 void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
     auto colorTarget = m_swapChain->getColorTarget();
@@ -706,7 +694,6 @@ void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassD
 
     commandBuffer->beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
-    // Set default viewport and scissor
     vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -801,7 +788,7 @@ void RenderAPI::handleWindowResize() {
 // Internal initialization
 
 void RenderAPI::createSwapchain() {
-    m_swapChain = std::make_unique<SwapChain>(m_device);
+    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures);
 }
 
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
