@@ -10,11 +10,12 @@ namespace ailo::gpu {
 class  Texture : public enable_resource_ptr<Texture> {
 public:
     Texture() = default;
+
     Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels,
         uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags,
         vk::SampleCountFlagBits = vk::SampleCountFlagBits::e1);
 
-    Texture(vk::Device device, vk::Image, vk::Format, uint32_t width, uint32_t height, vk::ImageAspectFlags);
+    Texture(vk::Device device, vk::Image, vk::Format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags);
 
     ~Texture();
 
@@ -55,6 +56,7 @@ public:
     uint32_t height;
 
     uint8_t getLevels() const { return m_levels; }
+    auto getUsage() const { return m_usage; }
 
 private:
     vk::Device m_device {};
@@ -63,6 +65,7 @@ private:
     uint8_t m_layerCount = 1;
     TextureType m_type = TextureType::TEXTURE_2D;
     vk::SampleCountFlagBits m_samples = vk::SampleCountFlagBits::e1;
+    vk::ImageUsageFlags m_usage;
 
     vk::ImageView createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels, vk::ImageAspectFlags aspectFlags);
     uint32_t findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties);

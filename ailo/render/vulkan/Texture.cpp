@@ -5,10 +5,10 @@
 namespace ailo::gpu {
 
 Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
-    : m_device(device), format(format), width(width), height(height), aspect(aspect), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples) {
+    : format(format), aspect(aspect), width(width), height(height), m_device(device), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples), m_usage(usage) {
 
     if (m_levels > 1) {
-        usage |= vk::ImageUsageFlagBits::eTransferSrc;
+        m_usage |= vk::ImageUsageFlagBits::eTransferSrc;
     }
 
     m_layerCount = type == TextureType::TEXTURE_CUBEMAP ? 6 : 1;
@@ -23,7 +23,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
     imageInfo.format = format;
     imageInfo.tiling = vk::ImageTiling::eOptimal;
     imageInfo.initialLayout = vk::ImageLayout::eUndefined;
-    imageInfo.usage = usage;
+    imageInfo.usage = m_usage;
     imageInfo.samples = m_samples;
     imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
@@ -68,8 +68,8 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
     }
 }
 
-Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageAspectFlags aspectFlags)
-    : m_device(device), image(image), format(format), width(width), height(height), aspect(aspectFlags) {
+Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags)
+    : image(image), format(format), aspect(aspectFlags), width(width), height(height), m_device(device), m_usage(usage) {
     imageView = createImageView(device, image, format, m_levels, aspectFlags);
 }
 

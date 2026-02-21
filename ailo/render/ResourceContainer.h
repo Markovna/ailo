@@ -44,7 +44,6 @@ private:
     dod::slot_map<ResourceType> m_resources {};
 };
 
-// Implementation of resource_ptr::make (must be after ResourceContainer definition)
 template<typename T>
 template<typename ...Args>
 resource_ptr<T> resource_ptr<T>::make(ResourceContainer<T>& container, Args&& ...args) {

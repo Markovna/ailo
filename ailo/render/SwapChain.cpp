@@ -7,7 +7,7 @@
 
 namespace ailo {
 
-SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& textures) {
+SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& textures, ResourceContainer<gpu::RenderTarget>& renderTargets) {
     vk::SurfaceFormatKHR surfaceFormat = device.getSurfaceFormat();
     vk::PresentModeKHR presentMode = device.getPresentMode();
     vk::Extent2D extent = device.getSwapExtent();
@@ -44,37 +44,44 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = nullptr;
-
     m_swapchain = device->createSwapchainKHR(createInfo);
-    auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
-    m_colors.reserve(swapchainImages.size());
-    for (auto& image : swapchainImages) {
-        m_colors.emplace_back(resource_ptr<gpu::Texture>::make(textures, *device, image, surfaceFormat.format, extent.width, extent.height, vk::ImageAspectFlagBits::eColor));
-
-        vk::SemaphoreCreateInfo semaphoreInfo{};
-        m_renderFinishedSemaphores.push_back(device->createSemaphore(semaphoreInfo));
-    }
 
     auto samples = vk::SampleCountFlagBits::e4;
     samples = std::min(samples, device.getMSAASamples());
-    
-    m_depth = resource_ptr<gpu::Texture>::make(textures,
+
+    auto depth = resource_ptr<gpu::Texture>::make(textures,
         *device, device.physicalDevice(), TextureType::TEXTURE_2D,
         depthFormat, 1, extent.width, extent.height, vk::Filter{},
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth,
         samples);
 
-    if (samples != vk::SampleCountFlagBits::e1) {
-        m_msaa.reserve(m_colors.size());
-        for (size_t i = 0; i < m_colors.size(); i++) {
-            m_msaa.emplace_back(resource_ptr<gpu::Texture>::make(textures,
+    auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
+    m_renderTargets.reserve(swapchainImages.size());
+    for (auto& image : swapchainImages) {
+        auto& rt = m_renderTargets.emplace_back(resource_ptr<gpu::RenderTarget>::make(renderTargets));
+        rt->samples = samples;
+        rt->width = extent.width;
+        rt->height = extent.height;
+
+        rt->colors[0] = resource_ptr<gpu::Texture>::make(textures, *device, image,
+            surfaceFormat.format, extent.width, extent.height, vk::ImageUsageFlagBits::eColorAttachment, vk::ImageAspectFlagBits::eColor);
+
+        if (samples != vk::SampleCountFlagBits::e1) {
+            auto color = rt->colors[0];
+            rt->colors[0] = resource_ptr<gpu::Texture>::make(textures,
                 *device, device.physicalDevice(), TextureType::TEXTURE_2D,
                 surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                 vk::ImageAspectFlagBits::eColor,
-                samples));
+                samples);
+            rt->resolve[0] = color;
         }
+
+        rt->depth = depth;
+
+        vk::SemaphoreCreateInfo semaphoreInfo{};
+        m_renderFinishedSemaphores.push_back(device->createSemaphore(semaphoreInfo));
     }
 }
 
@@ -89,7 +96,9 @@ vk::Result SwapChain::acquireNextImage(vk::Device device, vk::Semaphore& semapho
 }
 
 vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue) {
-    auto& texture = m_colors[m_currentImageIndex];
+    auto& texture = m_renderTargets[m_currentImageIndex]->resolve[0]
+        ? m_renderTargets[m_currentImageIndex]->resolve[0]
+        : m_renderTargets[m_currentImageIndex]->colors[0];
     texture->transitionLayout(commandBuffer.buffer(), vk::ImageLayout::ePresentSrcKHR);
 
     commandBuffer.submit(graphicsQueue, m_renderFinishedSemaphores[m_currentImageIndex]);
@@ -105,11 +114,7 @@ vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQu
 }
 
 void SwapChain::destroy(vk::Device device) {
-    if (m_depth) {
-        m_depth.reset();
-    }
-
-    m_colors.clear();
+    m_renderTargets.clear();
 
     for (auto semaphore : m_renderFinishedSemaphores) {
         device.destroySemaphore(semaphore);

@@ -84,7 +84,6 @@ public:
     void setViewport(float x, float y, float width, float height);
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
-    // Swapchain management
     void handleWindowResize();
 
 private:
@@ -99,10 +98,7 @@ private:
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
     static vk::DescriptorPool createDescriptorPoolS(vk::Device device);
 
-    // Internal initialization
     void createSwapchain();
-
-    // Internal cleanup
     void cleanupSwapchain();
     void recreateSwapchain();
 

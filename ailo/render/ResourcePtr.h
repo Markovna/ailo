@@ -56,6 +56,9 @@ private:
 };
 
 template<typename T>
+class enable_resource_ptr;
+
+template<typename T>
 class resource_ptr {
 public:
     template<typename ...Args>
@@ -131,6 +134,8 @@ private:
     }
 
     T* m_ptr = nullptr;
+
+    friend class enable_resource_ptr<T>;
 };
 
 template<typename T>
@@ -144,7 +149,7 @@ private:
 public:
     void release() { m_ptr.reset(); }
     void acquire(const resource_ptr<T>& ptr) { m_ptr = ptr; }
-    resource_ptr<T> getSharedPtr() { return m_ptr; }
+    resource_ptr<T> getSharedPtr() { return resource_ptr { &m_container->get(m_handle) }; }
 
     friend class resource_ptr<T>;
 };

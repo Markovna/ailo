@@ -551,80 +551,7 @@ void RenderAPI::destroyProgram(const ProgramHandle& handle) {
 }
 
 void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
-    auto colorTarget = m_swapChain->getColorTarget();
-    auto resolveTarget = m_swapChain->getResolveTarget();
-    auto depthTarget = m_swapChain->getDepthTarget();
-
-    m_currentRenderPassState = {};
-
-    gpu::FrameBufferFormat fbFormat {
-        .color = { colorTarget->format },
-        .depth = depthTarget->format,
-        .samples = vk::SampleCountFlagBits::e1
-    };
-
-    gpu::FrameBufferImageView fbImageView {
-        .color = { colorTarget->imageView },
-        .depth = depthTarget->imageView
-    };
-
-    if (resolveTarget) {
-        fbImageView.resolve[0] = resolveTarget->imageView;
-        fbFormat.hasResolve[0] = true;
-        fbFormat.samples = colorTarget->getSamples();
-    }
-
-    auto& renderPass = m_renderPassCache.getOrCreate(description, fbFormat);
-    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, colorTarget->width, colorTarget->height);
-
-    m_pipelineCache.bindRenderPass(renderPass, fbFormat);
-
-    CommandBuffer& commandBuffer = m_commands.get();
-    colorTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
-    depthTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eDepthStencilAttachmentOptimal);
-    if (resolveTarget) {
-        resolveTarget->transitionLayout(*commandBuffer, vk::ImageLayout::eColorAttachmentOptimal);
-    }
-
-    vk::Extent2D extent { colorTarget->width, colorTarget->height };
-    vk::Rect2D rect { { 0, 0 }, extent};
-
-    vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = frameBuffer;
-    renderPassInfo.renderArea = rect;
-
-    std::array<vk::ClearValue, 2 * fbImageView.color.size() + 1> clearValues;
-    uint32_t clearValuesCount = 0;
-    for (size_t i = 0; i < fbImageView.color.size(); i++) {
-        if (fbImageView.color[i] != VK_NULL_HANDLE) {
-            clearValues[clearValuesCount++].color = clearColor;
-        }
-    }
-    for (size_t i = 0; i < fbImageView.resolve.size(); i++) {
-        if (fbImageView.resolve[i] != VK_NULL_HANDLE) {
-            clearValues[clearValuesCount++].color = clearColor;
-        }
-    }
-    const vk::ClearDepthStencilValue depthStencilClearValue { 1.0f, 0 };
-    clearValues[clearValuesCount++].depthStencil = depthStencilClearValue;
-    renderPassInfo.clearValueCount = clearValuesCount;
-    renderPassInfo.pClearValues = clearValues.data();
-
-    commandBuffer->beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
-    // Set default viewport and scissor
-    vk::Viewport viewport{};
-    viewport.x = 0.0f;
-    viewport.y = 0.0f;
-    viewport.width = static_cast<float>(extent.width);
-    viewport.height = static_cast<float>(extent.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    commandBuffer->setViewport(0, 1, &viewport);
-
-    vk::Rect2D scissor {{0, 0}, extent };
-    commandBuffer->setScissor(0, 1, &scissor);
+    beginRenderPass(m_swapChain->getCurrentRenderTarget().getHandle(), description, clearColor);
 }
 
 void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassDescription& description,
@@ -711,13 +638,14 @@ void RenderAPI::endRenderPass() {
     auto& commands = m_commands.get();
     commands->endRenderPass();
 
-    if (m_currentRenderPassState.renderTarget) {
-        for (size_t i = 0; i < m_currentRenderPassState.renderTarget->colors.size(); i++) {
-            if (m_currentRenderPassState.renderTarget->colors[i]) {
-                m_currentRenderPassState.renderTarget->colors[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+    if (auto renderTarget = m_currentRenderPassState.renderTarget) {
+        for (size_t i = 0; i < renderTarget->colors.size(); i++) {
+            if (renderTarget->colors[i] && renderTarget->colors[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
+                renderTarget->colors[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
-            if (m_currentRenderPassState.renderTarget->resolve[i]) {
-                m_currentRenderPassState.renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+            if (renderTarget->resolve[i] && renderTarget->resolve[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
+                renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
         }
     }
@@ -788,7 +716,7 @@ void RenderAPI::handleWindowResize() {
 // Internal initialization
 
 void RenderAPI::createSwapchain() {
-    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures);
+    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
 
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
