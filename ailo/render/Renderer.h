@@ -118,7 +118,7 @@ private:
   DescriptorSetHandle m_objectDescriptorSet;
   DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
   DescriptorSetLayoutHandle m_objectDescriptorSetLayout;
-  std::shared_ptr<Texture> m_iblDfgLut;
+  asset_ptr<Texture> m_iblDfgLut;
 };
 
 }

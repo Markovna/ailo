@@ -1,12 +1,13 @@
 #pragma once
 
 #include "RenderAPI.h"
+#include "common/AssetPool.h"
 
 namespace ailo {
 
 class Engine;
 
-class Shader {
+class Shader : public enable_asset_ptr<Shader> {
  public:
     Shader(Engine&, const ShaderDescription&);
 
@@ -19,6 +20,8 @@ class Shader {
     static ShaderDescription& getDefaultShaderDescription();
     static ShaderDescription& getSkyboxShaderDescription();
     static ShaderDescription& getHdrShader();
+
+    static asset_ptr<Shader> load(Engine&, const ShaderDescription&);
 
  private:
     std::vector<DescriptorSetLayoutHandle> m_descriptorSetLayouts;

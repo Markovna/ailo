@@ -4,6 +4,7 @@
 
 #include "Mesh.h"
 #include "Shader.h"
+#include "ecs/ImageBasedLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
 #include "resources/ResourcePtr.h"
@@ -51,9 +52,8 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
-  auto iblTexture = scene.getIblTexture();
-  m_perViewUniformBufferData.iblSpecularMaxLod = iblTexture ? iblTexture->getLevels() - 1 : 1;
-
+  auto ibl = scene.tryGet<ImageBasedLighting>(scene.single());
+  m_perViewUniformBufferData.iblSpecularMaxLod = ibl ? ibl->irradianceMap->getLevels() - 1 : 1;
 
   // prepare descriptor sets and uniform buffers
   prepare(engine, scene);
@@ -168,12 +168,12 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
-  auto iblTexture = scene.getIblTexture();
-  auto iblTexHandle = iblTexture ? iblTexture->getHandle() : TextureHandle{};
+  auto ibl = scene.tryGet<ImageBasedLighting>(scene.single());
+  auto iblTexHandle = ibl ? ibl->irradianceMap->getHandle() : TextureHandle{};
   backend.updateDescriptorSetTexture(m_viewDescriptorSet, iblTexHandle, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
   if (!m_iblDfgLut) {
-    m_iblDfgLut = Texture::createFromFile(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
+    m_iblDfgLut = Texture::load(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
   }
 
   backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));

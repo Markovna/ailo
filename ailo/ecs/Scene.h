@@ -10,10 +10,7 @@ class Texture;
 
 class Scene {
  public:
-  Scene() = default;
-
-  void setIblTexture(std::shared_ptr<Texture> texture) { m_iblTexture = texture; }
-  auto getIblTexture() const { return m_iblTexture.get(); }
+  Scene();
 
   auto addEntity() { return m_registry.create(); }
   void removeEntity(entt::entity entity) { m_registry.destroy(entity); }
@@ -25,6 +22,8 @@ class Scene {
   decltype(auto) addComponent(entt::entity entity, Args&& ...args) {
    return m_registry.emplace<Type, Args...>(entity, std::forward<Args>(args)...);
   }
+
+  decltype(auto) single() const { return m_singleEntity; }
 
   template<typename Type>
   decltype(auto) get(entt::entity entity) {
@@ -38,7 +37,7 @@ class Scene {
 
  private:
   entt::registry m_registry;
-  std::shared_ptr<Texture> m_iblTexture;
+  entt::entity m_singleEntity;
 };
 
 }

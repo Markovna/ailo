@@ -20,7 +20,7 @@ public:
     template<typename...Args>
     std::pair<Handle, reference> emplace(Args&&... args) {
         auto key = m_resources.emplace(std::forward<Args>(args)...);
-        auto ptr  = m_resources.get(key);
+        auto ptr = m_resources.get(key);
         return { Handle { key.raw }, *ptr };
     }
 

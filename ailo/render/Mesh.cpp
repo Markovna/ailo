@@ -42,7 +42,7 @@ struct MeshData {
 };
 
 // Helper function to load texture from file
-static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
+static asset_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
     // Construct full texture path
     std::filesystem::path fullPath;
 
@@ -54,7 +54,7 @@ static std::unique_ptr<Texture> loadTexture(Engine& engine, const std::string& t
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
 
-    return Texture::createFromFile(engine, fullPath.string(), format, true);
+    return Texture::load(engine, fullPath.string(), format, true);
 }
 
 // Recursive function to traverse scene hierarchy and extract meshes with transforms
@@ -238,7 +238,7 @@ Mesh MeshReader::createCubeMesh(Engine& engine) {
 
 std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path) {
     // Static container to keep textures alive
-    static std::vector<std::unique_ptr<Texture>> loadedTextures;
+    // static std::vector<std::unique_ptr<Texture>> loadedTextures;
 
     Assimp::Importer importer;
 
@@ -257,7 +257,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
     std::string modelDirectory = modelPath.parent_path().string();
 
     // Create shader (shared by all meshes)
-    auto shader = engine.loadShader(Shader::getDefaultShaderDescription());
+    auto shader = Shader::load(engine, Shader::getDefaultShaderDescription());
 
     std::vector<std::shared_ptr<Material>> materials;
     materials.resize(aiscene->mNumMaterials);
@@ -266,41 +266,29 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
 
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* material = aiscene->mMaterials[i];
-        Texture* diffuse = nullptr;
-        Texture* normalMap = nullptr;
-        Texture* metallicRoughnessMap = nullptr;
+        asset_ptr<Texture> diffuse = {};
+        asset_ptr<Texture> normalMap = {};
+        asset_ptr<Texture> metallicRoughnessMap {};
 
         // Try to get the diffuse texture
         if (material->GetTextureCount(aiTextureType_BASE_COLOR) > 0) {
             aiString texturePath;
             if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texturePath) == AI_SUCCESS) {
-                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
-                if (texture) {
-                    diffuse = texture.get();
-                    loadedTextures.push_back(std::move(texture));
-                }
+                diffuse = loadTexture(engine, texturePath.C_Str(), modelDirectory);
             }
         }
 
         if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
             aiString texturePath;
             if (material->GetTexture(aiTextureType_NORMALS, 0, &texturePath) == AI_SUCCESS) {
-                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory, vk::Format::eR8G8B8A8Unorm);
-                if (texture) {
-                    normalMap = texture.get();
-                    loadedTextures.push_back(std::move(texture));
-                }
+                normalMap = loadTexture(engine, texturePath.C_Str(), modelDirectory, vk::Format::eR8G8B8A8Unorm);
             }
         }
 
         if (material->GetTextureCount(aiTextureType_GLTF_METALLIC_ROUGHNESS) > 0) {
             aiString texturePath;
             if (material->GetTexture(aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &texturePath) == AI_SUCCESS) {
-                auto texture = loadTexture(engine, texturePath.C_Str(), modelDirectory);
-                if (texture) {
-                    metallicRoughnessMap = texture.get();
-                    loadedTextures.push_back(std::move(texture));
-                }
+                metallicRoughnessMap = loadTexture(engine, texturePath.C_Str(), modelDirectory);
             }
         }
 
@@ -314,7 +302,6 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         }
         if (metallicRoughnessMap) {
             materials[i]->setTexture(2, metallicRoughnessMap);
-
         }
     }
 

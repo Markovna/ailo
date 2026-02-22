@@ -1,4 +1,5 @@
 #include "Texture.h"
+#include "Engine.h"
 
 #include <iostream>
 #include <ostream>
@@ -28,7 +29,7 @@ void Texture::destroy(Engine& engine) {
     engine.getRenderAPI()->destroyTexture(m_handle);
 }
 
-asset_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
+asset_ptr<Texture> Texture::load(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
     auto ptr = engine.getAssetManager()->get<Texture>(path);
     if (ptr) { return ptr; }
 

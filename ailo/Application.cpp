@@ -23,6 +23,7 @@
 #include <iostream>
 
 #include "OS.h"
+#include "ecs/ImageBasedLighting.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
 #include "resources/ResourcePtr.h"
@@ -92,7 +93,7 @@ void Application::init() {
   auto skybox = m_scene->addEntity();
   ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox, ailo::MeshReader::createCubeMesh(*m_engine));
 
-  auto skyboxShader = m_engine->loadShader(ailo::Shader::getSkyboxShaderDescription());
+  auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
   auto skyboxMaterial = ailo::make_resource<ailo::Material>(*m_engine, *m_engine, skyboxShader);
   skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
@@ -100,7 +101,7 @@ void Application::init() {
     bool isHdr = stbi_is_hdr(path[0].c_str());
 
     constexpr int MAX_MIP_LEVELS = 4;
-    std::shared_ptr<ailo::Texture> tex;
+    ailo::asset_ptr<ailo::Texture> tex;
 
     assert(path.size() == 6);
     for (size_t face = 0; face < 6; face++) {
@@ -126,7 +127,7 @@ void Application::init() {
       }
 
       if (!tex) {
-        tex = ailo::make_resource<ailo::Texture>(engine, engine, ailo::TextureType::TEXTURE_CUBEMAP, format, ailo::TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
+        tex = engine.getAssetManager()->emplace<ailo::Texture>(path[face], engine, ailo::TextureType::TEXTURE_CUBEMAP, format, ailo::TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
       }
 
       tex->updateImage(engine, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1);
@@ -137,7 +138,7 @@ void Application::init() {
     return tex;
   };
 
-  static auto cubemapTex = loadCubemapTex(
+  auto cubemapTex = loadCubemapTex(
       *m_engine,
       vk::Format::eR8G8B8A8Srgb,
       {
@@ -148,9 +149,9 @@ void Application::init() {
         "assets/textures/yokohama/yokohama_posz.jpg",
         "assets/textures/yokohama/yokohama_negz.jpg"
       });
-  skyboxMaterial->setTexture(0, cubemapTex.get());
+  skyboxMaterial->setTexture(0, cubemapTex);
 
-  static auto iblIrradiance = loadCubemapTex(
+  auto iblIrradiance = loadCubemapTex(
     *m_engine,
     vk::Format::eR32G32B32A32Sfloat,
     {
@@ -162,7 +163,7 @@ void Application::init() {
       "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nz.hdr"
     });
 
-  m_scene->setIblTexture(iblIrradiance);
+  m_scene->addComponent<ailo::ImageBasedLighting>(m_scene->single()).irradianceMap = iblIrradiance;
 
   auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
@@ -180,6 +181,8 @@ void Application::mainLoop() {
     handleInput();
 
     drawFrame();
+
+    m_engine->gc();
   }
   m_engine->getRenderAPI()->waitIdle();
 }
@@ -326,13 +329,6 @@ void Application::cleanup() {
   m_imguiProcessor.reset();
 
   m_scene.reset();
-  if (m_texture) {
-    m_texture->destroy(*m_engine);
-  }
-
-  if (m_normalMapTexture) {
-    m_normalMapTexture->destroy(*m_engine);
-  }
 
   m_engine.reset();
 

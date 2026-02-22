@@ -22,8 +22,6 @@ class Application {
     std::unique_ptr<ailo::Scene> m_scene;
     std::unique_ptr<ailo::ImGuiProcessor> m_imguiProcessor;
     std::unique_ptr<ailo::Camera> m_camera;
-    std::unique_ptr<ailo::Texture> m_texture;
-    std::unique_ptr<ailo::Texture> m_normalMapTexture;
     ailo::Entity m_cubeEntity {};
 
     float m_time = 0;

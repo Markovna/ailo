@@ -1,5 +1,7 @@
 #include "Shader.h"
 
+#include <iostream>
+#include <ostream>
 #include <ranges>
 
 #include "Engine.h"
@@ -108,6 +110,10 @@ ShaderDescription& Shader::getHdrShader() {
         }
     };
     return description;
+}
+
+asset_ptr<Shader> Shader::load(Engine& engine, const ShaderDescription& description) {
+    return engine.getAssetManager()->emplace<Shader>(assets::no_path{}, engine, description);
 }
 
 Shader::Shader(Engine& engine, const ShaderDescription& description)

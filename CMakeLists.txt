@@ -84,6 +84,8 @@ add_executable(ailo
     ailo/resources/ResourcePtr.cpp
     ailo/resources/ResourcePtr.h
         ailo/common/AssetPool.h
+        ailo/ecs/ImageBasedLighting.cpp
+        ailo/ecs/ImageBasedLighting.h
 )
 
 # Link libraries
