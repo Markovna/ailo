@@ -42,7 +42,7 @@ struct Pixel {
     float reflectance;
     vec3 diffuseColor;
     float perceptualRoughness;
-    vec3 baseColor;
+    vec4 baseColor;
     float metallic;
     float roughness;
 //    vec3 energyCompensation;
@@ -50,8 +50,7 @@ struct Pixel {
 };
 
 void getPixel(out Pixel pixel) {
-    vec3 baseColor = texture(baseColorMap, fragUV).rgb;
-    //baseColor = pow(baseColor, vec3(2.2));
+    vec4 baseColor = texture(baseColorMap, fragUV);
 
     vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
     float metallic = metallicRoughness.b;
@@ -70,10 +69,6 @@ void getPixel(out Pixel pixel) {
     pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
     pixel.dfg = textureLod(iblDFG, vec2(shading_NoV, pixel.perceptualRoughness), 0.0).rgb;
     //pixel.energyCompensation = 1.0 + pixel.f0 * (1.0 / pixel.dfg.y - 1.0);
-}
-
-vec3 fresnelSchlickRoughness(float NoV, vec3 f0, float roughness) {
-    return f0 + (max(vec3(1.0 - roughness), f0) - f0) * pow5(clamp01(1.0 - NoV));
 }
 
 vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float NoH, float LoH) {
@@ -193,7 +188,7 @@ void main() {
         color += surfaceShading(pixel, light, 1.0);
     }
 
-    const float ambientLuminance = 0.3;
+    const float ambientLuminance = 0.2;
 
     vec3 E = mix(pixel.dfg.yyy, pixel.dfg.xxx, pixel.f0);
 
@@ -207,20 +202,8 @@ void main() {
 
     color.rgb += ambientLuminance * (Fd + Fr);
 
-//    float NoV = max(shading_NoV, 1e-5);
-//    vec3 kS = fresnelSchlickRoughness(NoV, pixel.f0, pixel.perceptualRoughness);
-//    vec3 irradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
-//    vec3 diffuse = pixel.diffuseColor * irradiance * (1.0 - kS);
-//
-//    vec3 R = shading_reflected;
-//    vec3 prefilteredColor = textureLod(iblSpecular, R, pixel.perceptualRoughness * view.iblSpecularMaxLod).rgb;
-//    vec2 envBRDF  = texture(iblDFG, vec2(NoV, pixel.perceptualRoughness)).rg;
-//    vec3 specular = prefilteredColor * (kS * envBRDF.x + envBRDF.y);
-//
-//    color.rgb += ambientLuminance * (diffuse + specular);
-
     // HDR tonemapping
-     color = color / (color + vec3(1.0));
+    color = color / (color + vec3(1.0));
 
-    outColor = vec4(color, 1.0);
+    outColor = vec4(color, pixel.baseColor.a);
 }

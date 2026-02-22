@@ -37,7 +37,7 @@ public:
     template<typename D, typename = std::enable_if_t<std::is_base_of<T, D>::value> >
     Handle(const Handle<D>& derived) noexcept : Handle(derived.id) {}
 
-    HandleId getId() const noexcept { return id; }
+    [[nodiscard]] HandleId getId() const noexcept { return id; }
 
     template<typename B>
     static std::enable_if_t<std::is_base_of_v<B, T>, Handle>

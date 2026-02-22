@@ -1,9 +1,9 @@
 TODO:
 
-*  Add support for different types of indexes in index buffer (16/32 bits)
-
 *  Resource management: resource class to manage resource creation and
    destruction (shaders, materials, textures)
+
+*  Add support for different types of indexes in index buffer (16/32 bits)
 
 *  Refactoring: move stage buffers to a separate class
 

@@ -33,7 +33,7 @@ ShaderDescription& Shader::getDefaultShaderDescription() {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
             .depthWriteEnable = true,
-            .depthCompareOp = CompareOp::LESS
+            .depthCompareOp = CompareOp::LESS,
         },
         .layout = {
             DescriptorSetLayoutBindings::perView(),

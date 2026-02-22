@@ -28,10 +28,13 @@ void Texture::destroy(Engine& engine) {
     engine.getRenderAPI()->destroyTexture(m_handle);
 }
 
-std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
+asset_ptr<Texture> Texture::createFromFile(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
+    auto ptr = engine.getAssetManager()->get<Texture>(path);
+    if (ptr) { return ptr; }
+
     bool isHdr = stbi_is_hdr(path.c_str());
 
-    std::unique_ptr<Texture> tex;
+    asset_ptr<Texture> tex;
     if (!isHdr) {
         // Load texture
         int texWidth, texHeight, texChannels;
@@ -44,7 +47,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = engine.getAssetManager()->emplace<Texture>(path, engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels);
         stbi_image_free(pixels);
 
@@ -59,7 +62,7 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = std::make_unique<Texture>(engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = engine.getAssetManager()->emplace<Texture>(path, engine, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(engine, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
         stbi_image_free(pixels);
     }
@@ -70,4 +73,5 @@ std::unique_ptr<Texture> Texture::createFromFile(Engine& engine, const std::stri
 
     return tex;
 }
+
 }

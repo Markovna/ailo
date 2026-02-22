@@ -83,6 +83,7 @@ add_executable(ailo
     ailo/render/vulkan/Resources.h
     ailo/resources/ResourcePtr.cpp
     ailo/resources/ResourcePtr.h
+        ailo/common/AssetPool.h
 )
 
 # Link libraries
@@ -222,7 +223,7 @@ add_shader(ailo shaders/shader.frag)
 add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
 add_shader(ailo shaders/pbr.vert)
-add_shader(ailo shaders/pbr.frag NAME pbr DEFINES USE_NORMAL_MAP)
+add_shader(ailo shaders/pbr.frag DEFINES USE_NORMAL_MAP)
 add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
 add_shader(ailo shaders/skybox.vert)
