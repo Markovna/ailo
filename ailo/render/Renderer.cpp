@@ -24,6 +24,13 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
+Renderer::Renderer(Engine& engine) {
+  m_persistentTextures.push_back(createWhiteTexture(engine));
+  m_persistentTextures.push_back(createDefaultNormalTexture(engine));
+}
+
+Renderer::~Renderer() = default;
+
 bool Renderer::beginFrame(Engine& engine) {
   RenderAPI* backend = engine.getRenderAPI();
   return backend->beginFrame();
@@ -177,6 +184,22 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
   }
 
   backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
+}
+
+asset_ptr<Texture> Renderer::createWhiteTexture(Engine& engine) {
+  static const std::array<uint8_t, 4> white = { 255, 255, 255, 255 };
+
+  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/white", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(engine, white.data(), 4);
+  return texture;
+}
+
+asset_ptr<Texture> Renderer::createDefaultNormalTexture(Engine& engine) {
+  static const std::array<uint8_t, 4> normal = { 128, 128, 255, 255 };
+
+  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/normal", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(engine, normal.data(), 4);
+  return texture;
 }
 
 void Renderer::terminate(Engine& engine) {

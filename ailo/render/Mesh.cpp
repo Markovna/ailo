@@ -278,11 +278,19 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
             }
         }
 
+        if (!diffuse) {
+            diffuse = engine.getAssetManager()->get<Texture>("builtin://textures/white");
+        }
+
         if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
             aiString texturePath;
             if (material->GetTexture(aiTextureType_NORMALS, 0, &texturePath) == AI_SUCCESS) {
                 normalMap = loadTexture(engine, texturePath.C_Str(), modelDirectory, vk::Format::eR8G8B8A8Unorm);
             }
+        }
+
+        if (!normalMap) {
+            normalMap = engine.getAssetManager()->get<Texture>("builtin://textures/normal");
         }
 
         if (material->GetTextureCount(aiTextureType_GLTF_METALLIC_ROUGHNESS) > 0) {
@@ -292,6 +300,9 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
             }
         }
 
+        if (!metallicRoughnessMap) {
+            metallicRoughnessMap = engine.getAssetManager()->get<Texture>("builtin://textures/white");
+        }
 
         materials[i] = ailo::make_resource<Material>(engine, engine, shader);
         if (diffuse) {

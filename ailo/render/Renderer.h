@@ -96,6 +96,9 @@ class Scene;
 
 class Renderer {
 public:
+  Renderer(Engine&);
+  ~Renderer();
+
   bool beginFrame(Engine&);
   void colorPass(Engine&, Scene& scene, const Camera& camera);
   void endFrame(Engine&);
@@ -106,6 +109,9 @@ private:
   void prepare(Engine&, Scene&);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
+
+  static asset_ptr<Texture> createWhiteTexture(Engine&);
+  static asset_ptr<Texture> createDefaultNormalTexture(Engine&);
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
@@ -119,6 +125,8 @@ private:
   DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
   DescriptorSetLayoutHandle m_objectDescriptorSetLayout;
   asset_ptr<Texture> m_iblDfgLut;
+
+  std::vector<asset_ptr<Texture>> m_persistentTextures;
 };
 
 }
