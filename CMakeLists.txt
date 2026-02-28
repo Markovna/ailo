@@ -84,8 +84,8 @@ add_executable(ailo
     ailo/resources/ResourcePtr.cpp
     ailo/resources/ResourcePtr.h
         ailo/common/AssetPool.h
-        ailo/ecs/ImageBasedLighting.cpp
-        ailo/ecs/ImageBasedLighting.h
+        ailo/ecs/SceneLighting.cpp
+        ailo/ecs/SceneLighting.h
 )
 
 # Link libraries
@@ -104,6 +104,12 @@ target_link_libraries(ailo
 target_include_directories(ailo PRIVATE
     ${Vulkan_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/ailo
+)
+
+# GLM configuration for Vulkan
+target_compile_definitions(ailo PRIVATE
+    GLM_FORCE_RADIANS
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
 # Find glslc shader compiler
@@ -230,3 +236,5 @@ add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
 add_shader(ailo shaders/skybox.vert)
 add_shader(ailo shaders/skybox.frag)
+add_shader(ailo shaders/shadow.vert)
+add_shader(ailo shaders/shadow.frag)

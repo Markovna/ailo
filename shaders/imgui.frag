@@ -1,7 +1,8 @@
 #version 450 core
 layout(location = 0) out vec4 fColor;
 
-layout(binding = 1) uniform sampler2D sTexture;
+layout(set = 1, binding = 0)
+uniform sampler2D sTexture;
 
 layout(location = 0) in struct {
     vec4 Color;

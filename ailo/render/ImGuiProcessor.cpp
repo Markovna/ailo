@@ -35,11 +35,16 @@ void ImGuiProcessor::shutdown() {
       }
     }
 
+    for (auto& [id, descriptor] : m_samplerDescriptors) {
+        m_renderAPI->destroyDescriptorSet(descriptor);
+    }
+
     m_renderAPI->destroyBuffer(m_vertexBuffer);
     m_renderAPI->destroyBuffer(m_indexBuffer);
     m_renderAPI->destroyBuffer(m_uniformBuffer);
-    m_renderAPI->destroyDescriptorSet(m_descriptorSet);
-    m_renderAPI->destroyDescriptorSetLayout(m_descriptorSetLayout);
+    m_renderAPI->destroyDescriptorSet(m_uniformDescriptor);
+    m_renderAPI->destroyDescriptorSetLayout(m_uniformDescriptorLayout);
+    m_renderAPI->destroyDescriptorSetLayout(m_samplerDescriptorLayout);
     m_renderAPI->destroyProgram(m_program);
 }
 
@@ -47,23 +52,25 @@ void ImGuiProcessor::createPipeline() {
     // Create uniform buffer for projection matrix (2 vec2s = 16 bytes)
     m_uniformBuffer = m_renderAPI->createBuffer(ailo::BufferBinding::UNIFORM, 16);
 
-    // Create descriptor set layout with two bindings (swapped for MoltenVK compatibility test)
     ailo::DescriptorSetLayoutBinding uniformBinding{};
     uniformBinding.binding = 0;
     uniformBinding.descriptorType = vk::DescriptorType::eUniformBuffer;
     uniformBinding.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
     ailo::DescriptorSetLayoutBinding samplerBinding{};
-    samplerBinding.binding = 1;
+    samplerBinding.binding = 0;
     samplerBinding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
     samplerBinding.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-    std::vector<ailo::DescriptorSetLayoutBinding> bindings = { uniformBinding, samplerBinding };
-    m_descriptorSetLayout = m_renderAPI->createDescriptorSetLayout(bindings);
+    std::vector<DescriptorSetLayoutBinding> set0 { uniformBinding };
+    std::vector<DescriptorSetLayoutBinding> set1 { samplerBinding };
+
+    m_uniformDescriptorLayout = m_renderAPI->createDescriptorSetLayout(set0);
+    m_samplerDescriptorLayout = m_renderAPI->createDescriptorSetLayout(set1);
 
     // Create and update descriptor set
-    m_descriptorSet = m_renderAPI->createDescriptorSet(m_descriptorSetLayout);
-    m_renderAPI->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, 0);
+    m_uniformDescriptor = m_renderAPI->createDescriptorSet(m_uniformDescriptorLayout);
+    m_renderAPI->updateDescriptorSetBuffer(m_uniformDescriptor, m_uniformBuffer, 0);
 
     // Create the graphics pipeline
     m_program = m_renderAPI->createProgram(
@@ -83,7 +90,7 @@ void ImGuiProcessor::createPipeline() {
                         .dstAlphaBlendFunc = BlendFunction::ONE_MINUS_SRC_ALPHA
                     },
                     .layout {
-                       { bindings }
+                        { set0, set1 }
                     }
         }
     );
@@ -97,7 +104,7 @@ void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, u
     });
 
     // Bind descriptor set
-    m_renderAPI->bindDescriptorSet(m_descriptorSet, 0);
+    m_renderAPI->bindDescriptorSet(m_uniformDescriptor, 0);
 
     // Bind vertex and index buffers
     m_renderAPI->bindVertexBuffer(m_vertexBuffer);
@@ -127,8 +134,12 @@ void ImGuiProcessor::updateTexture(ImTextureData* tex) {
         static_cast<uint32_t>(tex->Height)
     );
 
-    tex->SetTexID((ImTextureID) textureHandle.getId());
-    m_renderAPI->updateDescriptorSetTexture(m_descriptorSet, textureHandle, 1);
+    ImTextureID texId = textureHandle.getId();
+    tex->SetTexID(texId);
+
+    auto descriptor = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
+    m_samplerDescriptors[texId] = descriptor;
+    m_renderAPI->updateDescriptorSetTexture(descriptor, TextureHandle(texId), 0);
   }
 
   if (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates) {
@@ -157,6 +168,9 @@ void ImGuiProcessor::updateTexture(ImTextureData* tex) {
     // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
     tex->SetTexID(ImTextureID_Invalid);
     tex->SetStatus(ImTextureStatus_Destroyed);
+
+    auto descriptor = m_samplerDescriptors[texHandleId];
+      m_renderAPI->destroyDescriptorSet(descriptor);
   }
 }
 
@@ -209,7 +223,6 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
     }
 
     if (!m_vertexLayoutHandle) {
-        // Define vertex input description matching ImDrawVert structure
         VertexInputDescription vertexInput{};
 
         // Binding description
@@ -256,10 +269,6 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
         m_indexBuffer = m_renderAPI->createIndexBuffer(nullptr, m_indexBufferSize);
     }
 
-    // Upload vertex and index data
-    ImDrawVert* vtxDst = nullptr;
-    ImDrawIdx* idxDst = nullptr;
-
     // Allocate temporary buffers to collect all vertex and index data
     std::vector<ImDrawVert> vertices;
     std::vector<ImDrawIdx> indices;
@@ -279,6 +288,8 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
 //            std::back_inserter(indices),
 //            [&idxOffset](ImDrawIdx& idx){ return idx + idxOffset; }
 //          );
+
+
     }
 
     // Update buffers with collected data
@@ -331,6 +342,21 @@ void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& i
                     static_cast<uint32_t>(clipMax.x - clipMin.x),
                     static_cast<uint32_t>(clipMax.y - clipMin.y)
                 );
+
+                auto texId = cmd->GetTexID();
+                if (texId != ImTextureID_Invalid) {
+                    auto descriptorIt = m_samplerDescriptors.find(texId);
+                    if (descriptorIt != m_samplerDescriptors.end()) {
+                        DescriptorSetHandle descriptorSet = descriptorIt->second;
+                        m_renderAPI->bindDescriptorSet(descriptorSet, 1);
+                    } else {
+                        // TODO: when do we destroy created descriptor set?
+                        DescriptorSetHandle descriptorSet = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
+                        m_samplerDescriptors[texId] = descriptorSet;
+                        m_renderAPI->updateDescriptorSetTexture(descriptorSet, TextureHandle(texId), 0);
+                        m_renderAPI->bindDescriptorSet(descriptorSet, 1);
+                    }
+                }
 
                 // Draw
                 m_renderAPI->drawIndexed(

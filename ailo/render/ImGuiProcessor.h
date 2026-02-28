@@ -24,8 +24,10 @@ private:
 
     // Resources
     ProgramHandle m_program;
-    DescriptorSetHandle m_descriptorSet;
-    DescriptorSetLayoutHandle m_descriptorSetLayout;
+    std::unordered_map<ImTextureID, DescriptorSetHandle> m_samplerDescriptors;
+    DescriptorSetHandle m_uniformDescriptor;
+    DescriptorSetLayoutHandle m_samplerDescriptorLayout;
+    DescriptorSetLayoutHandle m_uniformDescriptorLayout;
 
     // Uniform buffer for projection matrix
     BufferHandle m_uniformBuffer;

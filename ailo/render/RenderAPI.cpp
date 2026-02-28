@@ -262,7 +262,7 @@ TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, Text
         m_textures, *m_device, m_device.physicalDevice(),
         type, format, levels, width, height,
         vk::Filter::eLinear, vkutils::getTextureUsage(usage),
-        usage == TextureUsage::DepthStencilAttachment ?
+        (usage & TextureUsage::DepthStencilAttachment) != TextureUsage::None ?
             vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor);
     ptr->acquire(ptr);
     return ptr.getHandle();
@@ -647,6 +647,10 @@ void RenderAPI::endRenderPass() {
             if (renderTarget->resolve[i] && renderTarget->resolve[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
                 renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
+        }
+
+        if (renderTarget->depth && (renderTarget->depth->getUsage() & vk::ImageUsageFlagBits::eSampled)) {
+            renderTarget->depth->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
     }
 

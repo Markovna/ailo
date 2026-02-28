@@ -3,8 +3,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -23,7 +21,7 @@
 #include <iostream>
 
 #include "OS.h"
-#include "ecs/ImageBasedLighting.h"
+#include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
 #include "resources/ResourcePtr.h"
@@ -163,7 +161,10 @@ void Application::init() {
       "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nz.hdr"
     });
 
-  m_scene->addComponent<ailo::ImageBasedLighting>(m_scene->single()).irradianceMap = iblIrradiance;
+  auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
+  sceneLighting.irradianceMap = iblIrradiance;
+  sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.0, 0.2));
+
 
   auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
@@ -299,6 +300,8 @@ void Application::drawFrame() {
   io.DisplaySize = size;
   io.DisplayFramebufferScale = scale;
 
+  auto renderer = m_engine->getRenderer();
+
   ImGui::NewFrame();
 
   ImGui::Begin("Console");
@@ -309,11 +312,11 @@ void Application::drawFrame() {
 
   ImGui::Render();
 
-  auto renderer = m_engine->getRenderer();
   if (!renderer->beginFrame(*m_engine)) {
     return;
   }
 
+  renderer->shadowPass(*m_engine, *m_scene);
   renderer->colorPass(*m_engine, *m_scene, *m_camera);
 
   drawImGui();

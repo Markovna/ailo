@@ -4,10 +4,10 @@
 
 #include "Mesh.h"
 #include "Shader.h"
-#include "ecs/ImageBasedLighting.h"
+#include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
-#include "resources/ResourcePtr.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace ailo {
 
@@ -36,13 +36,114 @@ bool Renderer::beginFrame(Engine& engine) {
   return backend->beginFrame();
 }
 
+void Renderer::shadowPass(Engine& engine, Scene& scene) {
+  RenderAPI* backend = engine.getRenderAPI();
+
+  // Create shadow map resources lazily
+  if (!m_shadowMapTexture) {
+    m_shadowMapTexture = backend->createTexture(
+        TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
+        TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
+        kShadowMapSize, kShadowMapSize);
+  }
+
+  if (!m_shadowMapRenderTarget) {
+    m_shadowMapRenderTarget = backend->createRenderTarget(
+        {}, m_shadowMapTexture, kShadowMapSize, kShadowMapSize, vk::SampleCountFlagBits::e1);
+  }
+
+  if (!m_shadowShader) {
+    m_shadowShader = Shader::load(engine, Shader::getShadowShaderDescription());
+  }
+
+  auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
+
+  // Compute light view-projection matrix
+  glm::vec3 lightDir = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
+  float extent = 18;
+  float nearPlane = 0.1f;
+  float farPlane = 1000.0f;
+  glm::vec3 center = glm::vec3(0.0f);
+  glm::vec3 lightPos = center + lightDir * 600.0f;
+
+  // glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
+      // ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+  glm::vec3 up = glm::vec3(0, 0, 1);
+  glm::mat4 lightView = glm::lookAt(lightPos, center, up);
+  glm::mat4 lightProjection = glm::ortho(-extent, extent, -extent, extent, nearPlane, farPlane);
+  // Flip Y for Vulkan
+  lightProjection[1][1] *= -1.0f;
+
+  glm::mat4 lightVP = lightProjection * lightView;
+  m_perViewUniformBufferData.lightViewProjection = lightVP;
+
+  // Save camera matrices, temporarily use light matrices for shadow pass
+  glm::mat4 savedProjection = m_perViewUniformBufferData.projection;
+  glm::mat4 savedView = m_perViewUniformBufferData.view;
+  glm::mat4 savedViewInverse = m_perViewUniformBufferData.viewInverse;
+
+  m_perViewUniformBufferData.projection = lightProjection;
+  m_perViewUniformBufferData.view = lightView;
+  m_perViewUniformBufferData.viewInverse = inverse(lightView);
+
+  // prepare descriptor sets and uniform buffers
+  prepare(engine, scene);
+
+  // Begin depth-only render pass
+  RenderPassDescription shadowPassDesc {};
+  shadowPassDesc.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
+
+  backend->beginRenderPass(m_shadowMapRenderTarget, shadowPassDesc);
+
+  PipelineState pipelineState {};
+  pipelineState.program = m_shadowShader->program();
+
+  uint32_t bufferOffset = 0;
+  auto meshView = scene.view<Mesh>();
+  for (const auto& [entity, mesh] : meshView.each()) {
+    // Skip entities without Transform (e.g. skybox) — they shouldn't cast shadows
+    if (!scene.tryGet<Transform>(entity)) {
+      bufferOffset += sizeof(PerObjectUniforms);
+      continue;
+    }
+
+    auto indexBuffer = mesh.indexBuffer.get();
+    auto vertexBuffer = mesh.vertexBuffer.get();
+
+    pipelineState.vertexBufferLayout = vertexBuffer->getLayout();
+    backend->bindPipeline(pipelineState);
+
+    backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
+
+    backend->bindIndexBuffer(indexBuffer->getHandle());
+    backend->bindVertexBuffer(vertexBuffer->getBuffer());
+
+    for (const auto& primitive : mesh.primitives) {
+      backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
+    }
+
+    bufferOffset += sizeof(PerObjectUniforms);
+  }
+
+  backend->endRenderPass();
+
+  // Restore camera matrices
+  m_perViewUniformBufferData.projection = savedProjection;
+  m_perViewUniformBufferData.view = savedView;
+  m_perViewUniformBufferData.viewInverse = savedViewInverse;
+}
+
 void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
+
+  auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
+
   // prepare per view buffer
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  m_perViewUniformBufferData.lightDirection = normalize(glm::vec3(0.136f, 0.652f, 0.746f));
+  m_perViewUniformBufferData.lightDirection = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
 
   float radius = 3.0f;
@@ -59,13 +160,18 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
-  auto ibl = scene.tryGet<ImageBasedLighting>(scene.single());
-  m_perViewUniformBufferData.iblSpecularMaxLod = ibl ? ibl->irradianceMap->getLevels() - 1 : 1;
+  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->irradianceMap->getLevels() - 1 : 1;
 
   // prepare descriptor sets and uniform buffers
   prepare(engine, scene);
 
   RenderAPI* backend = engine.getRenderAPI();
+
+  // Bind shadow map to per-view descriptor set
+  if (m_shadowMapTexture) {
+    backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture,
+        std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP));
+  }
 
   RenderPassDescription renderPass {};
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
@@ -175,7 +281,7 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
-  auto ibl = scene.tryGet<ImageBasedLighting>(scene.single());
+  auto ibl = scene.tryGet<SceneLighting>(scene.single());
   auto iblTexHandle = ibl ? ibl->irradianceMap->getHandle() : TextureHandle{};
   backend.updateDescriptorSetTexture(m_viewDescriptorSet, iblTexHandle, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
@@ -214,6 +320,9 @@ void Renderer::terminate(Engine& engine) {
   backend.destroyBuffer(m_viewUniformBufferHandle);
   backend.destroyBuffer(m_lightsUniformBufferHandle);
   backend.destroyBuffer(m_objectsUniformBufferHandle);
+
+  backend.destroyTexture(m_shadowMapTexture);
+  backend.destroyRenderTarget(m_shadowMapRenderTarget);
 }
 
 }

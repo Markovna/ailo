@@ -112,6 +112,24 @@ ShaderDescription& Shader::getHdrShader() {
     return description;
 }
 
+ShaderDescription& Shader::getShadowShaderDescription() {
+    static ShaderDescription description {
+        .vertexShader = os::readFile("shaders/shadow.vert.spv"),
+        .fragmentShader = os::readFile("shaders/shadow.frag.spv"),
+        .raster = RasterDescription {
+            .cullingMode = CullingMode::NONE,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = CompareOp::LESS,
+        },
+        .layout = {
+            DescriptorSetLayoutBindings::perView(),
+            DescriptorSetLayoutBindings::perObject(),
+        }
+    };
+    return description;
+}
+
 asset_ptr<Shader> Shader::load(Engine& engine, const ShaderDescription& description) {
     return engine.getAssetManager()->emplace<Shader>(assets::no_path{}, engine, description);
 }

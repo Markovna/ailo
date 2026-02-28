@@ -3,7 +3,8 @@ layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec4 aColor;
 
-layout(binding = 0) uniform UniformBuffer {
+layout(set = 0, binding = 0, std140)
+uniform UniformBuffer {
     vec2 uScale;
     vec2 uTranslate;
 } ubo;

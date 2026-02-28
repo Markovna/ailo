@@ -16,6 +16,8 @@ struct PerViewUniforms {
   glm::vec4 ambientLightColorIntensity;
 
   float iblSpecularMaxLod;
+  float __padding1[3]; // pad iblSpecularMaxLod to 16 bytes
+  alignas(16) glm::mat4 lightViewProjection;
 };
 
 struct LightUniform {
@@ -49,7 +51,8 @@ enum class PerViewDescriptorBindings {
   FRAME_UNIFORMS = 0,
   LIGHTS = 1,
   IBL_SPECULAR_MAP = 2,
-  IBL_DFG_LUT = 3
+  IBL_DFG_LUT = 3,
+  SHADOW_MAP = 4
 };
 
 class DescriptorSetLayoutBindings {
@@ -75,6 +78,11 @@ public:
         .binding = std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT),
         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
         .stageFlags = vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eVertex
+      },
+      {
+        .binding = std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP),
+        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+        .stageFlags = vk::ShaderStageFlagBits::eFragment
       }
     };
     return bindings;
@@ -100,10 +108,12 @@ public:
   ~Renderer();
 
   bool beginFrame(Engine&);
+  void shadowPass(Engine&, Scene& scene);
   void colorPass(Engine&, Scene& scene, const Camera& camera);
   void endFrame(Engine&);
 
   void terminate(Engine&);
+  TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:
   void prepare(Engine&, Scene&);
@@ -127,6 +137,12 @@ private:
   asset_ptr<Texture> m_iblDfgLut;
 
   std::vector<asset_ptr<Texture>> m_persistentTextures;
+
+  // Shadow mapping
+  TextureHandle m_shadowMapTexture;
+  RenderTargetHandle m_shadowMapRenderTarget;
+  asset_ptr<Shader> m_shadowShader;
+  static constexpr uint32_t kShadowMapSize = 2048;
 };
 
 }

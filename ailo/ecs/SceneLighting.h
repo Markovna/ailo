@@ -4,8 +4,9 @@
 
 namespace ailo {
 
-struct ImageBasedLighting {
+struct SceneLighting {
     asset_ptr<Texture> irradianceMap;
+    glm::vec3 lightDirection;
 };
 
 }

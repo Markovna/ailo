@@ -16,10 +16,6 @@ MATERIAL_UNIFORM(1) uniform sampler2D normalMap;
 
 MATERIAL_UNIFORM(2) uniform sampler2D metallicRoughnessMap;
 
-#if defined(HAS_SHADOWS)
-MATERIAL_UNIFORM(3) uniform sampler2D shadowMap;
-#endif
-
 layout(location = 0) out vec4 outColor;
 
 mat3 shading_tangentToWorld;
@@ -152,6 +148,33 @@ Light getDirectionalLight() {
     return light;
 }
 
+float calculateShadow(vec3 worldPos) {
+    vec4 lightSpacePos = view.lightViewProjection * vec4(worldPos, 1.0);
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+
+    vec2 shadowUV = projCoords.xy * 0.5 + 0.5;
+    float currentDepth = projCoords.z;
+
+    // Outside shadow map bounds -> no shadow
+    if (shadowUV.x < 0.0 || shadowUV.x > 1.0 || shadowUV.y < 0.0 || shadowUV.y > 1.0 || currentDepth > 1.0) {
+        return 1.0;
+    }
+
+    // PCF 3x3 filtering
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    float bias = 0.005;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            float closestDepth = texture(shadowMap, shadowUV + vec2(x, y) * texelSize).r;
+            shadow += (currentDepth - bias > closestDepth) ? 0.0 : 1.0;
+        }
+    }
+    shadow /= 4.0;
+
+    return shadow;
+}
+
 void main() {
     vec3 n = fragNormalWorld;
     vec3 t = fragTangentWorld.xyz;
@@ -181,7 +204,8 @@ void main() {
     vec3 color = vec3(0.0);
 
     Light directionalLight = getDirectionalLight();
-    color += surfaceShading(pixel, directionalLight, 1.0);
+    float shadow = calculateShadow(fragPosWorld);
+    color += surfaceShading(pixel, directionalLight, shadow);
 
     for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
         Light light = getLight(i);

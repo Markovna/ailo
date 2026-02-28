@@ -7,6 +7,7 @@ struct ViewUniform {
    vec4 ambientLightColorIntensity;
 
    float iblSpecularMaxLod;
+   mat4 lightViewProjection;
 };
 
 struct LightUniform {
@@ -48,3 +49,6 @@ uniform samplerCube iblSpecular;
 
 layout (set = 0, binding = 3)
 uniform sampler2D iblDFG;
+
+layout (set = 0, binding = 4)
+uniform sampler2D shadowMap;
