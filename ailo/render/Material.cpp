@@ -1,5 +1,6 @@
 #include "Material.h"
 
+#include "Engine.h"
 #include "Renderer.h"
 #include "RenderPrimitive.h"
 
@@ -49,4 +50,8 @@ void ailo::Material::bindDescriptorSet(RenderAPI& renderAPI) const {
 void ailo::Material::destroy(Engine& engine) {
     engine.getRenderAPI()->destroyDescriptorSet(m_descriptorSet);
     m_shader.reset();
+}
+
+ailo::asset_ptr<ailo::Material> ailo::Material::create(Engine& engine, asset_ptr<Shader> shader) {
+    return engine.getAssetManager()->emplace<Material>(assets::no_path{}, engine, shader);
 }

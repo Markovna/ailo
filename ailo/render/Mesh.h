@@ -9,7 +9,7 @@ namespace ailo {
 
 class Engine;
 
-struct Mesh {
+struct Mesh : public enable_asset_ptr<Mesh> {
     std::shared_ptr<VertexBuffer> vertexBuffer;
     std::shared_ptr<BufferObject> indexBuffer;
     std::vector<RenderPrimitive> primitives;

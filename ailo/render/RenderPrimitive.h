@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Engine.h>
-
 #include "Material.h"
 #include "RenderAPI.h"
 
@@ -38,7 +36,7 @@ private:
 class RenderPrimitive {
  public:
   explicit RenderPrimitive(
-        std::shared_ptr<Material> material = nullptr,
+        asset_ptr<Material> material = {},
         size_t indexOffset = 0,
         size_t indexCount = 0);
 
@@ -47,10 +45,10 @@ class RenderPrimitive {
 
   const Material* getMaterial() const;
   Material* getMaterial();
-  void setMaterial(std::shared_ptr<Material> material);
+  void setMaterial(asset_ptr<Material> material);
 
  private:
-  std::shared_ptr<Material> m_material;
+  asset_ptr<Material> m_material;
   size_t m_indexOffset;
   size_t m_indexCount;
 };

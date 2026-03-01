@@ -169,13 +169,14 @@ void VulkanDevice::createInstance() {
 
     vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
 
     uint32_t extensionCount = 0;
     auto glfwRequiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
     std::vector<const char*> extensions(glfwRequiredExtensions, glfwRequiredExtensions + extensionCount);
 
-    extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    // TODO: this makes app crash in RenderDoc
+    // createInfo.flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
+    // extensions.emplace_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     extensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
     std::vector<const char*> enabledLayers;

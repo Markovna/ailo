@@ -1,6 +1,5 @@
 #pragma once
 
-#include <memory>
 #include "Shader.h"
 #include "Texture.h"
 
@@ -8,7 +7,7 @@ namespace ailo {
 
 class BufferObject;
 
-class Material {
+class Material : public enable_asset_ptr<Material> {
 public:
     Material(Engine& engine, asset_ptr<Shader>& shader);
     void setTexture(uint32_t binding, asset_ptr<Texture> texture);
@@ -18,9 +17,13 @@ public:
     void updateBuffers(RenderAPI&);
     void bindDescriptorSet(RenderAPI&) const;
 
+    DescriptorSetHandle getDescriptorSet() const { return m_descriptorSet; }
+
     [[nodiscard]] const Shader* getShader() const { return m_shader.get(); }
 
     void destroy(Engine&);
+
+    static asset_ptr<Material> create(Engine&, asset_ptr<Shader>);
 
 private:
     DescriptorSetHandle m_descriptorSet;

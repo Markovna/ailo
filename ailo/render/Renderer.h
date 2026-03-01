@@ -102,6 +102,18 @@ public:
 
 class Scene;
 
+struct RenderData {
+  ProgramHandle program;
+  VertexBufferLayoutHandle vertexBufferLayout;
+  uint32_t bufferOffset;
+  Material* material;
+  BufferHandle indexBuffer;
+  BufferHandle vertexBuffer;
+  uint32_t indexCount;
+  uint32_t indexOffset;
+  bool hasTransform;
+};
+
 class Renderer {
 public:
   Renderer(Engine&);
@@ -135,6 +147,7 @@ private:
   DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
   DescriptorSetLayoutHandle m_objectDescriptorSetLayout;
   asset_ptr<Texture> m_iblDfgLut;
+  TextureHandle m_iblSpecularMap;
 
   std::vector<asset_ptr<Texture>> m_persistentTextures;
 
@@ -143,6 +156,8 @@ private:
   RenderTargetHandle m_shadowMapRenderTarget;
   asset_ptr<Shader> m_shadowShader;
   static constexpr uint32_t kShadowMapSize = 2048;
+
+  std::vector<RenderData> m_renderData;
 };
 
 }

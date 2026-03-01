@@ -148,29 +148,37 @@ Light getDirectionalLight() {
     return light;
 }
 
+float sampleShadow(vec2 uv, float depth) {
+    const float bias = 0.005;
+    float closestDepth = texture(shadowMap, uv).r;
+    return (depth - bias > closestDepth) ? 0.0 : 1.0;
+}
+
 float calculateShadow(vec3 worldPos) {
     vec4 lightSpacePos = view.lightViewProjection * vec4(worldPos, 1.0);
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    vec3 projCoords = lightSpacePos.xyz * (1.0 / lightSpacePos.w);
 
-    vec2 shadowUV = projCoords.xy * 0.5 + 0.5;
-    float currentDepth = projCoords.z;
+    vec2 uv = projCoords.xy * 0.5 + 0.5;
+    float depth = projCoords.z;
 
-    // Outside shadow map bounds -> no shadow
-    if (shadowUV.x < 0.0 || shadowUV.x > 1.0 || shadowUV.y < 0.0 || shadowUV.y > 1.0 || currentDepth > 1.0) {
+    if (uv != clamp01(uv) || depth > 1.0) {
         return 1.0;
     }
 
-    // PCF 3x3 filtering
+
     float shadow = 0.0;
+//    shadow += sampleShadow(uv, depth);
     vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    float bias = 0.005;
-    for (int x = -1; x <= 1; x++) {
-        for (int y = -1; y <= 1; y++) {
-            float closestDepth = texture(shadowMap, shadowUV + vec2(x, y) * texelSize).r;
-            shadow += (currentDepth - bias > closestDepth) ? 0.0 : 1.0;
-        }
-    }
-    shadow /= 4.0;
+    shadow += sampleShadow(uv + vec2(-1, -1) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2(-1,  0) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2(-1,  1) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 0, -1) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 0,  0) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 0,  1) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 1, -1) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 1,  0) * texelSize, depth);
+    shadow += sampleShadow(uv + vec2( 1,  1) * texelSize, depth);
+    shadow /= 9.0;
 
     return shadow;
 }

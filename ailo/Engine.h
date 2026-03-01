@@ -3,6 +3,8 @@
 #include <memory>
 #include "render/Shader.h"
 #include "render/Texture.h"
+#include "render/Material.h"
+#include "render/Mesh.h"
 
 struct GLFWwindow;
 
@@ -23,7 +25,7 @@ class AssetManager;
 
 class Engine {
  public:
-  using AssetManager = AssetManager<Texture, Shader>;
+  using AssetManager = AssetManager<Texture, Shader, Material, Mesh>;
 
   Engine(GLFWwindow*);
   ~Engine();

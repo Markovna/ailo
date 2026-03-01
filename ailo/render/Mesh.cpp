@@ -9,6 +9,7 @@
 #include <vector>
 #include <filesystem>
 
+#include "Renderable.h"
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
 #include "resources/ResourcePtr.h"
@@ -38,7 +39,7 @@ struct MeshData {
     std::vector<Vertex> vertices;
     std::vector<uint16_t> indices;
     glm::mat4 transform;
-    unsigned int materialIndex;
+    uint32_t meshIndex;
 };
 
 // Helper function to load texture from file
@@ -69,82 +70,12 @@ static void processNode(
 
     // Process all meshes attached to this node
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
-        unsigned int meshIdx = node->mMeshes[i];
-        aiMesh* aiMesh = aiscene->mMeshes[meshIdx];
+        auto meshIdx = node->mMeshes[i];
 
         MeshData meshData;
         meshData.transform = worldTransform;
-        meshData.materialIndex = aiMesh->mMaterialIndex;
+        meshData.meshIndex = meshIdx;
 
-        // Extract vertices
-        for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
-            Vertex vertex{};
-
-            // Position
-            vertex.pos = glm::vec3(
-                aiMesh->mVertices[v].x,
-                aiMesh->mVertices[v].y,
-                aiMesh->mVertices[v].z
-            );
-
-            // Texture coordinates (if available)
-            if (aiMesh->mTextureCoords[0]) {
-                vertex.texCoord = glm::vec2(
-                    aiMesh->mTextureCoords[0][v].x,
-                    aiMesh->mTextureCoords[0][v].y
-                );
-            } else {
-                vertex.texCoord = glm::vec2(0.0f, 0.0f);
-            }
-
-            if (aiMesh->mColors[0]) {
-                vertex.color = glm::vec3(
-                    aiMesh->mColors[v]->r,
-                    aiMesh->mColors[v]->r,
-                    aiMesh->mColors[v]->b
-                );
-            } else {
-                vertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
-            }
-
-            if (aiMesh->mNormals) {
-                vertex.normal = glm::vec3(
-                    (aiMesh->mNormals[v].x),
-                    (aiMesh->mNormals[v].y),
-                    (aiMesh->mNormals[v].z)
-                );
-            }
-
-            if (aiMesh->mTangents) {
-                glm::vec3 tangent = glm::vec3(
-                    (aiMesh->mTangents[v].x),
-                    (aiMesh->mTangents[v].y),
-                    (aiMesh->mTangents[v].z)
-                );
-                glm::vec3 biTangent = glm::vec3(
-                    aiMesh->mBitangents[v].x,
-                    aiMesh->mBitangents[v].y,
-                    aiMesh->mBitangents[v].z
-                );
-
-                float dot = glm::dot(glm::cross(vertex.normal, tangent), biTangent);
-
-                vertex.tangent = glm::vec4(tangent, dot);
-
-            } else {
-                vertex.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-            }
-
-            meshData.vertices.push_back(vertex);
-        }
-
-        // Extract indices
-        for (unsigned int f = 0; f < aiMesh->mNumFaces; f++) {
-            aiFace face = aiMesh->mFaces[f];
-            for (unsigned int j = 0; j < face.mNumIndices; j++) {
-                meshData.indices.push_back(static_cast<uint16_t>(face.mIndices[j]));
-            }
-        }
         meshDataList.push_back(std::move(meshData));
     }
 
@@ -232,14 +163,11 @@ Mesh MeshReader::createCubeMesh(Engine& engine) {
 
     mesh.vertexBuffer = vb;
     mesh.indexBuffer = ib;
-    mesh.primitives.emplace_back(std::shared_ptr<Material>(), 0, 36);
+    mesh.primitives.emplace_back(asset_ptr<Material>(), 0, 36);
     return mesh;
 }
 
 std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path) {
-    // Static container to keep textures alive
-    // static std::vector<std::unique_ptr<Texture>> loadedTextures;
-
     Assimp::Importer importer;
 
     const aiScene* aiscene = importer.ReadFile(path,
@@ -252,6 +180,8 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
     }
 
+    auto assetManager = engine.getAssetManager();
+
     // Get the directory of the model file for resolving texture paths
     std::filesystem::path modelPath(path);
     std::string modelDirectory = modelPath.parent_path().string();
@@ -259,7 +189,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
     // Create shader (shared by all meshes)
     auto shader = Shader::load(engine, Shader::getDefaultShaderDescription());
 
-    std::vector<std::shared_ptr<Material>> materials;
+    std::vector<asset_ptr<Material>> materials;
     materials.resize(aiscene->mNumMaterials);
 
     // Process materials and load textures
@@ -279,7 +209,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         }
 
         if (!diffuse) {
-            diffuse = engine.getAssetManager()->get<Texture>("builtin://textures/white");
+            diffuse = assetManager->get<Texture>("builtin://textures/white");
         }
 
         if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
@@ -290,7 +220,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         }
 
         if (!normalMap) {
-            normalMap = engine.getAssetManager()->get<Texture>("builtin://textures/normal");
+            normalMap = assetManager->get<Texture>("builtin://textures/normal");
         }
 
         if (material->GetTextureCount(aiTextureType_GLTF_METALLIC_ROUGHNESS) > 0) {
@@ -301,10 +231,10 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         }
 
         if (!metallicRoughnessMap) {
-            metallicRoughnessMap = engine.getAssetManager()->get<Texture>("builtin://textures/white");
+            metallicRoughnessMap = assetManager->get<Texture>("builtin://textures/white");
         }
 
-        materials[i] = ailo::make_resource<Material>(engine, engine, shader);
+        materials[i] = assetManager->emplace<Material>(assets::no_path{}, engine, shader);
         if (diffuse) {
             materials[i]->setTexture(0, diffuse);
         }
@@ -315,13 +245,6 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
             materials[i]->setTexture(2, metallicRoughnessMap);
         }
     }
-
-    // Traverse the scene hierarchy and collect mesh data with transforms
-    std::vector<MeshData> meshDataList;
-    glm::mat4 identity(1.0f);
-    processNode(aiscene->mRootNode, aiscene, identity, meshDataList);
-
-    std::vector<Entity> entities;
 
     // Create vertex input description (shared by all meshes)
     VertexInputDescription vertexInput;
@@ -366,41 +289,130 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
     tangentAttr.offset = offsetof(Vertex, tangent);
     vertexInput.attributes.push_back(tangentAttr);
 
+    std::vector<asset_ptr<Mesh>> meshes;
+    meshes.reserve(aiscene->mNumMeshes);
+
+    for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
+        aiMesh* aiMesh = aiscene->mMeshes[i];
+
+        meshes.push_back(assetManager->emplace<Mesh>(assets::no_path{}));
+        auto mesh = meshes.back();
+
+        std::vector<Vertex> vertices;
+        std::vector<uint16_t> indices;
+
+        // Extract vertices
+        for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
+            Vertex vertex{};
+
+            // Position
+            vertex.pos = glm::vec3(
+                aiMesh->mVertices[v].x,
+                aiMesh->mVertices[v].y,
+                aiMesh->mVertices[v].z
+            );
+
+            // Texture coordinates (if available)
+            if (aiMesh->mTextureCoords[0]) {
+                vertex.texCoord = glm::vec2(
+                    aiMesh->mTextureCoords[0][v].x,
+                    aiMesh->mTextureCoords[0][v].y
+                );
+            } else {
+                vertex.texCoord = glm::vec2(0.0f, 0.0f);
+            }
+
+            if (aiMesh->mColors[0]) {
+                vertex.color = glm::vec3(
+                    aiMesh->mColors[v]->r,
+                    aiMesh->mColors[v]->r,
+                    aiMesh->mColors[v]->b
+                );
+            } else {
+                vertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
+            }
+
+            if (aiMesh->mNormals) {
+                vertex.normal = glm::vec3(
+                    (aiMesh->mNormals[v].x),
+                    (aiMesh->mNormals[v].y),
+                    (aiMesh->mNormals[v].z)
+                );
+            }
+
+            if (aiMesh->mTangents) {
+                glm::vec3 tangent = glm::vec3(
+                    (aiMesh->mTangents[v].x),
+                    (aiMesh->mTangents[v].y),
+                    (aiMesh->mTangents[v].z)
+                );
+                glm::vec3 biTangent = glm::vec3(
+                    aiMesh->mBitangents[v].x,
+                    aiMesh->mBitangents[v].y,
+                    aiMesh->mBitangents[v].z
+                );
+
+                float dot = glm::dot(glm::cross(vertex.normal, tangent), biTangent);
+
+                vertex.tangent = glm::vec4(tangent, dot);
+
+            } else {
+                vertex.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+            }
+
+            vertices.push_back(vertex);
+        }
+
+        // Extract indices
+        for (unsigned int f = 0; f < aiMesh->mNumFaces; f++) {
+            aiFace face = aiMesh->mFaces[f];
+            for (unsigned int j = 0; j < face.mNumIndices; j++) {
+                indices.push_back(static_cast<uint16_t>(face.mIndices[j]));
+            }
+        }
+
+        // Create vertex buffer
+        mesh->vertexBuffer = ailo::make_resource<VertexBuffer>(
+            engine,
+            engine,
+            vertexInput,
+            sizeof(Vertex) * vertices.size()
+        );
+        mesh->vertexBuffer->updateBuffer(engine, vertices.data(), sizeof(Vertex) * vertices.size());
+
+        // Create index buffer
+        mesh->indexBuffer = ailo::make_resource<BufferObject>(
+            engine,
+            engine,
+            BufferBinding::INDEX,
+            sizeof(uint16_t) * indices.size()
+        );
+        mesh->indexBuffer->updateBuffer(engine, indices.data(), sizeof(uint16_t) * indices.size());
+
+        auto material = materials[aiMesh->mMaterialIndex];
+        RenderPrimitive primitive(material, 0, indices.size());
+        mesh->primitives.push_back(primitive);
+    }
+
+    // Traverse the scene hierarchy and collect mesh data with transforms
+    std::vector<MeshData> meshDataList;
+    glm::mat4 identity(1.0f);
+    processNode(aiscene->mRootNode, aiscene, identity, meshDataList);
+
+    std::vector<Entity> entities;
+
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
         auto entity = scene.addEntity();
         entities.push_back(entity);
 
-        // Add Mesh component
-        Mesh& mesh = scene.addComponent<Mesh>(entity);
+        // Add Renderable component
+        Renderable& renderable = scene.addComponent<Renderable>(entity);
+        renderable.mesh = meshes[meshData.meshIndex];
 
         // Add Transform component with the correct world transform
         Transform& transform = scene.addComponent<Transform>(entity);
         transform.transform = meshData.transform;
-
-        // Create vertex buffer
-        mesh.vertexBuffer = ailo::make_resource<VertexBuffer>(
-            engine,
-            engine,
-            vertexInput,
-            sizeof(Vertex) * meshData.vertices.size()
-        );
-        mesh.vertexBuffer->updateBuffer(engine, meshData.vertices.data(), sizeof(Vertex) * meshData.vertices.size());
-
-        // Create index buffer
-        mesh.indexBuffer = ailo::make_resource<BufferObject>(
-            engine,
-            engine,
-            BufferBinding::INDEX,
-            sizeof(uint16_t) * meshData.indices.size()
-        );
-        mesh.indexBuffer->updateBuffer(engine, meshData.indices.data(), sizeof(uint16_t) * meshData.indices.size());
-
-        auto material = materials[meshData.materialIndex];
-
-        // Create a single primitive for this mesh
-        RenderPrimitive primitive(material, 0, meshData.indices.size());
-        mesh.primitives.push_back(primitive);
     }
 
     return entities;

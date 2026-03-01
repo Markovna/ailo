@@ -1,9 +1,5 @@
 #include "Shader.h"
 
-#include <iostream>
-#include <ostream>
-#include <ranges>
-
 #include "Engine.h"
 #include "OS.h"
 #include "Renderer.h"
@@ -117,7 +113,7 @@ ShaderDescription& Shader::getShadowShaderDescription() {
         .vertexShader = os::readFile("shaders/shadow.vert.spv"),
         .fragmentShader = os::readFile("shaders/shadow.frag.spv"),
         .raster = RasterDescription {
-            .cullingMode = CullingMode::NONE,
+            .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
             .depthWriteEnable = true,
             .depthCompareOp = CompareOp::LESS,

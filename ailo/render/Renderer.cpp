@@ -2,12 +2,15 @@
 
 #include <ecs/Scene.h>
 
+#include "Engine.h"
 #include "Mesh.h"
 #include "Shader.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+
+#include "Renderable.h"
 
 namespace ailo {
 
@@ -27,6 +30,22 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
 Renderer::Renderer(Engine& engine) {
   m_persistentTextures.push_back(createWhiteTexture(engine));
   m_persistentTextures.push_back(createDefaultNormalTexture(engine));
+
+  m_iblDfgLut = Texture::load(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
+
+  auto backend = engine.getRenderAPI();
+  m_viewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
+  m_lightsUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_lightUniformsBufferData));
+  m_viewDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
+  m_objectDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
+  m_viewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
+
+  backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
+  backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
+
+  backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
+
+  m_shadowShader = Shader::load(engine, Shader::getShadowShaderDescription());
 }
 
 Renderer::~Renderer() = default;
@@ -45,6 +64,8 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
         TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
         kShadowMapSize, kShadowMapSize);
+
+    backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture, std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP));
   }
 
   if (!m_shadowMapRenderTarget) {
@@ -52,23 +73,19 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
         {}, m_shadowMapTexture, kShadowMapSize, kShadowMapSize, vk::SampleCountFlagBits::e1);
   }
 
-  if (!m_shadowShader) {
-    m_shadowShader = Shader::load(engine, Shader::getShadowShaderDescription());
-  }
-
   auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
 
   // Compute light view-projection matrix
   glm::vec3 lightDir = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
-  float extent = 18;
+  float extent = 22;
   float nearPlane = 0.1f;
-  float farPlane = 1000.0f;
+  float farPlane = 60.0f;
   glm::vec3 center = glm::vec3(0.0f);
-  glm::vec3 lightPos = center + lightDir * 600.0f;
+  glm::vec3 lightPos = center + lightDir * 20.0f;
 
   // glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
       // ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-  glm::vec3 up = glm::vec3(0, 0, 1);
+  glm::vec3 up = glm::vec3(0, 1, 0);
   glm::mat4 lightView = glm::lookAt(lightPos, center, up);
   glm::mat4 lightProjection = glm::ortho(-extent, extent, -extent, extent, nearPlane, farPlane);
   // Flip Y for Vulkan
@@ -76,12 +93,6 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
 
   glm::mat4 lightVP = lightProjection * lightView;
   m_perViewUniformBufferData.lightViewProjection = lightVP;
-
-  // Save camera matrices, temporarily use light matrices for shadow pass
-  glm::mat4 savedProjection = m_perViewUniformBufferData.projection;
-  glm::mat4 savedView = m_perViewUniformBufferData.view;
-  glm::mat4 savedViewInverse = m_perViewUniformBufferData.viewInverse;
-
   m_perViewUniformBufferData.projection = lightProjection;
   m_perViewUniformBufferData.view = lightView;
   m_perViewUniformBufferData.viewInverse = inverse(lightView);
@@ -98,40 +109,25 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
   PipelineState pipelineState {};
   pipelineState.program = m_shadowShader->program();
 
-  uint32_t bufferOffset = 0;
-  auto meshView = scene.view<Mesh>();
-  for (const auto& [entity, mesh] : meshView.each()) {
+  for(const RenderData& renderData : m_renderData) {
     // Skip entities without Transform (e.g. skybox) — they shouldn't cast shadows
-    if (!scene.tryGet<Transform>(entity)) {
-      bufferOffset += sizeof(PerObjectUniforms);
+    if (!renderData.hasTransform) {
       continue;
     }
 
-    auto indexBuffer = mesh.indexBuffer.get();
-    auto vertexBuffer = mesh.vertexBuffer.get();
-
-    pipelineState.vertexBufferLayout = vertexBuffer->getLayout();
+    pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
     backend->bindPipeline(pipelineState);
 
     backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
+    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { renderData.bufferOffset });
 
-    backend->bindIndexBuffer(indexBuffer->getHandle());
-    backend->bindVertexBuffer(vertexBuffer->getBuffer());
+    backend->bindIndexBuffer(renderData.indexBuffer);
+    backend->bindVertexBuffer(renderData.vertexBuffer);
 
-    for (const auto& primitive : mesh.primitives) {
-      backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
-    }
-
-    bufferOffset += sizeof(PerObjectUniforms);
+    backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
   }
 
   backend->endRenderPass();
-
-  // Restore camera matrices
-  m_perViewUniformBufferData.projection = savedProjection;
-  m_perViewUniformBufferData.view = savedView;
-  m_perViewUniformBufferData.viewInverse = savedViewInverse;
 }
 
 void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
@@ -142,9 +138,10 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 2.0f);
   m_perViewUniformBufferData.lightDirection = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
+  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->irradianceMap->getLevels() - 1 : 1;
 
   float radius = 3.0f;
   auto& light0 = m_lightUniformsBufferData[0];
@@ -160,18 +157,10 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
-  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->irradianceMap->getLevels() - 1 : 1;
-
   // prepare descriptor sets and uniform buffers
   prepare(engine, scene);
 
   RenderAPI* backend = engine.getRenderAPI();
-
-  // Bind shadow map to per-view descriptor set
-  if (m_shadowMapTexture) {
-    backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture,
-        std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP));
-  }
 
   RenderPassDescription renderPass {};
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
@@ -181,30 +170,20 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
 
   PipelineState pipelineState {};
 
-  uint32_t bufferOffset = 0;
-  auto meshView = scene.view<Mesh>();
-  for(const auto& [entity, mesh] : meshView.each()) {
-    auto indexBuffer = mesh.indexBuffer.get();
-    auto vertexBuffer = mesh.vertexBuffer.get();
+  for(const RenderData& renderData : m_renderData) {
+      pipelineState.program = renderData.program;
+      pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
 
-    for(const auto& primitive : mesh.primitives) {
-      auto material = primitive.getMaterial();
-      auto shader = material->getShader();
-
-      pipelineState.program = shader->program();
-      pipelineState.vertexBufferLayout = vertexBuffer->getLayout();
       backend->bindPipeline(pipelineState);
 
       backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-      backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { bufferOffset });
-      material->bindDescriptorSet(*backend);
+      backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { renderData.bufferOffset });
 
-      backend->bindIndexBuffer(indexBuffer->getHandle());
-      backend->bindVertexBuffer(vertexBuffer->getBuffer());
-      backend->drawIndexed(primitive.getIndexCount(), 1, primitive.getIndexOffset());
-    }
+      renderData.material->bindDescriptorSet(*backend);
 
-    bufferOffset += sizeof(PerObjectUniforms);
+      backend->bindIndexBuffer(renderData.indexBuffer);
+      backend->bindVertexBuffer(renderData.vertexBuffer);
+      backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
   }
 
   backend->endRenderPass();
@@ -218,29 +197,8 @@ void Renderer::endFrame(Engine& engine) {
 void Renderer::prepare(Engine& engine, Scene& scene) {
   auto& backend = *engine.getRenderAPI();
 
-  if(!m_viewUniformBufferHandle) {
-    m_viewUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
-  }
-  if(!m_lightsUniformBufferHandle) {
-    m_lightsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, sizeof(m_lightUniformsBufferData));
-  }
-
-  if(!m_viewDescriptorSetLayout) {
-    m_viewDescriptorSetLayout = backend.createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
-  }
-
-  if(!m_viewDescriptorSet) {
-    m_viewDescriptorSet = backend.createDescriptorSet(m_viewDescriptorSetLayout);
-    backend.updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
-    backend.updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
-  }
-
-  if(!m_objectDescriptorSetLayout) {
-    m_objectDescriptorSetLayout = backend.createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
-  }
-
-  auto meshView = scene.view<Mesh>();
-  size_t meshCount = meshView.size();
+  auto renderableView = scene.view<Renderable>();
+  size_t meshCount = renderableView.size();
 
   // prepare per object buffer
   if(meshCount > m_perObjectUniformBufferData.size() || !m_objectsUniformBufferHandle) {
@@ -260,8 +218,11 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
     backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, 0, 0, sizeof(PerObjectUniforms));
   }
 
+  m_renderData.clear();
+  m_renderData.reserve(meshCount * 2);
+
   uint32_t index = 0;
-  for(const auto& [entity, mesh] : meshView.each()) {
+  for(const auto& [entity, renderable] : renderableView.each()) {
     const auto tr = scene.tryGet<Transform>(entity);
 
     auto& uniformBufferData = m_perObjectUniformBufferData[index];
@@ -271,9 +232,23 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
 
     index++;
 
-    for(auto& primitive : mesh.primitives) {
-      primitive.getMaterial()->updateTextures(backend);
-      primitive.getMaterial()->updateBuffers(backend);
+    for(auto& primitive : renderable.mesh->primitives) {
+      Material* material = primitive.getMaterial();
+      material->updateTextures(backend);
+      material->updateBuffers(backend);
+
+      m_renderData.push_back({});
+
+      auto& entry = m_renderData.back();
+      entry.program = material->getShader()->program();
+      entry.vertexBufferLayout = renderable.mesh->vertexBuffer->getLayout();
+      entry.bufferOffset = index * sizeof(PerObjectUniforms);
+      entry.material = material;
+      entry.indexBuffer = renderable.mesh->indexBuffer->getHandle();
+      entry.vertexBuffer = renderable.mesh->vertexBuffer->getBuffer();
+      entry.indexCount = primitive.getIndexCount();
+      entry.indexOffset = primitive.getIndexOffset();
+      entry.hasTransform = tr != nullptr;
     }
   }
 
@@ -283,13 +258,10 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
 
   auto ibl = scene.tryGet<SceneLighting>(scene.single());
   auto iblTexHandle = ibl ? ibl->irradianceMap->getHandle() : TextureHandle{};
-  backend.updateDescriptorSetTexture(m_viewDescriptorSet, iblTexHandle, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
-
-  if (!m_iblDfgLut) {
-    m_iblDfgLut = Texture::load(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
+  if (iblTexHandle != m_iblSpecularMap) {
+    m_iblSpecularMap = iblTexHandle;
+    backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
   }
-
-  backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
 }
 
 asset_ptr<Texture> Renderer::createWhiteTexture(Engine& engine) {

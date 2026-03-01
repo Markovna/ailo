@@ -35,7 +35,6 @@ const uint32_t WIDTH = 2400;
 const uint32_t HEIGHT = 1400;
 
 void Application::run() {
-
   init();
   mainLoop();
   cleanup();
@@ -92,7 +91,7 @@ void Application::init() {
   ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox, ailo::MeshReader::createCubeMesh(*m_engine));
 
   auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
-  auto skyboxMaterial = ailo::make_resource<ailo::Material>(*m_engine, *m_engine, skyboxShader);
+  auto skyboxMaterial = ailo::Material::create(*m_engine, skyboxShader);
   skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
 
   auto loadCubemapTex = [](ailo::Engine& engine, vk::Format format, const std::array<std::string, 6>& path) {
@@ -163,8 +162,7 @@ void Application::init() {
 
   auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
   sceneLighting.irradianceMap = iblIrradiance;
-  sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.0, 0.2));
-
+  sceneLighting.lightDirection = normalize(glm::vec3(0.2, 1.0, 0.1));
 
   auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");

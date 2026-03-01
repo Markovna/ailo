@@ -86,6 +86,8 @@ add_executable(ailo
         ailo/common/AssetPool.h
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
+        ailo/render/Renderable.cpp
+        ailo/render/Renderable.h
 )
 
 # Link libraries
@@ -111,6 +113,8 @@ target_compile_definitions(ailo PRIVATE
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
+
+target_compile_definitions(ailo PRIVATE NDEBUG)
 
 # Find glslc shader compiler
 find_program(GLSLC glslc HINTS

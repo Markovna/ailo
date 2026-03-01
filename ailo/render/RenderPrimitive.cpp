@@ -1,4 +1,5 @@
 #include "RenderPrimitive.h"
+#include "Engine.h"
 
 namespace ailo {
 
@@ -14,7 +15,7 @@ void BufferObject::destroy(Engine& engine) {
   engine.getRenderAPI()->destroyBuffer(m_handle);
 }
 
-RenderPrimitive::RenderPrimitive(std::shared_ptr<Material> material, size_t indexOffset,
+RenderPrimitive::RenderPrimitive(asset_ptr<Material> material, size_t indexOffset,
   size_t indexCount) : m_material(material), m_indexOffset(indexOffset), m_indexCount(indexCount)
 { }
 
@@ -26,7 +27,7 @@ Material* RenderPrimitive::getMaterial() {
   return m_material.get();
 }
 
-void RenderPrimitive::setMaterial(std::shared_ptr<Material> material) { m_material = material; }
+void RenderPrimitive::setMaterial(asset_ptr<Material> material) { m_material = material; }
 
 VertexBuffer::VertexBuffer(Engine& engine, const VertexInputDescription& description, size_t byteSize) {
   m_layoutHandle = engine.getRenderAPI()->createVertexBufferLayout(description);
