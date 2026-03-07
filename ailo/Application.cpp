@@ -24,6 +24,7 @@
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "render/Mesh.h"
+#include "render/Renderable.h"
 #include "resources/ResourcePtr.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
@@ -87,13 +88,6 @@ void Application::init() {
 
   m_camera = std::make_unique<ailo::Camera>();
 
-  auto skybox = m_scene->addEntity();
-  ailo::Mesh& skyboxMesh = m_scene->addComponent<ailo::Mesh>(skybox, ailo::MeshReader::createCubeMesh(*m_engine));
-
-  auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
-  auto skyboxMaterial = ailo::Material::create(*m_engine, skyboxShader);
-  skyboxMesh.primitives[0].setMaterial(skyboxMaterial);
-
   auto loadCubemapTex = [](ailo::Engine& engine, vk::Format format, const std::array<std::string, 6>& path) {
     bool isHdr = stbi_is_hdr(path[0].c_str());
 
@@ -135,6 +129,8 @@ void Application::init() {
     return tex;
   };
 
+  auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
+  auto skyboxMaterial = ailo::Material::create(*m_engine, skyboxShader);
   auto cubemapTex = loadCubemapTex(
       *m_engine,
       vk::Format::eR8G8B8A8Srgb,
@@ -147,6 +143,10 @@ void Application::init() {
         "assets/textures/yokohama/yokohama_negz.jpg"
       });
   skyboxMaterial->setTexture(0, cubemapTex);
+  auto skyboxEntity = m_scene->addEntity();
+  ailo::Renderable& skybox = m_scene->addComponent<ailo::Renderable>(skyboxEntity);
+  skybox.mesh = ailo::Mesh::cube(*m_engine);
+  skybox.mesh->primitives.back().setMaterial(skyboxMaterial);
 
   auto iblIrradiance = loadCubemapTex(
     *m_engine,
@@ -162,7 +162,7 @@ void Application::init() {
 
   auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
   sceneLighting.irradianceMap = iblIrradiance;
-  sceneLighting.lightDirection = normalize(glm::vec3(0.2, 1.0, 0.1));
+  sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.4, 0.3));
 
   auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
   // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
@@ -284,7 +284,7 @@ void Application::updateTransforms() {
 
   m_camera->view = glm::lookAt(m_cameraTarget + cameraPos, m_cameraTarget, up);
 
-  m_camera->projection = glm::perspective(glm::radians(70.0f), WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
+  m_camera->projection = glm::perspective(glm::radians(70.0f), WIDTH / (float) HEIGHT, 0.1f, 50.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 

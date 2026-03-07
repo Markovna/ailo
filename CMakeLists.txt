@@ -114,7 +114,7 @@ target_compile_definitions(ailo PRIVATE
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
-target_compile_definitions(ailo PRIVATE NDEBUG)
+#target_compile_definitions(ailo PRIVATE NDEBUG)
 
 # Find glslc shader compiler
 find_program(GLSLC glslc HINTS

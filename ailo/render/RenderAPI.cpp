@@ -644,9 +644,9 @@ void RenderAPI::endRenderPass() {
                 renderTarget->colors[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
 
-            if (renderTarget->resolve[i] && renderTarget->resolve[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
-                renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
-            }
+            // if (renderTarget->resolve[i] && renderTarget->resolve[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
+            //     renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+            // }
         }
 
         if (renderTarget->depth && (renderTarget->depth->getUsage() & vk::ImageUsageFlagBits::eSampled)) {

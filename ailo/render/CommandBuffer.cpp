@@ -18,7 +18,7 @@ void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) con
 }
 
 CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) {
-    const uint32_t numCommandBuffers = 4;
+    const uint32_t numCommandBuffers = 10;
     vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.commandPool = commandPool;
     allocInfo.level = vk::CommandBufferLevel::ePrimary;

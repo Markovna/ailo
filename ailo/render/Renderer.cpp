@@ -79,9 +79,9 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
   glm::vec3 lightDir = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
   float extent = 22;
   float nearPlane = 0.1f;
-  float farPlane = 60.0f;
+  float farPlane = 32.0f;
   glm::vec3 center = glm::vec3(0.0f);
-  glm::vec3 lightPos = center + lightDir * 20.0f;
+  glm::vec3 lightPos = center + lightDir * 18.0f;
 
   // glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
       // ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
@@ -138,7 +138,7 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 2.0f);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.2f);
   m_perViewUniformBufferData.lightDirection = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
   m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->irradianceMap->getLevels() - 1 : 1;
@@ -230,8 +230,6 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
 
-    index++;
-
     for(auto& primitive : renderable.mesh->primitives) {
       Material* material = primitive.getMaterial();
       material->updateTextures(backend);
@@ -249,6 +247,8 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
       entry.indexCount = primitive.getIndexCount();
       entry.indexOffset = primitive.getIndexOffset();
       entry.hasTransform = tr != nullptr;
+
+      index++;
     }
   }
 

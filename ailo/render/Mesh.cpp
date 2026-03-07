@@ -133,8 +133,14 @@ static constexpr uint16_t sCubeIndices[] = {
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
 };
 
-Mesh MeshReader::createCubeMesh(Engine& engine) {
-    Mesh mesh;
+asset_ptr<Mesh> Mesh::cube(Engine& engine) {
+    auto mesh = engine.getAssetManager()->get<Mesh>("builtin://meshes/cube");
+    if (mesh) {
+        return mesh;
+    }
+
+    mesh = engine.getAssetManager()->emplace<Mesh>("builtin://meshes/cube");
+
     vk::VertexInputBindingDescription binding{};
     binding.binding = 0;
     binding.stride = sizeof(glm::vec3);
@@ -161,9 +167,9 @@ Mesh MeshReader::createCubeMesh(Engine& engine) {
     auto ib = ailo::make_resource<BufferObject>(engine, engine, BufferBinding::INDEX, sizeof(sCubeIndices));
     ib->updateBuffer(engine, sCubeIndices, sizeof(sCubeIndices));
 
-    mesh.vertexBuffer = vb;
-    mesh.indexBuffer = ib;
-    mesh.primitives.emplace_back(asset_ptr<Material>(), 0, 36);
+    mesh->vertexBuffer = vb;
+    mesh->indexBuffer = ib;
+    mesh->primitives.emplace_back(asset_ptr<Material>(), 0, 36);
     return mesh;
 }
 

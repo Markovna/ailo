@@ -155,7 +155,7 @@ private:
   TextureHandle m_shadowMapTexture;
   RenderTargetHandle m_shadowMapRenderTarget;
   asset_ptr<Shader> m_shadowShader;
-  static constexpr uint32_t kShadowMapSize = 2048;
+  static constexpr uint32_t kShadowMapSize = 1024;
 
   std::vector<RenderData> m_renderData;
 };
