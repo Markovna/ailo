@@ -88,77 +88,23 @@ void Application::init() {
 
   m_camera = std::make_unique<ailo::Camera>();
 
-  auto loadCubemapTex = [](ailo::Engine& engine, vk::Format format, const std::array<std::string, 6>& path) {
-    bool isHdr = stbi_is_hdr(path[0].c_str());
-
-    constexpr int MAX_MIP_LEVELS = 4;
-    ailo::asset_ptr<ailo::Texture> tex;
-
-    assert(path.size() == 6);
-    for (size_t face = 0; face < 6; face++) {
-      int texChannels;
-      int texWidth, texHeight;
-      int desiredChannels = STBI_rgb_alpha;
-
-      uint32_t byteSize;
-
-      void* pixels;
-
-      if (isHdr) {
-        pixels = stbi_loadf(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
-        byteSize = texWidth * texHeight * desiredChannels * sizeof(float);
-      } else {
-        pixels = stbi_load(path[face].c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
-        byteSize = texWidth * texHeight * desiredChannels * sizeof(uint8_t);
-      }
-
-      if (!pixels) {
-        std::cerr << "failed to load texture image at '" << path[face] << "'! Reason " << stbi_failure_reason() << std::endl;
-        throw std::runtime_error("failed to load texture image!");
-      }
-
-      if (!tex) {
-        tex = engine.getAssetManager()->emplace<ailo::Texture>(path[face], engine, ailo::TextureType::TEXTURE_CUBEMAP, format, ailo::TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
-      }
-
-      tex->updateImage(engine, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1);
-
-      stbi_image_free(pixels);
-    }
-    tex->generateMipmaps(engine);
-    return tex;
-  };
-
   auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
   auto skyboxMaterial = ailo::Material::create(*m_engine, skyboxShader);
-  auto cubemapTex = loadCubemapTex(
+  auto cubemapTex = ailo::Texture::loadCubemap(
       *m_engine,
-      vk::Format::eR8G8B8A8Srgb,
-      {
-        "assets/textures/yokohama/yokohama_posx.jpg",
-        "assets/textures/yokohama/yokohama_negx.jpg",
-        "assets/textures/yokohama/yokohama_posy.jpg",
-        "assets/textures/yokohama/yokohama_negy.jpg",
-        "assets/textures/yokohama/yokohama_posz.jpg",
-        "assets/textures/yokohama/yokohama_negz.jpg"
-      });
+      "assets/textures/yokohama/yokohama.jpg",
+      vk::Format::eR8G8B8A8Srgb);
   skyboxMaterial->setTexture(0, cubemapTex);
   auto skyboxEntity = m_scene->addEntity();
   ailo::Renderable& skybox = m_scene->addComponent<ailo::Renderable>(skyboxEntity);
   skybox.mesh = ailo::Mesh::cube(*m_engine);
   skybox.mesh->primitives.back().setMaterial(skyboxMaterial);
 
-  auto iblIrradiance = loadCubemapTex(
+  auto iblIrradiance = ailo::Texture::loadCubemap(
     *m_engine,
-    vk::Format::eR32G32B32A32Sfloat,
-    {
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_px.hdr",
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nx.hdr",
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_py.hdr",
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_ny.hdr",
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_pz.hdr",
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k_nz.hdr"
-    });
+      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
+    vk::Format::eR32G32B32A32Sfloat
+    );
 
   auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
   sceneLighting.irradianceMap = iblIrradiance;

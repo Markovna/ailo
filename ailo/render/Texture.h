@@ -18,6 +18,7 @@ public:
     uint32_t getLevels() const { return m_levels; }
 
     static asset_ptr<Texture> load(Engine&, const std::string& path, vk::Format format, bool mipmaps = false);
+    static asset_ptr<Texture> loadCubemap(Engine&, const std::string& paths, vk::Format format, bool mipmaps = false);
 
 private:
     TextureHandle m_handle;

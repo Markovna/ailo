@@ -1,16 +1,9 @@
 TODO:
 
-*  Resource management: resource class to manage resource creation and
-   destruction (shaders, materials, textures)
-
 *  Add support for different types of indexes in index buffer (16/32 bits)
 
 *  Refactoring: move stage buffers to a separate class
 
-*  Optimization: shared materials
-
 *  Optimization: do not bind descriptor set if it's already bound
 
-*  Shader variants
-
-*  Shadow mapping
+*  Cascade Shadows

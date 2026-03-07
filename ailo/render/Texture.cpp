@@ -1,4 +1,7 @@
 #include "Texture.h"
+
+#include <filesystem>
+
 #include "Engine.h"
 
 #include <iostream>
@@ -72,6 +75,50 @@ asset_ptr<Texture> Texture::load(Engine& engine, const std::string& path, vk::Fo
         tex->generateMipmaps(engine);
     }
 
+    return tex;
+}
+
+asset_ptr<Texture> Texture::loadCubemap(Engine& engine, const std::string& path, vk::Format format, bool mipmaps) {
+    const char* suffixes[] = { "_px", "_nx", "_py", "_ny", "_pz", "_nz" };
+    std::filesystem::path p(path);
+    std::string extension(p.extension().string());
+    p.replace_extension("");
+
+    bool isHdr = format == vk::Format::eR32G32B32A32Sfloat;
+    constexpr int MAX_MIP_LEVELS = 4;
+    asset_ptr<Texture> tex;
+    for (size_t face = 0; face < 6; face++) {
+        int texChannels;
+        int texWidth, texHeight;
+        int desiredChannels = STBI_rgb_alpha;
+
+        uint32_t byteSize;
+
+        auto face_path = p.string() + suffixes[face] + extension;
+        void* pixels;
+
+        if (isHdr) {
+            pixels = stbi_loadf(face_path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+            byteSize = texWidth * texHeight * desiredChannels * sizeof(float);
+        } else {
+            pixels = stbi_load(face_path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+            byteSize = texWidth * texHeight * desiredChannels * sizeof(uint8_t);
+        }
+
+        if (!pixels) {
+            std::cerr << "failed to load texture image at '" << path[face] << "'! Reason " << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        if (!tex) {
+            tex = engine.getAssetManager()->emplace<ailo::Texture>(face_path, engine, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
+        }
+
+        tex->updateImage(engine, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1);
+
+        stbi_image_free(pixels);
+    }
+    tex->generateMipmaps(engine);
     return tex;
 }
 

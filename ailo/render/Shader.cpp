@@ -63,7 +63,7 @@ ShaderDescription& Shader::getSkyboxShaderDescription() {
         .vertexShader = os::readFile("shaders/skybox.vert.spv"),
         .fragmentShader = os::readFile("shaders/skybox.frag.spv"),
         .raster = RasterDescription {
-            .cullingMode = ailo::CullingMode::FRONT,
+            .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
             .depthWriteEnable = true,
             .depthCompareOp = CompareOp::LESS_OR_EQUAL
