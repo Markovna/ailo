@@ -4,6 +4,8 @@
 #include <unordered_map>
 
 #include "common/slot_map.h"
+#include "entt/container/dense_map.hpp"
+#include "entt/core/type_info.hpp"
 
 namespace ailo {
 
@@ -96,10 +98,39 @@ namespace assets {
     struct no_path {};
 }
 
-template<typename TAsset>
-class AssetPool {
+class AssetPoolBase {
 public:
-    using key_type = typename dod::slot_map<TAsset>::key;
+    using key_type_base = uint64_t;
+
+public:
+    virtual ~AssetPoolBase() = default;
+
+    void gc(Engine& engine) {
+        for (auto key : m_gcList) {
+            destroy(engine, key);
+        }
+        m_gcList.clear();
+    }
+
+    virtual void reset(Engine& engine) {
+        m_gcList.clear();
+    }
+
+protected:
+    void destroyLater(uint64_t key) {
+        m_gcList.push_back(key);
+    }
+
+    virtual void destroy(Engine& engine, key_type_base key) = 0;
+
+private:
+    std::vector<key_type_base> m_gcList;
+};
+
+template<typename TAsset>
+class AssetPool : public AssetPoolBase {
+public:
+    using key_type = dod::slot_map<TAsset>::key;
 
 public:
     template<typename...Args>
@@ -129,25 +160,21 @@ public:
             return {};
         }
 
-        return { m_assets.get(it->second) };
+        auto ptr = m_assets.get(it->second);
+        if (ptr->m_refCount == 0) {
+            return {};
+        }
+
+        return { ptr };
     }
 
     void erase(const key_type& key) {
-        m_garbage.push_back(key);
+        destroyLater(static_cast<uint64_t>(key));
     }
 
-    void gc(Engine& engine) {
-        for (auto key : m_garbage) {
-            if constexpr (has_destroy<TAsset>) {
-                m_assets.get(key)->destroy(engine);
-            }
+    void reset(Engine& engine) override {
+        AssetPoolBase::reset(engine);
 
-            m_assets.erase(key);
-        }
-        m_garbage.clear();
-    }
-
-    void reset(Engine& engine) {
         for (auto& asset : m_assets) {
             if constexpr (has_destroy<TAsset>) {
                 asset.destroy(engine);
@@ -156,13 +183,21 @@ public:
 
         m_pathIndex.clear();
         m_assets.clear();
-        m_garbage.clear();
+    }
+
+protected:
+    void destroy(Engine& engine, key_type_base _key) override {
+        auto key = static_cast<key_type>(_key);
+        if constexpr (has_destroy<TAsset>) {
+            m_assets.get(key)->destroy(engine);
+        }
+
+        m_assets.erase(key);
     }
 
 private:
     dod::slot_map<TAsset> m_assets;
     std::unordered_map<std::string, key_type> m_pathIndex;
-    std::vector<key_type> m_garbage;
 };
 
 template<typename T>
@@ -175,39 +210,54 @@ class enable_asset_ptr {
     friend class asset_ptr<T>;
 };
 
-
-template<typename ...Types>
 class AssetManager {
 public:
     template<class TAsset, typename...Args>
     asset_ptr<TAsset> emplace(const std::string& path, Args&&... args) {
-        return std::get<AssetPool<TAsset>>(m_pools).emplace(path, std::forward<Args>(args)...);
+        return assure<TAsset>().emplace(path, std::forward<Args>(args)...);
     }
 
     template<class TAsset, typename...Args>
     asset_ptr<TAsset> emplace(assets::no_path tag, Args&&... args) {
-        return std::get<AssetPool<TAsset>>(m_pools).emplace(tag, std::forward<Args>(args)...);
+        return assure<TAsset>().emplace(tag, std::forward<Args>(args)...);
     }
 
     template<class TAsset>
     asset_ptr<TAsset> get(const std::string& path) {
-        return std::get<AssetPool<TAsset>>(m_pools).get(path);
+        return assure<TAsset>().get(path);
     }
 
     void gc(Engine& engine) {
-        std::apply([&](auto&&... pools) {
-            (pools.gc(engine), ...);
-        }, m_pools);
+        for (auto [key, pool] : m_pools) {
+            pool->gc(engine);
+        }
     }
 
     void reset(Engine& engine) {
-        std::apply([&](auto&&... pools) {
-            (pools.reset(engine), ...);
-        }, m_pools);
+        for (auto [key, pool] : m_pools) {
+            pool->reset(engine);
+        }
+    }
+
+    using id_type = entt::id_type;
+
+    template<class T>
+    using type_hash = entt::type_hash<T>;
+
+    template<class TAsset>
+    AssetPool<TAsset>& assure() {
+        const id_type id = type_hash<TAsset>::value();
+        auto it = m_pools.find(id);
+        if (it == m_pools.end()) {
+            auto ptr = std::make_shared<AssetPool<TAsset>>();
+            m_pools.emplace(id, ptr);
+            return *ptr;
+        }
+        return static_cast<AssetPool<TAsset>&>(*it->second);
     }
 
 private:
-    std::tuple<AssetPool<Types>...> m_pools;
+    entt::dense_map<id_type, std::shared_ptr<AssetPoolBase>> m_pools;
 };
 
 } // namespace ailo

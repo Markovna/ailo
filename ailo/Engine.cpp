@@ -33,7 +33,7 @@ void Engine::gc() {
 Renderer* Engine::getRenderer() { return m_renderer.get(); }
 RenderAPI* Engine::getRenderAPI() { return m_renderAPI.get(); }
 InputSystem* Engine::getInputSystem() { return m_inputSystem.get(); }
-Engine::AssetManager* Engine::getAssetManager() { return m_assetManager.get(); }
+AssetManager* Engine::getAssetManager() { return m_assetManager.get(); }
 
 std::unique_ptr<Scene> Engine::createScene() const {
   return std::make_unique<Scene>();

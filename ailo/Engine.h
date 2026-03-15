@@ -1,10 +1,6 @@
 #pragma once
 
 #include <memory>
-#include "render/Shader.h"
-#include "render/Texture.h"
-#include "render/Material.h"
-#include "render/Mesh.h"
 
 struct GLFWwindow;
 
@@ -18,15 +14,11 @@ class Scene;
 class Shader;
 class Texture;
 class Material;
-struct Camera;
-
-template<class ...>
 class AssetManager;
+struct Camera;
 
 class Engine {
  public:
-  using AssetManager = AssetManager<Texture, Shader, Material, Mesh>;
-
   Engine(GLFWwindow*);
   ~Engine();
 
