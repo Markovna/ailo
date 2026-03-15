@@ -230,8 +230,9 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
 
-    for(auto& primitive : renderable.mesh->primitives) {
-      Material* material = primitive.getMaterial();
+    for(size_t i = 0; i < renderable.mesh->faces.size(); i++) {
+      auto& face = renderable.mesh->faces[i];
+      auto& material = renderable.materials[i];
       material->updateTextures(backend);
       material->updateBuffers(backend);
 
@@ -241,11 +242,11 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
       entry.program = material->getShader()->program();
       entry.vertexBufferLayout = renderable.mesh->vertexBuffer->getLayout();
       entry.bufferOffset = index * sizeof(PerObjectUniforms);
-      entry.material = material;
+      entry.material = material.get();
       entry.indexBuffer = renderable.mesh->indexBuffer->getHandle();
       entry.vertexBuffer = renderable.mesh->vertexBuffer->getBuffer();
-      entry.indexCount = primitive.getIndexCount();
-      entry.indexOffset = primitive.getIndexOffset();
+      entry.indexCount = face.indexCount;
+      entry.indexOffset = face.indexOffset;
       entry.hasTransform = tr != nullptr;
 
       index++;

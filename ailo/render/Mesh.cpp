@@ -40,6 +40,7 @@ struct MeshData {
     std::vector<uint16_t> indices;
     glm::mat4 transform;
     uint32_t meshIndex;
+    uint32_t materialIndex;
 };
 
 // Helper function to load texture from file
@@ -75,6 +76,7 @@ static void processNode(
         MeshData meshData;
         meshData.transform = worldTransform;
         meshData.meshIndex = meshIdx;
+        meshData.materialIndex = aiscene->mMeshes[meshIdx]->mMaterialIndex;
 
         meshDataList.push_back(std::move(meshData));
     }
@@ -152,8 +154,7 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = 0;
 
-    auto vb = ailo::make_resource<VertexBuffer>(
-        engine,
+    auto vb = std::make_shared<VertexBuffer>(
         engine,
         VertexInputDescription {
             .bindings = { binding },
@@ -164,12 +165,12 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
 
     vb->updateBuffer(engine, sCubeVertices, sizeof(sCubeVertices));
 
-    auto ib = ailo::make_resource<BufferObject>(engine, engine, BufferBinding::INDEX, sizeof(sCubeIndices));
+    auto ib = std::make_shared<BufferObject>(engine, BufferBinding::INDEX, sizeof(sCubeIndices));
     ib->updateBuffer(engine, sCubeIndices, sizeof(sCubeIndices));
 
     mesh->vertexBuffer = vb;
     mesh->indexBuffer = ib;
-    mesh->primitives.emplace_back(asset_ptr<Material>(), 0, 36);
+    mesh->faces.emplace_back(0, 36);
     return mesh;
 }
 
@@ -378,8 +379,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         }
 
         // Create vertex buffer
-        mesh->vertexBuffer = ailo::make_resource<VertexBuffer>(
-            engine,
+        mesh->vertexBuffer = std::make_shared<VertexBuffer>(
             engine,
             vertexInput,
             sizeof(Vertex) * vertices.size()
@@ -387,17 +387,14 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         mesh->vertexBuffer->updateBuffer(engine, vertices.data(), sizeof(Vertex) * vertices.size());
 
         // Create index buffer
-        mesh->indexBuffer = ailo::make_resource<BufferObject>(
-            engine,
+        mesh->indexBuffer = std::make_shared<BufferObject>(
             engine,
             BufferBinding::INDEX,
             sizeof(uint16_t) * indices.size()
         );
         mesh->indexBuffer->updateBuffer(engine, indices.data(), sizeof(uint16_t) * indices.size());
 
-        auto material = materials[aiMesh->mMaterialIndex];
-        RenderPrimitive primitive(material, 0, indices.size());
-        mesh->primitives.push_back(primitive);
+        mesh->faces.push_back({0, static_cast<uint32_t>(indices.size())});
     }
 
     // Traverse the scene hierarchy and collect mesh data with transforms
@@ -415,6 +412,7 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         // Add Renderable component
         Renderable& renderable = scene.addComponent<Renderable>(entity);
         renderable.mesh = meshes[meshData.meshIndex];
+        renderable.materials.push_back(materials[meshData.materialIndex]);
 
         // Add Transform component with the correct world transform
         Transform& transform = scene.addComponent<Transform>(entity);

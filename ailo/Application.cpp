@@ -98,7 +98,7 @@ void Application::init() {
   auto skyboxEntity = m_scene->addEntity();
   ailo::Renderable& skybox = m_scene->addComponent<ailo::Renderable>(skyboxEntity);
   skybox.mesh = ailo::Mesh::cube(*m_engine);
-  skybox.mesh->primitives.back().setMaterial(skyboxMaterial);
+  skybox.materials.push_back(skyboxMaterial);
 
   auto iblIrradiance = ailo::Texture::loadCubemap(
     *m_engine,
