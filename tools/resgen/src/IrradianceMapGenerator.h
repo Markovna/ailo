@@ -4,13 +4,16 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
-#include "../../../third_party/glm/glm/common.hpp"
-
 namespace ailo {
 
 struct IrradianceGeneratorConfig {
     uint32_t outputSize = 64;    // Size of each cubemap face (width = height)
     uint32_t sampleCount = 1024; // Number of hemisphere samples for integration
+};
+
+struct PrefilterMapConfig {
+    uint32_t outputSize = 1024;
+    uint32_t sampleCount = 1024;
 };
 
 class IrradianceMapGenerator {
@@ -24,6 +27,9 @@ public:
         const std::string& outputPath,
         const IrradianceGeneratorConfig& config = {}
     );
+
+    static bool prefilter(const std::string& inputPath, const std::string& outputPath,
+        const PrefilterMapConfig&);
 
     static void dfg(const std::string& path);
 
@@ -72,14 +78,6 @@ private:
         float normalX, float normalY, float normalZ,
         uint32_t sampleCount,
         float& outR, float& outG, float& outB
-    );
-
-    // Generate a single cubemap face
-    static void generateFace(
-        const HDRImage& image,
-        int face,
-        CubemapFace& outFace,
-        uint32_t sampleCount
     );
 };
 

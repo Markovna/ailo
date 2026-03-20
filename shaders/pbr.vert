@@ -14,11 +14,11 @@ layout(location = 4) in vec4 inTangent;
 
 void main() {
     vec4 position = object.model * vec4(inPosition, 1.0);
+    mat3 normalToWorld = mat3(object.modelInverseTranspose);
 
     fragPosWorld = position.xyz;
-
-    fragNormalWorld = normalize(mat3(object.modelInverseTranspose) * inNormal);
-    fragTangentWorld.xyz = normalize(mat3(object.modelInverseTranspose) * inTangent.xyz);
+    fragNormalWorld = normalize(normalToWorld * inNormal);
+    fragTangentWorld.xyz = normalize(normalToWorld * inTangent.xyz);
     fragTangentWorld.w = inTangent.w;
 
     fragColor = inColor;

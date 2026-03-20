@@ -57,6 +57,25 @@ int main(int argc, char** argv) {
         std::string outputPath = argv[2];
         ailo::IrradianceMapGenerator::dfg(outputPath);
         return 0;
+    } else if (command == "ibl-prefilter") {
+        if (argc < 4) {
+            std::cerr << "Error: ibl-irradiance requires <input_path> and <output_path>\n\n";
+            printUsage(argv[0]);
+            return 1;
+        }
+
+        std::string inputPath = argv[2];
+        std::string outputPath = argv[3];
+
+        ailo::PrefilterMapConfig config;
+        if (argc >= 5) {
+            config.outputSize = static_cast<uint32_t>(std::stoul(argv[4]));
+        }
+        if (argc >= 6) {
+            config.sampleCount = static_cast<uint32_t>(std::stoul(argv[5]));
+        }
+
+        return ailo::IrradianceMapGenerator::prefilter(inputPath, outputPath, config) ? 0 : 1;
 
     } else {
         std::cerr << "Error: unknown command '" << command << "'\n\n";

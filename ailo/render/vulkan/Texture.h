@@ -19,7 +19,7 @@ public:
 
     ~Texture();
 
-    void transitionLayout(vk::CommandBuffer, vk::ImageLayout layout);
+    void transitionLayout(vk::CommandBuffer, vk::ImageLayout layout, uint32_t baseLevel = 0, uint32_t levelCount = 0);
     void transitionLayout(vk::CommandBuffer, vk::ImageLayout layout, vk::ImageSubresourceRange range);
 
     vk::ImageLayout getLayout(uint8_t level) const {

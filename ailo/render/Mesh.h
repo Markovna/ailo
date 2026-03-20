@@ -24,7 +24,7 @@ struct Mesh : public enable_asset_ptr<Mesh> {
 
 class MeshReader {
 public:
-    static std::vector<Entity> instantiate(Engine&, Scene&, const std::string& path);
+    static std::vector<Entity> instantiate(Engine&, Scene&, const std::string& path, const glm::mat4& transform = glm::mat4(1.0f));
 };
 
 }

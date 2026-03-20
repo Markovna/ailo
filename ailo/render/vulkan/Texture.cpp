@@ -110,11 +110,12 @@ Texture::~Texture() {
     }
 }
 
-void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout newLayout) {
+void Texture::transitionLayout(vk::CommandBuffer commandBuffer, vk::ImageLayout newLayout,
+    uint32_t baseLevel, uint32_t levelCount) {
     vk::ImageSubresourceRange range{};
     range.aspectMask = aspect;
-    range.baseMipLevel = 0;
-    range.levelCount = m_levels;
+    range.baseMipLevel = baseLevel;
+    range.levelCount = levelCount > 0 ? levelCount : m_levels;
     range.baseArrayLayer = 0;
     range.layerCount = m_layerCount;
     transitionLayout(commandBuffer, newLayout, range);

@@ -174,14 +174,36 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     return mesh;
 }
 
-std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path) {
+asset_ptr<Texture> load(Engine& engine, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
+    if (material->GetTextureCount(textureType) <= 0) return {};
+
+    aiString texturePath;
+    if (material->GetTexture(textureType, 0, &texturePath) != AI_SUCCESS) {
+        return {};
+    }
+
+    auto embedded = scene->GetEmbeddedTexture(texturePath.C_Str());
+    if (embedded) {
+        if (embedded->mHeight > 0) {
+            return Texture::fromEmbedded(engine, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
+        }
+
+        return  Texture::fromEmbeddedCompressed(engine, embedded->pcData, embedded->mWidth, format);
+    }
+
+    return loadTexture(engine, texturePath.C_Str(), modelDirectory, format);
+}
+
+std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path, const glm::mat4& transform) {
     Assimp::Importer importer;
 
     const aiScene* aiscene = importer.ReadFile(path,
         aiProcess_Triangulate |
+        aiProcess_OptimizeMeshes |
         aiProcess_FlipUVs |
         aiProcess_GenNormals |
-        aiProcess_CalcTangentSpace);
+        aiProcess_CalcTangentSpace |
+        aiProcess_LimitBoneWeights);
 
     if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode) {
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
@@ -208,37 +230,23 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         asset_ptr<Texture> metallicRoughnessMap {};
 
         // Try to get the diffuse texture
-        if (material->GetTextureCount(aiTextureType_BASE_COLOR) > 0) {
-            aiString texturePath;
-            if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texturePath) == AI_SUCCESS) {
-                diffuse = loadTexture(engine, texturePath.C_Str(), modelDirectory);
-            }
+        diffuse = load(engine, aiscene, material, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) {
+            diffuse = load(engine, aiscene, material, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
         }
 
         if (!diffuse) {
             diffuse = assetManager->get<Texture>("builtin://textures/white");
         }
 
-        if (material->GetTextureCount(aiTextureType_NORMALS) > 0) {
-            aiString texturePath;
-            if (material->GetTexture(aiTextureType_NORMALS, 0, &texturePath) == AI_SUCCESS) {
-                normalMap = loadTexture(engine, texturePath.C_Str(), modelDirectory, vk::Format::eR8G8B8A8Unorm);
-            }
-        }
-
+        normalMap = load(engine, aiscene, material, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
         if (!normalMap) {
             normalMap = assetManager->get<Texture>("builtin://textures/normal");
         }
 
-        if (material->GetTextureCount(aiTextureType_GLTF_METALLIC_ROUGHNESS) > 0) {
-            aiString texturePath;
-            if (material->GetTexture(aiTextureType_GLTF_METALLIC_ROUGHNESS, 0, &texturePath) == AI_SUCCESS) {
-                metallicRoughnessMap = loadTexture(engine, texturePath.C_Str(), modelDirectory);
-            }
-        }
-
+        metallicRoughnessMap = load(engine, aiscene, material, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
         if (!metallicRoughnessMap) {
-            metallicRoughnessMap = assetManager->get<Texture>("builtin://textures/white");
+            metallicRoughnessMap = assetManager->get<Texture>("builtin://textures/default_metallic_roughness");
         }
 
         materials[i] = assetManager->emplace<Material>(assets::no_path{}, engine, shader);
@@ -252,6 +260,14 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
             materials[i]->setTexture(2, metallicRoughnessMap);
         }
     }
+
+    // for (unsigned int i = 0; i < aiscene->mNumAnimations; i++) {
+    //     auto animation = aiscene->mAnimations[i];
+    //     for (unsigned int j = 0; j < animation->mNumChannels; j++) {
+    //         auto channel = animation->mChannels[j];
+    //         std::cout << "Animation channel: " << channel->mNodeName.C_Str() << std::endl;
+    //     }
+    // }
 
     // Create vertex input description (shared by all meshes)
     VertexInputDescription vertexInput;
@@ -307,6 +323,13 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
 
         std::vector<Vertex> vertices;
         std::vector<uint16_t> indices;
+
+        // for (unsigned int j = 0; j < aiMesh->mNumBones; j++) {
+        //     aiBone* bone = aiMesh->mBones[j];
+        //     if (bone->mNumWeights > 0) {
+        //         std::cout << "Bone: " << bone->mName.C_Str() << " influences " << bone->mNumWeights << " vertices" << std::endl;
+        //     }
+        // }
 
         // Extract vertices
         for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
@@ -399,11 +422,11 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
 
     // Traverse the scene hierarchy and collect mesh data with transforms
     std::vector<MeshData> meshDataList;
-    glm::mat4 identity(1.0f);
-    processNode(aiscene->mRootNode, aiscene, identity, meshDataList);
+    processNode(aiscene->mRootNode, aiscene, transform, meshDataList);
 
     std::vector<Entity> entities;
 
+    uint32_t renderableCount = 0;
     // Create an entity for each mesh with its correct transform
     for (const auto& meshData : meshDataList) {
         auto entity = scene.addEntity();
@@ -417,7 +440,10 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
         // Add Transform component with the correct world transform
         Transform& transform = scene.addComponent<Transform>(entity);
         transform.transform = meshData.transform;
+        renderableCount++;
     }
+
+    std::cout << "Loaded " << renderableCount << " renderables" << std::endl;
 
     return entities;
 }

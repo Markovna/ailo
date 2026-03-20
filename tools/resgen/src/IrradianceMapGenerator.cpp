@@ -71,7 +71,7 @@ glm::vec2 hammersley(uint32_t i, float iN) {
 }
 
 inline glm::vec3 hemisphereImportanceSampleDggx(glm::vec2 u, float a) { // pdf = D(a) * cosTheta
-    const float phi = 2.0f * (float) glm::pi<float>() * u.x;
+    const float phi = 2.0f * glm::pi<float>() * u.x;
     // NOTE: (aa-1) == (a-1)(a+1) produces better fp accuracy
     const float cosTheta2 = (1 - u.y) / (1 + (a + 1) * ((a - 1) * u.y));
     const float cosTheta = std::sqrt(cosTheta2);
@@ -135,6 +135,15 @@ std::string getOutputPathForFace(const std::string& basePath, int face) {
         return basePath.substr(0, dotPos) + FACE_SUFFIXES[face] + basePath.substr(dotPos);
     }
     return basePath + FACE_SUFFIXES[face] + ".hdr";
+}
+
+std::string getOutputPathForMipFace(const std::string& basePath, size_t level, int face) {
+    const std::string mipTag = "_m" + std::to_string(level);
+    size_t dotPos = basePath.rfind('.');
+    if (dotPos != std::string::npos) {
+        return basePath.substr(0, dotPos) + mipTag + FACE_SUFFIXES[face] + basePath.substr(dotPos);
+    }
+    return basePath + mipTag + FACE_SUFFIXES[face] + ".hdr";
 }
 
 // Sample equirectangular image with bilinear filtering
@@ -306,15 +315,6 @@ void IrradianceMapGenerator::getDirectionFromCubemapUV(
 void IrradianceMapGenerator::computeIrradiance(
     const HDRImage&, float, float, float, uint32_t, float&, float&, float&) {}
 
-void IrradianceMapGenerator::generateFace(
-    const HDRImage& image,
-    int face,
-    CubemapFace& outFace,
-    uint32_t sampleCount
-) {
-    // This is now handled in generate() with shared precomputed data
-}
-
 bool IrradianceMapGenerator::irradiance(
     const std::string& inputPath,
     const std::string& outputPath,
@@ -401,6 +401,188 @@ bool IrradianceMapGenerator::irradiance(
     return true;
 }
 
+namespace details {
+template<typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
+constexpr inline T ctz(T x) noexcept {
+    static_assert(sizeof(T) * CHAR_BIT <= 64, "details::ctz() only support up to 64 bits");
+    T c = sizeof(T) * CHAR_BIT;
+#if defined(_MSC_VER)
+    // equivalent to x & -x, but MSVC yield a warning for using unary minus operator on unsigned types
+    x &= (~x + 1);
+#else
+    // equivalent to x & (~x + 1), but some compilers generate a better sequence on ARM
+    x &= -x;
+#endif
+    if (x) c--;
+    if constexpr (sizeof(T) * CHAR_BIT >= 64) {
+        if (x & T(0x00000000FFFFFFFF)) c -= 32;
+    }
+    if constexpr (sizeof(T) * CHAR_BIT >= 32) {
+        if (x & T(0x0000FFFF0000FFFF)) c -= 16;
+    }
+    if constexpr (sizeof(T) * CHAR_BIT >= 16) {
+        if (x & T(0x00FF00FF00FF00FF)) c -= 8;
+    }
+    if (x & T(0x0F0F0F0F0F0F0F0F)) c -= 4;
+    if (x & T(0x3333333333333333)) c -= 2;
+    if (x & T(0x5555555555555555)) c -= 1;
+    return c;
+}
+
+}
+
+constexpr inline unsigned long long ctz(unsigned long long x) noexcept {
+#if __has_builtin(__builtin_ctzll)
+    return __builtin_ctzll(x);
+#else
+    return details::ctz(x);
+#endif
+}
+
+static float lodToPerceptualRoughness(float lod) noexcept {
+    const float a = 2.0f;
+    const float b = -1.0f;
+    return (lod != 0)
+            ? std::clamp((std::sqrt(a * a + 4.0f * b * lod) - a) / (2.0f * b), 0.0f, 1.0f)
+            : 0.0f;
+}
+
+bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::string& outputPath,
+    const PrefilterMapConfig& config) {
+
+    HDRImage image;
+    if (!image.load(inputPath)) {
+        return false;
+    }
+
+    const uint32_t minLodSize = 16;
+    const size_t baseExp = ctz(config.outputSize);
+    size_t minLod = ctz(minLodSize);
+    if (minLod >= baseExp) {
+        minLod = 0;
+    }
+
+    size_t numSamples = config.sampleCount;
+    const size_t numLevels = (baseExp + 1) - minLod;
+
+    std::cout << "Generating prefiltered environment map (" << config.outputSize << "x"
+              << config.outputSize << " base, " << baseExp << " base exp, " << numLevels << " mip levels)..." << std::endl;
+
+    for (size_t i = baseExp; i >= (baseExp + 1) - numLevels; --i) {
+        const size_t dim = 1U << i; // NOLINT
+        const size_t level = baseExp - i;
+        if (level >= 2) {
+            numSamples *= 2;
+        }
+
+        const float lod = std::clamp(level / (numLevels - 1.0f), 0.0f, 1.0f);
+        // map the lod to a perceptualRoughness
+        const float perceptualRoughness = lodToPerceptualRoughness(lod);
+        const float roughness = perceptualRoughness * perceptualRoughness;
+
+        std::cout << "Mip level " << level << " (dim=" << dim
+                  << ", roughness=" << roughness
+                  << ", samples=" << numSamples << ")..." << std::endl;
+
+        const float iN = 1.0f / static_cast<float>(numSamples);
+
+        for (int face = 0; face < 6; ++face) {
+            CubemapFace cubeFace(static_cast<uint32_t>(dim));
+
+            #ifdef _OPENMP
+            #pragma omp parallel for schedule(dynamic)
+            #endif
+            for (int y = 0; y < static_cast<int>(dim); ++y) {
+                for (size_t x = 0; x < dim; ++x) {
+                    const float u = (static_cast<float>(x) + 0.5f) / static_cast<float>(dim);
+                    const float v = (static_cast<float>(y) + 0.5f) / static_cast<float>(dim);
+
+                    // Split-sum approximation: N = V = R (outgoing direction)
+                    const glm::vec3 N = cubemapToDirection(face, u, v);
+                    const glm::vec3 V = N;
+
+                    // Build an orthonormal tangent frame around N
+                    const glm::vec3 up = std::abs(N.z) < 0.999f
+                        ? glm::vec3(0.0f, 0.0f, 1.0f)
+                        : glm::vec3(1.0f, 0.0f, 0.0f);
+                    const glm::vec3 tangentX = glm::normalize(glm::cross(up, N));
+                    const glm::vec3 tangentY = glm::cross(N, tangentX);
+
+                    glm::vec3 prefilteredColor(0.0f);
+                    float totalWeight = 0.0f;
+
+                    for (size_t s = 0; s < numSamples; ++s) {
+                        // Low-discrepancy Hammersley point set
+                        const glm::vec2 Xi = hammersley(static_cast<uint32_t>(s), iN);
+
+                        // GGX importance-sample a half-vector in tangent space
+                        const glm::vec3 Hlocal = hemisphereImportanceSampleDggx(Xi, roughness);
+
+                        // Rotate to world space
+                        const glm::vec3 H = glm::normalize(
+                            tangentX * Hlocal.x + tangentY * Hlocal.y + N * Hlocal.z);
+
+                        // Reflect V around H to get the incoming light direction
+                        const float VoH = glm::clamp(glm::dot(V, H), 0.0f, 1.0f);
+                        const glm::vec3 L = glm::normalize(2.0f * VoH * H - V);
+
+                        const float NoL = glm::clamp(glm::dot(N, L), 0.0f, 1.0f);
+                        if (NoL > 0.0f) {
+                            const glm::vec2 luv = directionToEquirectUV(L);
+                            const glm::vec3 envSample = sampleEquirect(
+                                image.data, image.width, image.height, luv);
+
+                            // Weight by NoL — cancels the cosine term in the pdf
+                            prefilteredColor += envSample * NoL;
+                            totalWeight += NoL;
+                        }
+                    }
+
+                    if (totalWeight > 0.0f) {
+                        prefilteredColor /= totalWeight;
+                    }
+
+                    const uint32_t idx =
+                        (static_cast<uint32_t>(y) * static_cast<uint32_t>(dim)
+                         + static_cast<uint32_t>(x)) * 3;
+                    cubeFace.data[idx + 0] = prefilteredColor.x;
+                    cubeFace.data[idx + 1] = prefilteredColor.y;
+                    cubeFace.data[idx + 2] = prefilteredColor.z;
+                }
+            }
+
+            const std::string facePath = getOutputPathForMipFace(outputPath, level, face);
+            if (!cubeFace.save(facePath)) {
+                return false;
+            }
+            std::cout << "Saved: " << facePath << std::endl;
+        }
+    }
+
+    std::cout << "Prefiltered environment map generation complete!" << std::endl;
+    return true;
+}
+
+static glm::vec2 DFV_Multiscatter(float NoV, float linearRoughness, size_t numSamples) {
+    glm::vec2 r(0.0f);
+    const glm::vec3 V(std::sqrt(1 - NoV * NoV), 0, NoV);
+    for (size_t i = 0; i < numSamples; i++) {
+        const glm::vec2 u = hammersley(uint32_t(i), 1.0f / numSamples);
+        const glm::vec3 H = hemisphereImportanceSampleDggx(u, linearRoughness);
+        const glm::vec3 L = 2 * dot(V, H) * H - V;
+        const float VoH = glm::clamp(glm::dot(V, H), 0.0f, 1.0f);
+        const float NoL = glm::clamp(L.z, 0.0f, 1.0f);
+        const float NoH = glm::clamp(H.z, 0.0f, 1.0f);
+        if (NoL > 0) {
+            const float v = visibility(NoV, NoL, linearRoughness) * NoL * (VoH / NoH);
+            const float Fc = pow5(1 - VoH);
+            r.x += v * Fc;
+            r.y += v;
+        }
+    }
+    return r * (4.0f / numSamples);
+}
+
 void IrradianceMapGenerator::dfg(const std::string& path) {
     const size_t width = 256;
     const size_t height = 256;
@@ -414,7 +596,7 @@ void IrradianceMapGenerator::dfg(const std::string& path) {
         for (size_t x = 0; x < width; x++) {
             const float w = static_cast<float>(width);
             const float NoV = glm::clamp((x + 0.5f) / w, 0.0f, 1.0f);
-            const glm::vec3 r = { DFV(NoV, linear_roughness, 1024), 0 };
+            const glm::vec3 r = { DFV_Multiscatter(NoV, linear_roughness, 1024), 0 };
             *dataPtr = r;
             dataPtr++;
         }

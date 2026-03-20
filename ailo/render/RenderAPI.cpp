@@ -275,7 +275,10 @@ void RenderAPI::destroyTexture(const TextureHandle& handle) {
     texture.release();
 }
 
-void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
+void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize,
+    uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset,
+    uint32_t baseLayer, uint32_t layerCount,
+    uint32_t level) {
     auto& texture = m_textures.get(handle);
 
     auto stageBuffer = allocateStageBuffer(dataSize);
@@ -289,7 +292,7 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     if(width == 0) width = texture.width;
     if(height == 0) height = texture.height;
 
-    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount);
+    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount, level);
 
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
@@ -758,13 +761,16 @@ void RenderAPI::recreateSwapchain() {
     createSwapchain();
 }
 
-void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer, uint32_t layerCount) {
+void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image,
+    uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset,
+    uint32_t baseLayer, uint32_t layerCount,
+    uint32_t level) {
     vk::BufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
     region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.mipLevel = level;
     region.imageSubresource.baseArrayLayer = baseLayer;
     region.imageSubresource.layerCount = layerCount;
     region.imageOffset = vk::Offset3D{static_cast<int32_t>(xOffset), static_cast<int32_t>(yOffset), 0};

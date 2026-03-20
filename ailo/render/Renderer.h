@@ -16,7 +16,7 @@ struct PerViewUniforms {
   glm::vec4 ambientLightColorIntensity;
 
   float iblSpecularMaxLod;
-  float __padding1[3]; // pad iblSpecularMaxLod to 16 bytes
+  float __padding1[3];
   alignas(16) glm::mat4 lightViewProjection;
 };
 
@@ -133,7 +133,9 @@ private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
   static asset_ptr<Texture> createWhiteTexture(Engine&);
+  static asset_ptr<Texture> createBlackTexture(Engine&);
   static asset_ptr<Texture> createDefaultNormalTexture(Engine&);
+  static asset_ptr<Texture> createDefaultMetallicRoughnessTexture(Engine&);
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};

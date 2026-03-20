@@ -1,5 +1,4 @@
 #pragma once
-#include "Scene.h"
 #include "glm/mat4x4.hpp"
 
 namespace ailo {

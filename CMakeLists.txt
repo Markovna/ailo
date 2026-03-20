@@ -219,7 +219,7 @@ function(add_irradiance_map TARGET INPUT_HDR)
     add_custom_command(
             OUTPUT ${FACE_OUTPUTS}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
-            COMMAND $<TARGET_FILE:resgen> ibl-irradiance ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
+            COMMAND $<TARGET_FILE:resgen> ibl-prefilter ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
             DEPENDS resgen ${CMAKE_SOURCE_DIR}/${INPUT_HDR}
             COMMENT "Generating irradiance map from ${INPUT_HDR}"
     )
@@ -227,7 +227,7 @@ function(add_irradiance_map TARGET INPUT_HDR)
     target_sources(${TARGET} PRIVATE ${FACE_OUTPUTS})
 endfunction()
 
-add_irradiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
+#add_irradiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
 # Add shaders
 add_shader(ailo shaders/shader.vert)

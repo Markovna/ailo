@@ -103,16 +103,27 @@ void Application::init() {
   auto iblIrradiance = ailo::Texture::loadCubemap(
     *m_engine,
       "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
-    vk::Format::eR32G32B32A32Sfloat
+      vk::Format::eR32G32B32A32Sfloat
     );
+
+  auto iblPrefilter = ailo::Texture::loadCubemap(
+    *m_engine,
+    "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
+    vk::Format::eR32G32B32A32Sfloat,
+    true
+  );
 
   auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
   sceneLighting.irradianceMap = iblIrradiance;
-  sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.4, 0.3));
+  sceneLighting.prefilteredEnvMap = iblPrefilter;
+  sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.4, 0.1));
 
-  auto meshes = ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
-  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/camera/GAP_CAM_lowpoly_4.fbx");
-  // auto meshes = reader.read(*m_engine, *m_scene, "assets/models/helmet/helmet.obj");
+  auto scale = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+  // scale = glm::translate(scale, glm::vec3(200.0f, 0.0f, 0.0f));
+  scale = glm::rotate(scale, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+  ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
+  ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/Roundhouse Kick.fbx", scale);
 }
 
 void Application::mainLoop() {
@@ -230,7 +241,8 @@ void Application::updateTransforms() {
 
   m_camera->view = glm::lookAt(m_cameraTarget + cameraPos, m_cameraTarget, up);
 
-  m_camera->projection = glm::perspective(glm::radians(70.0f), WIDTH / (float) HEIGHT, 0.1f, 50.0f);
+  auto fov = glm::radians(60.0f);
+  m_camera->projection = glm::perspective(fov, WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 

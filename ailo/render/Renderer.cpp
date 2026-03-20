@@ -1,5 +1,6 @@
 #include "Renderer.h"
 
+#include <iostream>
 #include <ecs/Scene.h>
 
 #include "Engine.h"
@@ -29,6 +30,8 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
 
 Renderer::Renderer(Engine& engine) {
   m_persistentTextures.push_back(createWhiteTexture(engine));
+  m_persistentTextures.push_back(createBlackTexture(engine));
+  m_persistentTextures.push_back(createDefaultMetallicRoughnessTexture(engine));
   m_persistentTextures.push_back(createDefaultNormalTexture(engine));
 
   m_iblDfgLut = Texture::load(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
@@ -141,18 +144,18 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.2f);
   m_perViewUniformBufferData.lightDirection = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
-  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->irradianceMap->getLevels() - 1 : 1;
+  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->prefilteredEnvMap->getLevels() - 1 : 1;
 
   float radius = 3.0f;
   auto& light0 = m_lightUniformsBufferData[0];
   light0.type = 0; // 0 - point, 1 - spot
-  light0.lightPositionFalloff = glm::vec4(-1.0, 1.5, 0.5f, 1.0f / (radius * radius));
+  light0.lightPositionFalloff = glm::vec4(1.0, 1.5, 0.5f, 1.0f / (radius * radius));
   light0.lightColorIntensity = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
 
   auto& light1 = m_lightUniformsBufferData[1];
   light1 = light0;
   light1.type = 1;
-  light1.lightPositionFalloff = glm::vec4(5.0, 1.5, 2.5f, 1.0f / (radius * radius));
+  light1.lightPositionFalloff = glm::vec4(.0, 1.5, 2.5f, 1.0f / (radius * radius));
   light1.lightColorIntensity = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
@@ -258,7 +261,7 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
   backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
   auto ibl = scene.tryGet<SceneLighting>(scene.single());
-  auto iblTexHandle = ibl ? ibl->irradianceMap->getHandle() : TextureHandle{};
+  auto iblTexHandle = ibl ? ibl->prefilteredEnvMap->getHandle() : TextureHandle{};
   if (iblTexHandle != m_iblSpecularMap) {
     m_iblSpecularMap = iblTexHandle;
     backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
@@ -273,11 +276,28 @@ asset_ptr<Texture> Renderer::createWhiteTexture(Engine& engine) {
   return texture;
 }
 
+asset_ptr<Texture> Renderer::createBlackTexture(Engine& engine) {
+  static const std::array<uint8_t, 4> black = { 0, 0, 0, 255 };
+
+  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/black", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(engine, black.data(), 4);
+  return texture;
+}
+
 asset_ptr<Texture> Renderer::createDefaultNormalTexture(Engine& engine) {
   static const std::array<uint8_t, 4> normal = { 128, 128, 255, 255 };
 
   auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/normal", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
   texture->updateImage(engine, normal.data(), 4);
+  return texture;
+}
+
+asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(Engine& engine) {
+  static const std::array<uint8_t, 4> metallicRoughness = { 0, 128, 0, 255 };
+
+  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/default_metallic_roughness",
+    engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(engine, metallicRoughness.data(), 4);
   return texture;
 }
 

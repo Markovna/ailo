@@ -15,7 +15,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
 
     auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
 
-    uint32_t imageCount = capabilities.minImageCount + 1;
+    uint32_t imageCount = capabilities.minImageCount + 4;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
         imageCount = capabilities.maxImageCount;
     }
@@ -46,7 +46,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     createInfo.oldSwapchain = nullptr;
     m_swapchain = device->createSwapchainKHR(createInfo);
 
-    auto samples = vk::SampleCountFlagBits::e4;
+    auto samples = vk::SampleCountFlagBits::e1;
     samples = std::min(samples, device.getMSAASamples());
 
     auto depth = resource_ptr<gpu::Texture>::make(textures,

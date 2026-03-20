@@ -203,7 +203,7 @@ void main() {
     shading_normal = normalize(fragNormalWorld);
 #endif
 
-    shading_NoV = dot(shading_normal, shading_view);
+    shading_NoV = clampNoV(dot(shading_normal, shading_view));
     shading_reflected = reflect(-shading_view, shading_normal);
 
     Pixel pixel;
@@ -222,7 +222,7 @@ void main() {
 
     const float ambientLuminance = 0.2;
 
-    vec3 E = mix(pixel.dfg.yyy, pixel.dfg.xxx, pixel.f0);
+    vec3 E = mix(pixel.dfg.xxx, pixel.dfg.yyy, pixel.f0);
 
     vec3 reflected = mix(shading_reflected, shading_normal, pixel.roughness * pixel.roughness);
     float radianceLod = view.iblSpecularMaxLod * pixel.perceptualRoughness * (2.0 - pixel.perceptualRoughness);
