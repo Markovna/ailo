@@ -122,7 +122,10 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
     backend->bindPipeline(pipelineState);
 
     backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-    backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { renderData.bufferOffset });
+    backend->bindDescriptorSet(
+      m_objectDescriptorSet,
+      std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
+      { renderData.bufferOffset, renderData.bufferOffset });
 
     backend->bindIndexBuffer(renderData.indexBuffer);
     backend->bindVertexBuffer(renderData.vertexBuffer);
@@ -180,7 +183,10 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
       backend->bindPipeline(pipelineState);
 
       backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-      backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE), { renderData.bufferOffset });
+      backend->bindDescriptorSet(
+        m_objectDescriptorSet,
+        std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
+        { renderData.bufferOffset, renderData.bufferOffset });
 
       renderData.material->bindDescriptorSet(*backend);
 
@@ -218,7 +224,7 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
 
   if(!m_objectDescriptorSet) {
     m_objectDescriptorSet = backend.createDescriptorSet(m_objectDescriptorSetLayout);
-    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, 0, 0, sizeof(PerObjectUniforms));
+    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS), 0, sizeof(PerObjectUniforms));
   }
 
   m_renderData.clear();

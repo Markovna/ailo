@@ -30,10 +30,15 @@ struct LightUniform {
   float __padding1;
 };
 
-struct PerObjectUniforms {
+struct alignas(64) PerObjectUniforms {
   alignas(16) glm::mat4 model = glm::mat4(1);
   alignas(16) glm::mat4 modelInverse = glm::mat4(1);
   alignas(16) glm::mat4 modelInverseTranspose = glm::mat4(1);
+  uint32_t flags;
+};
+
+struct BoneUniform {
+  glm::mat4 transform;
 };
 
 struct Camera {
@@ -53,6 +58,11 @@ enum class PerViewDescriptorBindings {
   IBL_SPECULAR_MAP = 2,
   IBL_DFG_LUT = 3,
   SHADOW_MAP = 4
+};
+
+enum class PerObjectDescriptorBindings {
+  OBJECT_UNIFORMS = 0,
+  BONE_UNIFORMS = 1
 };
 
 class DescriptorSetLayoutBindings {
@@ -88,16 +98,21 @@ public:
     return bindings;
   }
 
-  static const std::vector<DescriptorSetLayoutBinding>& perObject() {
-    static std::vector<DescriptorSetLayoutBinding> bindings {
-        {
-          .binding = 0,
-          .descriptorType = vk::DescriptorType::eUniformBufferDynamic,
-          .stageFlags = vk::ShaderStageFlagBits::eVertex
-        }
-    };
-    return bindings;
-  }
+    static const std::vector<DescriptorSetLayoutBinding>& perObject() {
+        static std::vector<DescriptorSetLayoutBinding> bindings {
+            {
+              .binding = std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS),
+              .descriptorType = vk::DescriptorType::eUniformBufferDynamic,
+              .stageFlags = vk::ShaderStageFlagBits::eVertex
+            },
+            {
+              .binding = std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
+              .descriptorType = vk::DescriptorType::eUniformBufferDynamic,
+              .stageFlags = vk::ShaderStageFlagBits::eVertex
+            }
+        };
+        return bindings;
+    }
 };
 
 class Scene;

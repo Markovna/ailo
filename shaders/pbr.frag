@@ -183,6 +183,16 @@ float calculateShadow(vec3 worldPos) {
     return shadow;
 }
 
+vec3 shadingNormal() {
+#if defined(USE_NORMAL_MAP)
+    vec3 normal = texture(normalMap, fragUV).rgb;
+    normal = normal * 2.0 - 1.0;
+    return normalize(shading_tangentToWorld * normal);
+#else
+    return normalize(fragNormalWorld);
+#endif
+}
+
 void main() {
     vec3 n = fragNormalWorld;
     vec3 t = fragTangentWorld.xyz;
@@ -194,15 +204,7 @@ void main() {
             (view.viewInverse[3].xyz - fragPosWorld) : view.viewInverse[2].xyz;
 
     shading_view = normalize(sv);
-
-#if defined(USE_NORMAL_MAP)
-    vec3 normal = texture(normalMap, fragUV).rgb;
-    normal = normal * 2.0 - 1.0;
-    shading_normal = normalize(shading_tangentToWorld * normal);
-#else
-    shading_normal = normalize(fragNormalWorld);
-#endif
-
+    shading_normal = shadingNormal();
     shading_NoV = clampNoV(dot(shading_normal, shading_view));
     shading_reflected = reflect(-shading_view, shading_normal);
 

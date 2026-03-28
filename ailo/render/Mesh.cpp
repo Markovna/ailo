@@ -194,7 +194,8 @@ asset_ptr<Texture> load(Engine& engine, const aiScene* scene, const aiMaterial* 
     return loadTexture(engine, texturePath.C_Str(), modelDirectory, format);
 }
 
-std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const std::string& path, const glm::mat4& transform) {
+std::vector<Entity> MeshReader::instantiate(
+    Engine& engine, Scene& scene, const std::string& path, const glm::mat4& transform) {
     Assimp::Importer importer;
 
     const aiScene* aiscene = importer.ReadFile(path,
@@ -279,35 +280,35 @@ std::vector<Entity> MeshReader::instantiate(Engine& engine, Scene& scene, const 
 
     vk::VertexInputAttributeDescription posAttr{};
     posAttr.binding = 0;
-    posAttr.location = 0;
+    posAttr.location = std::to_underlying(VertexLocation::Position);
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = offsetof(Vertex, pos);
     vertexInput.attributes.push_back(posAttr);
 
     vk::VertexInputAttributeDescription colorAttr{};
     colorAttr.binding = 0;
-    colorAttr.location = 1;
+    colorAttr.location = std::to_underlying(VertexLocation::Color);
     colorAttr.format = vk::Format::eR32G32B32Sfloat;
     colorAttr.offset = offsetof(Vertex, color);
     vertexInput.attributes.push_back(colorAttr);
 
     vk::VertexInputAttributeDescription texCoordAttr{};
     texCoordAttr.binding = 0;
-    texCoordAttr.location = 2;
+    texCoordAttr.location = std::to_underlying(VertexLocation::TexCoord);
     texCoordAttr.format = vk::Format::eR32G32Sfloat;
     texCoordAttr.offset = offsetof(Vertex, texCoord);
     vertexInput.attributes.push_back(texCoordAttr);
 
     vk::VertexInputAttributeDescription normalAttr{};
     normalAttr.binding = 0;
-    normalAttr.location = 3;
+    normalAttr.location = std::to_underlying(VertexLocation::Normal);
     normalAttr.format = vk::Format::eR32G32B32Sfloat;
     normalAttr.offset = offsetof(Vertex, normal);
     vertexInput.attributes.push_back(normalAttr);
 
     vk::VertexInputAttributeDescription tangentAttr{};
     tangentAttr.binding = 0;
-    tangentAttr.location = 4;
+    tangentAttr.location = std::to_underlying(VertexLocation::Tangent);
     tangentAttr.format = vk::Format::eR32G32B32A32Sfloat;
     tangentAttr.offset = offsetof(Vertex, tangent);
     vertexInput.attributes.push_back(tangentAttr);
