@@ -21,6 +21,8 @@ class Shader : public enable_asset_ptr<Shader> {
     static ShaderDescription& getSkyboxShaderDescription();
     static ShaderDescription& getHdrShader();
     static ShaderDescription& getShadowShaderDescription();
+    static ShaderDescription& getSkinnedShaderDescription();
+    static ShaderDescription& getSkinnedShadowShaderDescription();
 
     static asset_ptr<Shader> load(Engine&, const ShaderDescription&);
 

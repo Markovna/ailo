@@ -7,9 +7,14 @@
 #include <stdexcept>
 #include <iostream>
 #include <vector>
+#include <unordered_set>
 #include <filesystem>
+#include <functional>
 
 #include "Renderable.h"
+#include "Skeleton.h"
+#include "Skin.h"
+#include "ecs/AnimatorComponent.h"
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
 #include "resources/ResourcePtr.h"
@@ -24,122 +29,78 @@ struct Vertex {
     glm::vec4 tangent;
 };
 
-// Helper function to convert aiMatrix4x4 to glm::mat4
-static glm::mat4 aiMatrixToGlm(const aiMatrix4x4& aiMat) {
+struct SkinnedVertex {
+    glm::vec3 pos;
+    glm::vec3 color;
+    glm::vec2 texCoord;
+    glm::vec3 normal;
+    glm::vec4 tangent;
+    glm::ivec4 boneIndices;  // location 5
+    glm::vec4  boneWeights;  // location 6
+};
+
+static glm::mat4 aiMatrixToGlm(const aiMatrix4x4& m) {
     return glm::mat4(
-        aiMat.a1, aiMat.b1, aiMat.c1, aiMat.d1,
-        aiMat.a2, aiMat.b2, aiMat.c2, aiMat.d2,
-        aiMat.a3, aiMat.b3, aiMat.c3, aiMat.d3,
-        aiMat.a4, aiMat.b4, aiMat.c4, aiMat.d4
+        m.a1, m.b1, m.c1, m.d1,
+        m.a2, m.b2, m.c2, m.d2,
+        m.a3, m.b3, m.c3, m.d3,
+        m.a4, m.b4, m.c4, m.d4
     );
 }
 
-// Structure to hold per-mesh data during processing
 struct MeshData {
-    std::vector<Vertex> vertices;
-    std::vector<uint16_t> indices;
     glm::mat4 transform;
     uint32_t meshIndex;
     uint32_t materialIndex;
 };
 
-// Helper function to load texture from file
 static asset_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
-    // Construct full texture path
     std::filesystem::path fullPath;
-
-    // Check if the texture path is absolute
     if (std::filesystem::path(texturePath).is_absolute()) {
         fullPath = texturePath;
     } else {
-        // Make it relative to the model directory
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
-
     return Texture::load(engine, fullPath.string(), format, true);
 }
 
-// Recursive function to traverse scene hierarchy and extract meshes with transforms
 static void processNode(
     const aiNode* node,
     const aiScene* aiscene,
     const glm::mat4& parentTransform,
     std::vector<MeshData>& meshDataList
 ) {
-    glm::mat4 nodeTransform = aiMatrixToGlm(node->mTransformation);
-    glm::mat4 worldTransform = parentTransform * nodeTransform;
-
-    // Process all meshes attached to this node
+    glm::mat4 worldTransform = parentTransform * aiMatrixToGlm(node->mTransformation);
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         auto meshIdx = node->mMeshes[i];
-
-        MeshData meshData;
-        meshData.transform = worldTransform;
-        meshData.meshIndex = meshIdx;
-        meshData.materialIndex = aiscene->mMeshes[meshIdx]->mMaterialIndex;
-
-        meshDataList.push_back(std::move(meshData));
+        meshDataList.push_back({ worldTransform, meshIdx, aiscene->mMeshes[meshIdx]->mMaterialIndex });
     }
-
-    // Recursively process all child nodes
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
         processNode(node->mChildren[i], aiscene, worldTransform, meshDataList);
     }
 }
 
 static constexpr glm::vec3 sCubeVertices[] = {
-    {-10.0f,  10.0f, -10.0f},
-    {-10.0f, -10.0f, -10.0f},
-    {10.0f, -10.0f, -10.0f},
-    {10.0f, -10.0f, -10.0f},
-    {10.0f,  10.0f, -10.0f},
-    {-10.0f,  10.0f, -10.0f},
-
-    {-10.0f, -10.0f,  10.0f},
-    {-10.0f, -10.0f, -10.0f},
-    {-10.0f,  10.0f, -10.0f},
-    {-10.0f,  10.0f, -10.0f},
-    {-10.0f,  10.0f,  10.0f},
-    {-10.0f, -10.0f,  10.0f},
-
-    {10.0f, -10.0f, -10.0f},
-    {10.0f, -10.0f,  10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {10.0f,  10.0f, -10.0f},
-    {10.0f, -10.0f, -10.0f},
-
-    {-10.0f, -10.0f,  10.0f},
-    {-10.0f,  10.0f,  10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {10.0f, -10.0f,  10.0f},
-    {-10.0f, -10.0f,  10.0f},
-
-    {-10.0f,  10.0f, -10.0f},
-    {10.0f,  10.0f, -10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {10.0f,  10.0f,  10.0f},
-    {-10.0f,  10.0f,  10.0f},
-    {-10.0f,  10.0f, -10.0f},
-
-    {-10.0f, -10.0f, -10.0f},
-    {-10.0f, -10.0f,  10.0f},
-    {10.0f, -10.0f, -10.0f},
-    {10.0f, -10.0f, -10.0f},
-    {-10.0f, -10.0f,  10.0f},
-    {10.0f, -10.0f,  10.0f},
+    {-10.0f,  10.0f, -10.0f}, {-10.0f, -10.0f, -10.0f}, { 10.0f, -10.0f, -10.0f},
+    { 10.0f, -10.0f, -10.0f}, { 10.0f,  10.0f, -10.0f}, {-10.0f,  10.0f, -10.0f},
+    {-10.0f, -10.0f,  10.0f}, {-10.0f, -10.0f, -10.0f}, {-10.0f,  10.0f, -10.0f},
+    {-10.0f,  10.0f, -10.0f}, {-10.0f,  10.0f,  10.0f}, {-10.0f, -10.0f,  10.0f},
+    { 10.0f, -10.0f, -10.0f}, { 10.0f, -10.0f,  10.0f}, { 10.0f,  10.0f,  10.0f},
+    { 10.0f,  10.0f,  10.0f}, { 10.0f,  10.0f, -10.0f}, { 10.0f, -10.0f, -10.0f},
+    {-10.0f, -10.0f,  10.0f}, {-10.0f,  10.0f,  10.0f}, { 10.0f,  10.0f,  10.0f},
+    { 10.0f,  10.0f,  10.0f}, { 10.0f, -10.0f,  10.0f}, {-10.0f, -10.0f,  10.0f},
+    {-10.0f,  10.0f, -10.0f}, { 10.0f,  10.0f, -10.0f}, { 10.0f,  10.0f,  10.0f},
+    { 10.0f,  10.0f,  10.0f}, {-10.0f,  10.0f,  10.0f}, {-10.0f,  10.0f, -10.0f},
+    {-10.0f, -10.0f, -10.0f}, {-10.0f, -10.0f,  10.0f}, { 10.0f, -10.0f, -10.0f},
+    { 10.0f, -10.0f, -10.0f}, {-10.0f, -10.0f,  10.0f}, { 10.0f, -10.0f,  10.0f},
 };
-
 static constexpr uint16_t sCubeIndices[] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35
+    0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35
 };
 
 asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     auto mesh = engine.getAssetManager()->get<Mesh>("builtin://meshes/cube");
-    if (mesh) {
-        return mesh;
-    }
+    if (mesh) return mesh;
 
     mesh = engine.getAssetManager()->emplace<Mesh>("builtin://meshes/cube");
 
@@ -154,15 +115,9 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = 0;
 
-    auto vb = std::make_shared<VertexBuffer>(
-        engine,
-        VertexInputDescription {
-            .bindings = { binding },
-            .attributes = { posAttr }
-        },
-        sizeof(sCubeVertices)
-    );
-
+    auto vb = std::make_shared<VertexBuffer>(engine,
+        VertexInputDescription{ .bindings = {binding}, .attributes = {posAttr} },
+        sizeof(sCubeVertices));
     vb->updateBuffer(engine, sCubeVertices, sizeof(sCubeVertices));
 
     auto ib = std::make_shared<BufferObject>(engine, BufferBinding::INDEX, sizeof(sCubeIndices));
@@ -176,21 +131,15 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
 
 asset_ptr<Texture> load(Engine& engine, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
     if (material->GetTextureCount(textureType) <= 0) return {};
-
     aiString texturePath;
-    if (material->GetTexture(textureType, 0, &texturePath) != AI_SUCCESS) {
-        return {};
-    }
+    if (material->GetTexture(textureType, 0, &texturePath) != AI_SUCCESS) return {};
 
     auto embedded = scene->GetEmbeddedTexture(texturePath.C_Str());
     if (embedded) {
-        if (embedded->mHeight > 0) {
+        if (embedded->mHeight > 0)
             return Texture::fromEmbedded(engine, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
-        }
-
-        return  Texture::fromEmbeddedCompressed(engine, embedded->pcData, embedded->mWidth, format);
+        return Texture::fromEmbeddedCompressed(engine, embedded->pcData, embedded->mWidth, format);
     }
-
     return loadTexture(engine, texturePath.C_Str(), modelDirectory, format);
 }
 
@@ -206,246 +155,355 @@ std::vector<Entity> MeshReader::instantiate(
         aiProcess_CalcTangentSpace |
         aiProcess_LimitBoneWeights);
 
-    if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode) {
+    if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
-    }
 
     auto assetManager = engine.getAssetManager();
-
-    // Get the directory of the model file for resolving texture paths
     std::filesystem::path modelPath(path);
     std::string modelDirectory = modelPath.parent_path().string();
 
-    // Create shader (shared by all meshes)
-    auto shader = Shader::load(engine, Shader::getDefaultShaderDescription());
+    // -------------------------------------------------------------------------
+    // Skinning: collect bone names and build skeleton
+    // -------------------------------------------------------------------------
 
-    std::vector<asset_ptr<Material>> materials;
-    materials.resize(aiscene->mNumMaterials);
+    // Step 1: collect all bone names
+    std::unordered_set<std::string> boneNameSet;
+    for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
+        aiMesh* m = aiscene->mMeshes[i];
+        for (unsigned int j = 0; j < m->mNumBones; j++)
+            boneNameSet.insert(m->mBones[j]->mName.C_Str());
+    }
 
-    // Process materials and load textures
+    const bool hasAnySkinning = !boneNameSet.empty();
 
-    for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
-        aiMaterial* material = aiscene->mMaterials[i];
-        asset_ptr<Texture> diffuse = {};
-        asset_ptr<Texture> normalMap = {};
-        asset_ptr<Texture> metallicRoughnessMap {};
+    // Step 2: mark nodes to include — bones AND their non-bone ancestors.
+    // We need ALL ancestors so that intermediate node transforms (e.g. "Armature")
+    // are accumulated into bone world transforms. Without this, inverseBindPose
+    // (which was computed from the full hierarchy) won't cancel correctly at bind pose.
+    std::unordered_set<std::string> includedNodeNames;
+    if (hasAnySkinning) {
+        std::function<bool(const aiNode*)> markAncestors = [&](const aiNode* node) -> bool {
+            bool anyChildIncluded = false;
+            for (unsigned int i = 0; i < node->mNumChildren; i++)
+                if (markAncestors(node->mChildren[i])) anyChildIncluded = true;
+            std::string name = node->mName.C_Str();
+            if (boneNameSet.count(name) || anyChildIncluded) {
+                includedNodeNames.insert(name);
+                return true;
+            }
+            return false;
+        };
+        markAncestors(aiscene->mRootNode);
+    }
 
-        // Try to get the diffuse texture
-        diffuse = load(engine, aiscene, material, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!diffuse) {
-            diffuse = load(engine, aiscene, material, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        }
+    // Step 3: build skeleton — all included nodes in parent-first DFS order.
+    //   globalBoneRegistry: bone name → boneOutputIndex (index in BonesUniform::bones[])
+    //   non-bone nodes get boneOutputIndex = -1 and don't write to BonesUniform.
+    auto skeleton = std::make_shared<Skeleton>();
+    std::unordered_map<std::string, uint32_t> globalBoneRegistry; // bone name → boneOutputIndex
 
-        if (!diffuse) {
-            diffuse = assetManager->get<Texture>("builtin://textures/white");
-        }
+    if (hasAnySkinning) {
+        uint32_t nextBoneOutputIndex = 0;
+        std::function<void(const aiNode*, int)> buildSkeleton = [&](const aiNode* node, int parentNodeIdx) {
+            std::string name = node->mName.C_Str();
+            if (!includedNodeNames.count(name)) return;
 
-        normalMap = load(engine, aiscene, material, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
-        if (!normalMap) {
-            normalMap = assetManager->get<Texture>("builtin://textures/normal");
-        }
+            uint32_t nodeIdx = static_cast<uint32_t>(skeleton->nodes.size());
+            skeleton->nodeNameToIndex[name] = nodeIdx;
 
-        metallicRoughnessMap = load(engine, aiscene, material, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!metallicRoughnessMap) {
-            metallicRoughnessMap = assetManager->get<Texture>("builtin://textures/default_metallic_roughness");
-        }
+            NodeInfo ni;
+            ni.name = name;
+            ni.parentIndex = parentNodeIdx;
+            ni.localTransform = aiMatrixToGlm(node->mTransformation);
+            ni.inverseBindPose = glm::mat4(1.0f);
+            if (boneNameSet.count(name)) {
+                ni.boneOutputIndex = static_cast<int>(nextBoneOutputIndex);
+                globalBoneRegistry[name] = nextBoneOutputIndex++;
+            } else {
+                ni.boneOutputIndex = -1;
+            }
+            skeleton->nodes.push_back(ni);
 
-        materials[i] = assetManager->emplace<Material>(assets::no_path{}, engine, shader);
-        if (diffuse) {
-            materials[i]->setTexture(0, diffuse);
-        }
-        if (normalMap) {
-            materials[i]->setTexture(1, normalMap);
-        }
-        if (metallicRoughnessMap) {
-            materials[i]->setTexture(2, metallicRoughnessMap);
+            for (unsigned int i = 0; i < node->mNumChildren; i++)
+                buildSkeleton(node->mChildren[i], static_cast<int>(nodeIdx));
+        };
+        buildSkeleton(aiscene->mRootNode, -1);
+
+        // Step 4: fill inverseBindPose from mesh bone data
+        for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
+            aiMesh* m = aiscene->mMeshes[i];
+            for (unsigned int j = 0; j < m->mNumBones; j++) {
+                aiBone* bone = m->mBones[j];
+                auto it = skeleton->nodeNameToIndex.find(bone->mName.C_Str());
+                if (it != skeleton->nodeNameToIndex.end())
+                    skeleton->nodes[it->second].inverseBindPose = aiMatrixToGlm(bone->mOffsetMatrix);
+            }
         }
     }
 
-    // for (unsigned int i = 0; i < aiscene->mNumAnimations; i++) {
-    //     auto animation = aiscene->mAnimations[i];
-    //     for (unsigned int j = 0; j < animation->mNumChannels; j++) {
-    //         auto channel = animation->mChannels[j];
-    //         std::cout << "Animation channel: " << channel->mNodeName.C_Str() << std::endl;
-    //     }
-    // }
+    // Which material indices are used by skinned meshes?
+    std::unordered_set<uint32_t> skinnedMaterialIndices;
+    for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
+        if (aiscene->mMeshes[i]->mNumBones > 0)
+            skinnedMaterialIndices.insert(aiscene->mMeshes[i]->mMaterialIndex);
+    }
 
-    // Create vertex input description (shared by all meshes)
+    // -------------------------------------------------------------------------
+    // Shaders
+    // -------------------------------------------------------------------------
+    auto shader = Shader::load(engine, Shader::getDefaultShaderDescription());
+    asset_ptr<Shader> skinnedShader;
+    if (hasAnySkinning)
+        skinnedShader = Shader::load(engine, Shader::getSkinnedShaderDescription());
+
+    // -------------------------------------------------------------------------
+    // Materials
+    // -------------------------------------------------------------------------
+    std::vector<asset_ptr<Material>> materials(aiscene->mNumMaterials);
+    std::vector<asset_ptr<Material>> skinnedMaterials(aiscene->mNumMaterials);
+
+    for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
+        aiMaterial* mat = aiscene->mMaterials[i];
+
+        auto diffuse = load(engine, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) diffuse = load(engine, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) diffuse = assetManager->get<Texture>("builtin://textures/white");
+
+        auto normalMap = load(engine, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
+        if (!normalMap) normalMap = assetManager->get<Texture>("builtin://textures/normal");
+
+        auto metallicRoughness = load(engine, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!metallicRoughness) metallicRoughness = assetManager->get<Texture>("builtin://textures/default_metallic_roughness");
+
+        auto createMat = [&](asset_ptr<Shader> sh) {
+            auto m2 = assetManager->emplace<Material>(assets::no_path{}, engine, sh);
+            if (diffuse) m2->setTexture(0, diffuse);
+            if (normalMap) m2->setTexture(1, normalMap);
+            if (metallicRoughness) m2->setTexture(2, metallicRoughness);
+            return m2;
+        };
+
+        materials[i] = createMat(shader);
+        if (hasAnySkinning && skinnedMaterialIndices.count(i))
+            skinnedMaterials[i] = createMat(skinnedShader);
+    }
+
+    // -------------------------------------------------------------------------
+    // Vertex input descriptions
+    // -------------------------------------------------------------------------
     VertexInputDescription vertexInput;
-    vk::VertexInputBindingDescription bindingDescription{};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = vk::VertexInputRate::eVertex;
-    vertexInput.bindings.push_back(bindingDescription);
+    {
+        vk::VertexInputBindingDescription bd{};
+        bd.binding = 0; bd.stride = sizeof(Vertex); bd.inputRate = vk::VertexInputRate::eVertex;
+        vertexInput.bindings.push_back(bd);
+        auto addAttr = [&](uint32_t loc, vk::Format fmt, uint32_t off) {
+            vk::VertexInputAttributeDescription a{}; a.binding=0; a.location=loc; a.format=fmt; a.offset=off;
+            vertexInput.attributes.push_back(a);
+        };
+        addAttr(std::to_underlying(VertexLocation::Position),  vk::Format::eR32G32B32Sfloat,    offsetof(Vertex, pos));
+        addAttr(std::to_underlying(VertexLocation::Color),     vk::Format::eR32G32B32Sfloat,    offsetof(Vertex, color));
+        addAttr(std::to_underlying(VertexLocation::TexCoord),  vk::Format::eR32G32Sfloat,       offsetof(Vertex, texCoord));
+        addAttr(std::to_underlying(VertexLocation::Normal),    vk::Format::eR32G32B32Sfloat,    offsetof(Vertex, normal));
+        addAttr(std::to_underlying(VertexLocation::Tangent),   vk::Format::eR32G32B32A32Sfloat, offsetof(Vertex, tangent));
+    }
 
-    vk::VertexInputAttributeDescription posAttr{};
-    posAttr.binding = 0;
-    posAttr.location = std::to_underlying(VertexLocation::Position);
-    posAttr.format = vk::Format::eR32G32B32Sfloat;
-    posAttr.offset = offsetof(Vertex, pos);
-    vertexInput.attributes.push_back(posAttr);
+    VertexInputDescription skinnedVertexInput;
+    if (hasAnySkinning) {
+        vk::VertexInputBindingDescription bd{};
+        bd.binding = 0; bd.stride = sizeof(SkinnedVertex); bd.inputRate = vk::VertexInputRate::eVertex;
+        skinnedVertexInput.bindings.push_back(bd);
+        auto addAttr = [&](uint32_t loc, vk::Format fmt, uint32_t off) {
+            vk::VertexInputAttributeDescription a{}; a.binding=0; a.location=loc; a.format=fmt; a.offset=off;
+            skinnedVertexInput.attributes.push_back(a);
+        };
+        addAttr(std::to_underlying(VertexLocation::Position),    vk::Format::eR32G32B32Sfloat,    offsetof(SkinnedVertex, pos));
+        addAttr(std::to_underlying(VertexLocation::Color),       vk::Format::eR32G32B32Sfloat,    offsetof(SkinnedVertex, color));
+        addAttr(std::to_underlying(VertexLocation::TexCoord),    vk::Format::eR32G32Sfloat,       offsetof(SkinnedVertex, texCoord));
+        addAttr(std::to_underlying(VertexLocation::Normal),      vk::Format::eR32G32B32Sfloat,    offsetof(SkinnedVertex, normal));
+        addAttr(std::to_underlying(VertexLocation::Tangent),     vk::Format::eR32G32B32A32Sfloat, offsetof(SkinnedVertex, tangent));
+        addAttr(std::to_underlying(VertexLocation::BoneIndices), vk::Format::eR32G32B32A32Sint,   offsetof(SkinnedVertex, boneIndices));
+        addAttr(std::to_underlying(VertexLocation::BoneWeights), vk::Format::eR32G32B32A32Sfloat, offsetof(SkinnedVertex, boneWeights));
+    }
 
-    vk::VertexInputAttributeDescription colorAttr{};
-    colorAttr.binding = 0;
-    colorAttr.location = std::to_underlying(VertexLocation::Color);
-    colorAttr.format = vk::Format::eR32G32B32Sfloat;
-    colorAttr.offset = offsetof(Vertex, color);
-    vertexInput.attributes.push_back(colorAttr);
-
-    vk::VertexInputAttributeDescription texCoordAttr{};
-    texCoordAttr.binding = 0;
-    texCoordAttr.location = std::to_underlying(VertexLocation::TexCoord);
-    texCoordAttr.format = vk::Format::eR32G32Sfloat;
-    texCoordAttr.offset = offsetof(Vertex, texCoord);
-    vertexInput.attributes.push_back(texCoordAttr);
-
-    vk::VertexInputAttributeDescription normalAttr{};
-    normalAttr.binding = 0;
-    normalAttr.location = std::to_underlying(VertexLocation::Normal);
-    normalAttr.format = vk::Format::eR32G32B32Sfloat;
-    normalAttr.offset = offsetof(Vertex, normal);
-    vertexInput.attributes.push_back(normalAttr);
-
-    vk::VertexInputAttributeDescription tangentAttr{};
-    tangentAttr.binding = 0;
-    tangentAttr.location = std::to_underlying(VertexLocation::Tangent);
-    tangentAttr.format = vk::Format::eR32G32B32A32Sfloat;
-    tangentAttr.offset = offsetof(Vertex, tangent);
-    vertexInput.attributes.push_back(tangentAttr);
+    // -------------------------------------------------------------------------
+    // Build per-aiMesh vertex/index buffers
+    // -------------------------------------------------------------------------
+    std::vector<bool> meshHasBones(aiscene->mNumMeshes, false);
+    for (unsigned int i = 0; i < aiscene->mNumMeshes; i++)
+        meshHasBones[i] = aiscene->mMeshes[i]->mNumBones > 0;
 
     std::vector<asset_ptr<Mesh>> meshes;
     meshes.reserve(aiscene->mNumMeshes);
 
     for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
         aiMesh* aiMesh = aiscene->mMeshes[i];
-
         meshes.push_back(assetManager->emplace<Mesh>(assets::no_path{}));
         auto mesh = meshes.back();
 
-        std::vector<Vertex> vertices;
         std::vector<uint16_t> indices;
-
-        // for (unsigned int j = 0; j < aiMesh->mNumBones; j++) {
-        //     aiBone* bone = aiMesh->mBones[j];
-        //     if (bone->mNumWeights > 0) {
-        //         std::cout << "Bone: " << bone->mName.C_Str() << " influences " << bone->mNumWeights << " vertices" << std::endl;
-        //     }
-        // }
-
-        // Extract vertices
-        for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
-            Vertex vertex{};
-
-            // Position
-            vertex.pos = glm::vec3(
-                aiMesh->mVertices[v].x,
-                aiMesh->mVertices[v].y,
-                aiMesh->mVertices[v].z
-            );
-
-            // Texture coordinates (if available)
-            if (aiMesh->mTextureCoords[0]) {
-                vertex.texCoord = glm::vec2(
-                    aiMesh->mTextureCoords[0][v].x,
-                    aiMesh->mTextureCoords[0][v].y
-                );
-            } else {
-                vertex.texCoord = glm::vec2(0.0f, 0.0f);
-            }
-
-            if (aiMesh->mColors[0]) {
-                vertex.color = glm::vec3(
-                    aiMesh->mColors[v]->r,
-                    aiMesh->mColors[v]->r,
-                    aiMesh->mColors[v]->b
-                );
-            } else {
-                vertex.color = glm::vec3(1.0f, 1.0f, 1.0f);
-            }
-
-            if (aiMesh->mNormals) {
-                vertex.normal = glm::vec3(
-                    (aiMesh->mNormals[v].x),
-                    (aiMesh->mNormals[v].y),
-                    (aiMesh->mNormals[v].z)
-                );
-            }
-
-            if (aiMesh->mTangents) {
-                glm::vec3 tangent = glm::vec3(
-                    (aiMesh->mTangents[v].x),
-                    (aiMesh->mTangents[v].y),
-                    (aiMesh->mTangents[v].z)
-                );
-                glm::vec3 biTangent = glm::vec3(
-                    aiMesh->mBitangents[v].x,
-                    aiMesh->mBitangents[v].y,
-                    aiMesh->mBitangents[v].z
-                );
-
-                float dot = glm::dot(glm::cross(vertex.normal, tangent), biTangent);
-
-                vertex.tangent = glm::vec4(tangent, dot);
-
-            } else {
-                vertex.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-            }
-
-            vertices.push_back(vertex);
-        }
-
-        // Extract indices
+        indices.reserve(aiMesh->mNumFaces * 3);
         for (unsigned int f = 0; f < aiMesh->mNumFaces; f++) {
-            aiFace face = aiMesh->mFaces[f];
-            for (unsigned int j = 0; j < face.mNumIndices; j++) {
-                indices.push_back(static_cast<uint16_t>(face.mIndices[j]));
-            }
+            for (unsigned int j = 0; j < aiMesh->mFaces[f].mNumIndices; j++)
+                indices.push_back(static_cast<uint16_t>(aiMesh->mFaces[f].mIndices[j]));
         }
 
-        // Create vertex buffer
-        mesh->vertexBuffer = std::make_shared<VertexBuffer>(
-            engine,
-            vertexInput,
-            sizeof(Vertex) * vertices.size()
-        );
-        mesh->vertexBuffer->updateBuffer(engine, vertices.data(), sizeof(Vertex) * vertices.size());
+        if (meshHasBones[i]) {
+            // Accumulate per-vertex bone weights
+            struct VBW { std::vector<std::pair<uint32_t, float>> weights; };
+            std::vector<VBW> vbw(aiMesh->mNumVertices);
+            for (unsigned int j = 0; j < aiMesh->mNumBones; j++) {
+                aiBone* bone = aiMesh->mBones[j];
+                auto it = globalBoneRegistry.find(bone->mName.C_Str());
+                if (it == globalBoneRegistry.end()) continue;
+                uint32_t boneOutputIdx = it->second;
+                for (unsigned int k = 0; k < bone->mNumWeights; k++)
+                    vbw[bone->mWeights[k].mVertexId].weights.push_back({boneOutputIdx, bone->mWeights[k].mWeight});
+            }
 
-        // Create index buffer
-        mesh->indexBuffer = std::make_shared<BufferObject>(
-            engine,
-            BufferBinding::INDEX,
-            sizeof(uint16_t) * indices.size()
-        );
+            std::vector<SkinnedVertex> verts;
+            verts.reserve(aiMesh->mNumVertices);
+            for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
+                SkinnedVertex sv{};
+                sv.pos = {aiMesh->mVertices[v].x, aiMesh->mVertices[v].y, aiMesh->mVertices[v].z};
+                sv.texCoord = aiMesh->mTextureCoords[0]
+                    ? glm::vec2(aiMesh->mTextureCoords[0][v].x, aiMesh->mTextureCoords[0][v].y)
+                    : glm::vec2(0.0f);
+                sv.color = aiMesh->mColors[0]
+                    ? glm::vec3(aiMesh->mColors[0][v].r, aiMesh->mColors[0][v].g, aiMesh->mColors[0][v].b)
+                    : glm::vec3(1.0f);
+                if (aiMesh->mNormals)
+                    sv.normal = {aiMesh->mNormals[v].x, aiMesh->mNormals[v].y, aiMesh->mNormals[v].z};
+                if (aiMesh->mTangents) {
+                    glm::vec3 t(aiMesh->mTangents[v].x, aiMesh->mTangents[v].y, aiMesh->mTangents[v].z);
+                    glm::vec3 b(aiMesh->mBitangents[v].x, aiMesh->mBitangents[v].y, aiMesh->mBitangents[v].z);
+                    sv.tangent = glm::vec4(t, glm::dot(glm::cross(sv.normal, t), b));
+                } else {
+                    sv.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                }
+                sv.boneIndices = glm::ivec4(0);
+                sv.boneWeights = glm::vec4(0.0f);
+                const auto& bws = vbw[v].weights;
+                for (int k = 0; k < std::min(4, static_cast<int>(bws.size())); k++) {
+                    sv.boneIndices[k] = static_cast<int>(bws[k].first);
+                    sv.boneWeights[k] = bws[k].second;
+                }
+                verts.push_back(sv);
+            }
+            mesh->vertexBuffer = std::make_shared<VertexBuffer>(engine, skinnedVertexInput, sizeof(SkinnedVertex) * verts.size());
+            mesh->vertexBuffer->updateBuffer(engine, verts.data(), sizeof(SkinnedVertex) * verts.size());
+        } else {
+            std::vector<Vertex> verts;
+            verts.reserve(aiMesh->mNumVertices);
+            for (unsigned int v = 0; v < aiMesh->mNumVertices; v++) {
+                Vertex vx{};
+                vx.pos = {aiMesh->mVertices[v].x, aiMesh->mVertices[v].y, aiMesh->mVertices[v].z};
+                vx.texCoord = aiMesh->mTextureCoords[0]
+                    ? glm::vec2(aiMesh->mTextureCoords[0][v].x, aiMesh->mTextureCoords[0][v].y)
+                    : glm::vec2(0.0f);
+                if (aiMesh->mColors[0]) {
+                    vx.color = {aiMesh->mColors[v]->r, aiMesh->mColors[v]->r, aiMesh->mColors[v]->b};
+                } else {
+                    vx.color = glm::vec3(1.0f);
+                }
+                if (aiMesh->mNormals)
+                    vx.normal = {aiMesh->mNormals[v].x, aiMesh->mNormals[v].y, aiMesh->mNormals[v].z};
+                if (aiMesh->mTangents) {
+                    glm::vec3 t(aiMesh->mTangents[v].x, aiMesh->mTangents[v].y, aiMesh->mTangents[v].z);
+                    glm::vec3 b(aiMesh->mBitangents[v].x, aiMesh->mBitangents[v].y, aiMesh->mBitangents[v].z);
+                    vx.tangent = glm::vec4(t, glm::dot(glm::cross(vx.normal, t), b));
+                } else {
+                    vx.tangent = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
+                }
+                verts.push_back(vx);
+            }
+            mesh->vertexBuffer = std::make_shared<VertexBuffer>(engine, vertexInput, sizeof(Vertex) * verts.size());
+            mesh->vertexBuffer->updateBuffer(engine, verts.data(), sizeof(Vertex) * verts.size());
+        }
+
+        mesh->indexBuffer = std::make_shared<BufferObject>(engine, BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
         mesh->indexBuffer->updateBuffer(engine, indices.data(), sizeof(uint16_t) * indices.size());
-
         mesh->faces.push_back({0, static_cast<uint32_t>(indices.size())});
     }
 
-    // Traverse the scene hierarchy and collect mesh data with transforms
+    // -------------------------------------------------------------------------
+    // Parse animation clips
+    // -------------------------------------------------------------------------
+    std::vector<AnimationClip> animationClips;
+    if (hasAnySkinning) {
+        animationClips.reserve(aiscene->mNumAnimations);
+        for (unsigned int i = 0; i < aiscene->mNumAnimations; i++) {
+            aiAnimation* aiAnim = aiscene->mAnimations[i];
+            AnimationClip clip;
+            clip.name = aiAnim->mName.C_Str();
+            clip.ticksPerSecond = aiAnim->mTicksPerSecond > 0.0 ? static_cast<float>(aiAnim->mTicksPerSecond) : 25.0f;
+            clip.duration = static_cast<float>(aiAnim->mDuration) / clip.ticksPerSecond;
+
+            for (unsigned int j = 0; j < aiAnim->mNumChannels; j++) {
+                aiNodeAnim* ch = aiAnim->mChannels[j];
+                BoneChannel bc;
+                bc.boneName = ch->mNodeName.C_Str();
+                for (unsigned int k = 0; k < ch->mNumPositionKeys; k++)
+                    bc.positionKeys.push_back({ static_cast<float>(ch->mPositionKeys[k].mTime) / clip.ticksPerSecond,
+                        {ch->mPositionKeys[k].mValue.x, ch->mPositionKeys[k].mValue.y, ch->mPositionKeys[k].mValue.z} });
+                for (unsigned int k = 0; k < ch->mNumRotationKeys; k++)
+                    bc.rotationKeys.push_back({ static_cast<float>(ch->mRotationKeys[k].mTime) / clip.ticksPerSecond,
+                        glm::quat(ch->mRotationKeys[k].mValue.w, ch->mRotationKeys[k].mValue.x,
+                                  ch->mRotationKeys[k].mValue.y, ch->mRotationKeys[k].mValue.z) });
+                for (unsigned int k = 0; k < ch->mNumScalingKeys; k++)
+                    bc.scaleKeys.push_back({ static_cast<float>(ch->mScalingKeys[k].mTime) / clip.ticksPerSecond,
+                        {ch->mScalingKeys[k].mValue.x, ch->mScalingKeys[k].mValue.y, ch->mScalingKeys[k].mValue.z} });
+                clip.channels.push_back(std::move(bc));
+            }
+            animationClips.push_back(std::move(clip));
+        }
+    }
+
+    std::shared_ptr<BufferObject> sharedBoneBuffer;
+    if (hasAnySkinning)
+        sharedBoneBuffer = std::make_shared<BufferObject>(engine, BufferBinding::UNIFORM, sizeof(BonesUniform));
+
+    // -------------------------------------------------------------------------
+    // Create entities from scene hierarchy
+    // -------------------------------------------------------------------------
     std::vector<MeshData> meshDataList;
     processNode(aiscene->mRootNode, aiscene, transform, meshDataList);
 
     std::vector<Entity> entities;
+    entities.reserve(meshDataList.size() + (hasAnySkinning ? 1 : 0));
 
     uint32_t renderableCount = 0;
-    // Create an entity for each mesh with its correct transform
-    for (const auto& meshData : meshDataList) {
+    for (const auto& md : meshDataList) {
         auto entity = scene.addEntity();
         entities.push_back(entity);
 
-        // Add Renderable component
         Renderable& renderable = scene.addComponent<Renderable>(entity);
-        renderable.mesh = meshes[meshData.meshIndex];
-        renderable.materials.push_back(materials[meshData.materialIndex]);
+        renderable.mesh = meshes[md.meshIndex];
 
-        // Add Transform component with the correct world transform
-        Transform& transform = scene.addComponent<Transform>(entity);
-        transform.transform = meshData.transform;
+        bool isSkinned = meshHasBones[md.meshIndex];
+        if (isSkinned && skinnedMaterials[md.materialIndex])
+            renderable.materials.push_back(skinnedMaterials[md.materialIndex]);
+        else
+            renderable.materials.push_back(materials[md.materialIndex]);
+
+        Transform& tr = scene.addComponent<Transform>(entity);
+        tr.transform = md.transform;
+
+        if (isSkinned)
+            scene.addComponent<Skin>(entity, sharedBoneBuffer);
+
         renderableCount++;
     }
 
-    std::cout << "Loaded " << renderableCount << " renderables" << std::endl;
+    if (hasAnySkinning && !animationClips.empty()) {
+        auto skelEntity = scene.addEntity();
+        auto& animator = scene.addComponent<AnimatorComponent>(skelEntity);
+        animator.skeleton = skeleton;
+        animator.clips = std::move(animationClips);
+        animator.boneBuffer = sharedBoneBuffer;
+        entities.push_back(skelEntity);
+    }
 
+    std::cout << "Loaded " << renderableCount << " renderables" << std::endl;
     return entities;
 }
 

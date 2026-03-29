@@ -23,6 +23,7 @@
 #include "OS.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
+#include "ecs/AnimatorComponent.h"
 #include "render/Mesh.h"
 #include "render/Renderable.h"
 #include "resources/ResourcePtr.h"
@@ -267,6 +268,19 @@ void Application::drawFrame() {
   ImGui::End();
 
   ImGui::Render();
+
+  // Advance and apply skeletal animations
+  for (auto [entity, animator] : m_scene->view<ailo::AnimatorComponent>().each()) {
+    if (animator.playing && !animator.clips.empty()) {
+      auto& clip = animator.clips[animator.currentClip];
+      animator.currentTime += m_deltaTime;
+      if (animator.looping)
+        animator.currentTime = std::fmod(animator.currentTime, clip.duration);
+      ailo::BonesUniform bonesData{};
+      animator.skeleton->computeBoneTransforms(animator.currentTime, clip, bonesData);
+      animator.boneBuffer->updateBuffer(*m_engine, &bonesData, sizeof(bonesData));
+    }
+  }
 
   if (!renderer->beginFrame(*m_engine)) {
     return;

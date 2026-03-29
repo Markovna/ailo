@@ -29,7 +29,7 @@ class Engine {
   InputSystem* getInputSystem();
   AssetManager* getAssetManager();
 
-  [[nodiscard]] std::unique_ptr<Scene> createScene() const;
+  [[nodiscard]] std::unique_ptr<Scene> createScene();
 
  private:
   std::unique_ptr<RenderAPI> m_renderAPI;

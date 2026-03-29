@@ -126,6 +126,59 @@ ShaderDescription& Shader::getShadowShaderDescription() {
     return description;
 }
 
+ShaderDescription& Shader::getSkinnedShaderDescription() {
+    static ShaderDescription shaderDescription {
+        .vertexShader = os::readFile("shaders/pbr_skinned.vert.spv"),
+        .fragmentShader = os::readFile("shaders/pbr.frag.spv"),
+        .raster = RasterDescription {
+            .cullingMode = CullingMode::FRONT,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = CompareOp::LESS,
+        },
+        .layout = {
+            DescriptorSetLayoutBindings::perView(),
+            DescriptorSetLayoutBindings::perObject(),
+            {
+                {
+                    .binding = 0,
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                },
+                {
+                    .binding = 1,
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                },
+                {
+                    .binding = 2,
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .stageFlags = vk::ShaderStageFlagBits::eFragment,
+                }
+            },
+        }
+    };
+    return shaderDescription;
+}
+
+ShaderDescription& Shader::getSkinnedShadowShaderDescription() {
+    static ShaderDescription description {
+        .vertexShader = os::readFile("shaders/shadow_skinned.vert.spv"),
+        .fragmentShader = os::readFile("shaders/shadow.frag.spv"),
+        .raster = RasterDescription {
+            .cullingMode = CullingMode::FRONT,
+            .inverseFrontFace = true,
+            .depthWriteEnable = true,
+            .depthCompareOp = CompareOp::LESS,
+        },
+        .layout = {
+            DescriptorSetLayoutBindings::perView(),
+            DescriptorSetLayoutBindings::perObject(),
+        }
+    };
+    return description;
+}
+
 asset_ptr<Shader> Shader::load(Engine& engine, const ShaderDescription& description) {
     return engine.getAssetManager()->emplace<Shader>(assets::no_path{}, engine, description);
 }

@@ -28,7 +28,7 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
-Renderer::Renderer(Engine& engine) {
+Renderer::Renderer(Engine& engine) : m_renderAPI(engine.getRenderAPI()) {
   m_persistentTextures.push_back(createWhiteTexture(engine));
   m_persistentTextures.push_back(createBlackTexture(engine));
   m_persistentTextures.push_back(createDefaultMetallicRoughnessTexture(engine));
@@ -42,6 +42,7 @@ Renderer::Renderer(Engine& engine) {
   m_viewDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
   m_objectDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
   m_viewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
+  m_objectDescriptorSet = backend->createDescriptorSet(m_objectDescriptorSetLayout);
 
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
@@ -49,6 +50,14 @@ Renderer::Renderer(Engine& engine) {
   backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
 
   m_shadowShader = Shader::load(engine, Shader::getShadowShaderDescription());
+  m_skinnedShadowShader = Shader::load(engine, Shader::getSkinnedShadowShaderDescription());
+
+  // Provide a valid (all-identity) bone buffer for non-skinned entities so
+  // the descriptor set binding is always satisfied.
+  m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
+  backend->updateDescriptorSetBuffer(m_objectDescriptorSet, m_dummyBonesBuffer,
+      std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
+      0, sizeof(BonesUniform));
 }
 
 Renderer::~Renderer() = default;
@@ -110,7 +119,6 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
   backend->beginRenderPass(m_shadowMapRenderTarget, shadowPassDesc);
 
   PipelineState pipelineState {};
-  pipelineState.program = m_shadowShader->program();
 
   for(const RenderData& renderData : m_renderData) {
     // Skip entities without Transform (e.g. skybox) — they shouldn't cast shadows
@@ -118,14 +126,17 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
       continue;
     }
 
+    pipelineState.program = renderData.isSkinned
+        ? m_skinnedShadowShader->program()
+        : m_shadowShader->program();
     pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
     backend->bindPipeline(pipelineState);
 
     backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
     backend->bindDescriptorSet(
-      m_objectDescriptorSet,
+      renderData.objectDescriptorSet,
       std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
-      { renderData.bufferOffset, renderData.bufferOffset });
+      { renderData.objectBufferOffset, 0 });
 
     backend->bindIndexBuffer(renderData.indexBuffer);
     backend->bindVertexBuffer(renderData.vertexBuffer);
@@ -152,7 +163,7 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   float radius = 3.0f;
   auto& light0 = m_lightUniformsBufferData[0];
   light0.type = 0; // 0 - point, 1 - spot
-  light0.lightPositionFalloff = glm::vec4(1.0, 1.5, 0.5f, 1.0f / (radius * radius));
+  light0.lightPositionFalloff = glm::vec4(3.0, 1.5, 0.5f, 1.0f / (radius * radius));
   light0.lightColorIntensity = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
 
   auto& light1 = m_lightUniformsBufferData[1];
@@ -184,9 +195,9 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
 
       backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
       backend->bindDescriptorSet(
-        m_objectDescriptorSet,
+        renderData.objectDescriptorSet,
         std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
-        { renderData.bufferOffset, renderData.bufferOffset });
+        { renderData.objectBufferOffset, 0 });
 
       renderData.material->bindDescriptorSet(*backend);
 
@@ -201,6 +212,10 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
 void Renderer::endFrame(Engine& engine) {
   RenderAPI* backend = engine.getRenderAPI();
   backend->endFrame();
+}
+
+void Renderer::onSceneCreated(Engine& engine, Scene& scene) {
+  scene.onDestroy<Renderable>().connect<&Renderer::onDestroyRenderable>(*this);
 }
 
 void Renderer::prepare(Engine& engine, Scene& scene) {
@@ -218,12 +233,6 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
     }
     m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
-    backend.destroyDescriptorSet(m_objectDescriptorSet);
-    m_objectDescriptorSet = { };
-  }
-
-  if(!m_objectDescriptorSet) {
-    m_objectDescriptorSet = backend.createDescriptorSet(m_objectDescriptorSetLayout);
     backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS), 0, sizeof(PerObjectUniforms));
   }
 
@@ -233,30 +242,55 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
   uint32_t index = 0;
   for(const auto& [entity, renderable] : renderableView.each()) {
     const auto tr = scene.tryGet<Transform>(entity);
+    auto skin = scene.tryGet<Skin>(entity);
 
     auto& uniformBufferData = m_perObjectUniformBufferData[index];
     uniformBufferData.model = tr ? tr->transform : glm::mat4(1.0f);
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
+    uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
 
-    for(size_t i = 0; i < renderable.mesh->faces.size(); i++) {
-      auto& face = renderable.mesh->faces[i];
+    auto mesh = renderable.mesh;
+    for(size_t i = 0; i < mesh->faces.size(); i++) {
+      auto& [indexOffset, indexCount] = mesh->faces[i];
       auto& material = renderable.materials[i];
       material->updateTextures(backend);
       material->updateBuffers(backend);
 
-      m_renderData.push_back({});
+      auto& entry = m_renderData.emplace_back();
 
-      auto& entry = m_renderData.back();
+      if (skin) {
+        auto& objectDescriptor = renderable.descriptorSet;
+        if (!objectDescriptor) {
+          objectDescriptor = backend.createDescriptorSet(m_objectDescriptorSetLayout);
+
+          backend.updateDescriptorSetBuffer(
+          objectDescriptor, m_objectsUniformBufferHandle,
+          std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS),
+          0, sizeof(PerObjectUniforms));
+
+          backend.updateDescriptorSetBuffer(
+            objectDescriptor, skin->getBuffer().getHandle(),
+            std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
+            0, sizeof(BonesUniform));
+        }
+
+        entry.objectDescriptorSet = objectDescriptor;
+      }
+      else {
+        entry.objectDescriptorSet = m_objectDescriptorSet;
+      }
+
+      entry.objectBufferOffset = index * sizeof(PerObjectUniforms);
       entry.program = material->getShader()->program();
-      entry.vertexBufferLayout = renderable.mesh->vertexBuffer->getLayout();
-      entry.bufferOffset = index * sizeof(PerObjectUniforms);
+      entry.vertexBufferLayout = mesh->vertexBuffer->getLayout();
       entry.material = material.get();
-      entry.indexBuffer = renderable.mesh->indexBuffer->getHandle();
-      entry.vertexBuffer = renderable.mesh->vertexBuffer->getBuffer();
-      entry.indexCount = face.indexCount;
-      entry.indexOffset = face.indexOffset;
+      entry.indexBuffer = mesh->indexBuffer->getHandle();
+      entry.vertexBuffer = mesh->vertexBuffer->getBuffer();
+      entry.indexCount = indexCount;
+      entry.indexOffset = indexOffset;
       entry.hasTransform = tr != nullptr;
+      entry.isSkinned = (skin != nullptr);
 
       index++;
     }
@@ -272,6 +306,13 @@ void Renderer::prepare(Engine& engine, Scene& scene) {
     m_iblSpecularMap = iblTexHandle;
     backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
   }
+}
+
+void Renderer::onDestroyRenderable(entt::registry& registry, entt::entity entity) {
+    Renderable& renderable = registry.get<Renderable>(entity);
+    if (renderable.descriptorSet) {
+        m_renderAPI->destroyDescriptorSet(renderable.descriptorSet);
+    }
 }
 
 asset_ptr<Texture> Renderer::createWhiteTexture(Engine& engine) {
@@ -322,6 +363,7 @@ void Renderer::terminate(Engine& engine) {
 
   backend.destroyTexture(m_shadowMapTexture);
   backend.destroyRenderTarget(m_shadowMapRenderTarget);
+  backend.destroyBuffer(m_dummyBonesBuffer);
 }
 
 }

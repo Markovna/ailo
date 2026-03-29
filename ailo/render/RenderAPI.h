@@ -59,14 +59,14 @@ public:
 
     // Descriptor set management
     DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
-    void destroyDescriptorSetLayout(DescriptorSetLayoutHandle& dslh);
+    void destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& dslh);
     DescriptorSetHandle createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void destroyDescriptorSet(const DescriptorSetHandle& handle);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
 
     RenderTargetHandle createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
-    void destroyRenderTarget(RenderTargetHandle&);
+    void destroyRenderTarget(const RenderTargetHandle&);
 
     // Program management
 

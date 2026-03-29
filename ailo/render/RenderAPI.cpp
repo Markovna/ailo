@@ -372,7 +372,7 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
     return handle;
 }
 
-void RenderAPI::destroyDescriptorSetLayout(DescriptorSetLayoutHandle& handle) {
+void RenderAPI::destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
   auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
@@ -514,7 +514,7 @@ RenderTargetHandle RenderAPI::createRenderTarget(const PerColorAttachment<Textur
     return renderTarget.getHandle();
 }
 
-void RenderAPI::destroyRenderTarget(RenderTargetHandle& handle) {
+void RenderAPI::destroyRenderTarget(const RenderTargetHandle& handle) {
     auto rt = m_renderTargets.get(handle);
     rt.release();
 }

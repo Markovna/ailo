@@ -2,11 +2,14 @@
 
 #include <entt/entt.hpp>
 
+#include "Engine.h"
+
 namespace ailo {
 
 using Entity = entt::entity;
 
 class Texture;
+class Scene;
 
 class Scene {
  public:
@@ -22,6 +25,16 @@ class Scene {
   decltype(auto) addComponent(entt::entity entity, Args&& ...args) {
    return m_registry.emplace<Type, Args...>(entity, std::forward<Args>(args)...);
   }
+
+  template<typename Type>
+  void removeComponent(entt::entity entity) {
+    m_registry.remove<Type>(entity);
+  }
+
+    template<typename Type>
+    decltype(auto) onDestroy() {
+        return m_registry.on_destroy<Type>();
+    }
 
   decltype(auto) single() const { return m_singleEntity; }
 

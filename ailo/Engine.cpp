@@ -35,8 +35,10 @@ RenderAPI* Engine::getRenderAPI() { return m_renderAPI.get(); }
 InputSystem* Engine::getInputSystem() { return m_inputSystem.get(); }
 AssetManager* Engine::getAssetManager() { return m_assetManager.get(); }
 
-std::unique_ptr<Scene> Engine::createScene() const {
-  return std::make_unique<Scene>();
+std::unique_ptr<Scene> Engine::createScene() {
+  auto scene = std::make_unique<Scene>();
+  m_renderer->onSceneCreated(*this, *scene);
+  return scene;
 }
 
 }

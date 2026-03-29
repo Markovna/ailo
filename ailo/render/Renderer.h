@@ -3,6 +3,8 @@
 #include "RenderPrimitive.h"
 #include <vector>
 
+#include "Renderable.h"
+
 namespace ailo {
 
 struct PerViewUniforms {
@@ -37,8 +39,18 @@ struct alignas(64) PerObjectUniforms {
   uint32_t flags;
 };
 
-struct BoneUniform {
-  glm::mat4 transform;
+enum class ObjectFlags : uint32_t {
+  None = 0,
+  SkinningEnabled = 1 << 0
+};
+
+struct BonesUniform {
+  constexpr static uint32_t kMaxBones = 256;
+  struct Bone {
+    glm::mat4 transform;
+  };
+
+  Bone bones[kMaxBones];
 };
 
 struct Camera {
@@ -120,13 +132,15 @@ class Scene;
 struct RenderData {
   ProgramHandle program;
   VertexBufferLayoutHandle vertexBufferLayout;
-  uint32_t bufferOffset;
+  DescriptorSetHandle objectDescriptorSet;
+  uint32_t objectBufferOffset;
   Material* material;
   BufferHandle indexBuffer;
   BufferHandle vertexBuffer;
   uint32_t indexCount;
   uint32_t indexOffset;
   bool hasTransform;
+  bool isSkinned;
 };
 
 class Renderer {
@@ -138,12 +152,14 @@ public:
   void shadowPass(Engine&, Scene& scene);
   void colorPass(Engine&, Scene& scene, const Camera& camera);
   void endFrame(Engine&);
+  void onSceneCreated(Engine&, Scene&);
 
   void terminate(Engine&);
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:
   void prepare(Engine&, Scene&);
+  void onDestroyRenderable(entt::registry& registry, entt::entity entity);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
@@ -172,9 +188,13 @@ private:
   TextureHandle m_shadowMapTexture;
   RenderTargetHandle m_shadowMapRenderTarget;
   asset_ptr<Shader> m_shadowShader;
+  asset_ptr<Shader> m_skinnedShadowShader;
   static constexpr uint32_t kShadowMapSize = 1024;
 
+  BufferHandle m_dummyBonesBuffer;
+
   std::vector<RenderData> m_renderData;
+  RenderAPI* m_renderAPI;
 };
 
 }

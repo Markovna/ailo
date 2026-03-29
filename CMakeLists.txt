@@ -88,6 +88,13 @@ add_executable(ailo
         ailo/ecs/SceneLighting.h
         ailo/render/Renderable.cpp
         ailo/render/Renderable.h
+        ailo/render/Skin.cpp
+        ailo/render/Skin.h
+        ailo/render/Cleanup.h
+        ailo/render/Animation.h
+        ailo/render/Skeleton.cpp
+        ailo/render/Skeleton.h
+        ailo/ecs/AnimatorComponent.h
 )
 
 # Link libraries
@@ -242,3 +249,5 @@ add_shader(ailo shaders/skybox.vert)
 add_shader(ailo shaders/skybox.frag)
 add_shader(ailo shaders/shadow.vert)
 add_shader(ailo shaders/shadow.frag)
+add_shader(ailo shaders/pbr.vert    DEFINES VARIANT_SKINNING NAME pbr_skinned)
+add_shader(ailo shaders/shadow.vert DEFINES VARIANT_SKINNING NAME shadow_skinned)
