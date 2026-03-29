@@ -12,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Renderable.h"
+#include "Skin.h"
 
 namespace ailo {
 

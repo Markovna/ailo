@@ -15,6 +15,7 @@ struct NodeInfo {
     int parentIndex;           // parent in Skeleton::nodes[], -1 for root
     glm::mat4 localTransform;  // from aiNode::mTransformation (bind-pose default)
     glm::mat4 inverseBindPose; // from aiBone::mOffsetMatrix; identity for non-bone nodes
+    glm::mat4 worldTransform;
     int boneOutputIndex;        // index into BonesUniform::bones[]; -1 for non-bone nodes
 };
 
@@ -26,12 +27,9 @@ public:
 
     // Evaluates animation at `time` and writes final skinning matrices into out.
     // Only nodes with boneOutputIndex >= 0 write to out.bones[].
-    void computeBoneTransforms(float time, const AnimationClip& clip, BonesUniform& out) const;
+    void updateBoneTransforms(float time, const AnimationClip& clip, BonesUniform& out);
 
 private:
-    glm::vec3 interpolatePosition(float time, const BoneChannel& channel) const;
-    glm::quat interpolateRotation(float time, const BoneChannel& channel) const;
-    glm::vec3 interpolateScale(float time, const BoneChannel& channel) const;
 };
 
 } // namespace ailo

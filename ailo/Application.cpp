@@ -26,6 +26,7 @@
 #include "ecs/AnimatorComponent.h"
 #include "render/Mesh.h"
 #include "render/Renderable.h"
+#include "render/Skin.h"
 #include "resources/ResourcePtr.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
@@ -269,6 +270,7 @@ void Application::drawFrame() {
 
   ImGui::Render();
 
+  ailo::BonesUniform bonesData{};
   // Advance and apply skeletal animations
   for (auto [entity, animator] : m_scene->view<ailo::AnimatorComponent>().each()) {
     if (animator.playing && !animator.clips.empty()) {
@@ -276,8 +278,8 @@ void Application::drawFrame() {
       animator.currentTime += m_deltaTime;
       if (animator.looping)
         animator.currentTime = std::fmod(animator.currentTime, clip.duration);
-      ailo::BonesUniform bonesData{};
-      animator.skeleton->computeBoneTransforms(animator.currentTime, clip, bonesData);
+
+      animator.skeleton->updateBoneTransforms(animator.currentTime, clip, bonesData);
       animator.boneBuffer->updateBuffer(*m_engine, &bonesData, sizeof(bonesData));
     }
   }
