@@ -81,8 +81,6 @@ add_executable(ailo
     ailo/render/Program.h
     ailo/render/vulkan/Resources.cpp
     ailo/render/vulkan/Resources.h
-    ailo/resources/ResourcePtr.cpp
-    ailo/resources/ResourcePtr.h
         ailo/common/AssetPool.h
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
@@ -95,6 +93,8 @@ add_executable(ailo
         ailo/render/Skeleton.cpp
         ailo/render/Skeleton.h
         ailo/ecs/AnimatorComponent.h
+        ailo/ecs/AnimationSystem.cpp
+        ailo/ecs/AnimationSystem.h
 )
 
 # Link libraries
@@ -120,6 +120,8 @@ target_compile_definitions(ailo PRIVATE
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
+
+target_compile_definitions(ailo PRIVATE GLFW_INCLUDE_VULKAN)
 
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
@@ -189,24 +191,24 @@ add_custom_command(
 )
 target_sources(ailo PRIVATE ${DFG_LUT_OUTPUT})
 
-# Irradiance map generation function
-function(add_irradiance_map TARGET INPUT_HDR)
+# Radiance map generation function
+function(add_radiance_map TARGET INPUT_HDR)
     set(oneValueArgs NAME SIZE SAMPLES)
-    cmake_parse_arguments(IRR "" "${oneValueArgs}" "" ${ARGN})
+    cmake_parse_arguments(RADIANCE "" "${oneValueArgs}" "" ${ARGN})
 
     get_filename_component(FILE_NAME ${INPUT_HDR} NAME_WE)
 
-    if(IRR_NAME)
-        set(OUTPUT_NAME ${IRR_NAME})
+    if(RADIANCE_NAME)
+        set(OUTPUT_NAME ${RADIANCE_NAME})
     else()
         set(OUTPUT_NAME ${FILE_NAME})
     endif()
 
     set(OPTIONAL_ARGS "")
-    if(IRR_SIZE)
-        list(APPEND OPTIONAL_ARGS ${IRR_SIZE})
-        if(IRR_SAMPLES)
-            list(APPEND OPTIONAL_ARGS ${IRR_SAMPLES})
+    if(RADIANCE_SIZE)
+        list(APPEND OPTIONAL_ARGS $RADIANCE_SIZE})
+        if(RADIANCE_SAMPLES)
+            list(APPEND OPTIONAL_ARGS ${RADIANCE_SAMPLES})
         endif()
     endif()
 
@@ -228,13 +230,13 @@ function(add_irradiance_map TARGET INPUT_HDR)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
             COMMAND $<TARGET_FILE:resgen> ibl-prefilter ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
             DEPENDS resgen ${CMAKE_SOURCE_DIR}/${INPUT_HDR}
-            COMMENT "Generating irradiance map from ${INPUT_HDR}"
+            COMMENT "Generating radiance map from ${INPUT_HDR}"
     )
 
     target_sources(${TARGET} PRIVATE ${FACE_OUTPUTS})
 endfunction()
 
-#add_irradiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
+add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
 # Add shaders
 add_shader(ailo shaders/shader.vert)

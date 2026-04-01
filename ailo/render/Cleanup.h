@@ -5,7 +5,6 @@
 
 #include "Program.h"
 #include "RenderAPI.h"
-#include "ResourcePtr.h"
 
 namespace ailo {
 

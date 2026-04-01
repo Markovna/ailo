@@ -17,7 +17,6 @@
 #include "ecs/AnimatorComponent.h"
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"
-#include "resources/ResourcePtr.h"
 
 namespace ailo {
 

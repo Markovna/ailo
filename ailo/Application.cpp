@@ -1,13 +1,10 @@
 #include "Application.h"
 
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#include <stb_image/stb_image.h>
 
 #include "Engine.h"
 #include "render/RenderAPI.h"
@@ -27,7 +24,6 @@
 #include "render/Mesh.h"
 #include "render/Renderable.h"
 #include "render/Skin.h"
-#include "resources/ResourcePtr.h"
 
 // Helper functions for GLFW to platform-agnostic conversion
 static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
