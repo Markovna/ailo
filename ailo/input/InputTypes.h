@@ -189,7 +189,7 @@ struct MouseScrolledEvent {
 };
 
 // Event variant type
-using Event = std::variant<
+class Event : public std::variant<
     KeyPressedEvent,
     KeyReleasedEvent,
     KeyRepeatedEvent,
@@ -197,6 +197,24 @@ using Event = std::variant<
     MouseButtonReleasedEvent,
     MouseMovedEvent,
     MouseScrolledEvent
->;
+> {
+public:
+    using base = std::variant<
+                    KeyPressedEvent,
+                    KeyReleasedEvent,
+                    KeyRepeatedEvent,
+                    MouseButtonPressedEvent,
+                    MouseButtonReleasedEvent,
+                    MouseMovedEvent,
+                    MouseScrolledEvent
+                >;
+    using base::base;
+    using base::operator=;
+
+    template<class T>
+    decltype(auto) as() {
+        return std::get_if<T>(this);
+    }
+};
 
 } // namespace ailo

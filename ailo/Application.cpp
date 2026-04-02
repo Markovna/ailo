@@ -98,12 +98,6 @@ void Application::init() {
   skybox.mesh = ailo::Mesh::cube(*m_engine);
   skybox.materials.push_back(skyboxMaterial);
 
-  auto iblIrradiance = ailo::Texture::loadCubemap(
-    *m_engine,
-      "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
-      vk::Format::eR32G32B32A32Sfloat
-    );
-
   auto iblPrefilter = ailo::Texture::loadCubemap(
     *m_engine,
     "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
@@ -112,7 +106,6 @@ void Application::init() {
   );
 
   auto& sceneLighting = m_scene->addComponent<ailo::SceneLighting>(m_scene->single());
-  sceneLighting.irradianceMap = iblIrradiance;
   sceneLighting.prefilteredEnvMap = iblPrefilter;
   sceneLighting.lightDirection = normalize(glm::vec3(0.1, 1.4, 0.1));
 
@@ -162,27 +155,27 @@ void Application::handleInput() {
     handleImGuiEvent(event);
 
     // Handle camera rotation on mouse drag
-    if (auto mousePressedEvent = std::get_if<ailo::MouseButtonPressedEvent>(&event)) {
-      if (mousePressedEvent->button == ailo::MouseButton::Left) {
+    if (auto mousePressed = event.as<ailo::MouseButtonPressedEvent>()) {
+      if (mousePressed->button == ailo::MouseButton::Left) {
         if (inputSystem->isKeyPressed(ailo::KeyCode::LeftAlt)) {
           bool controlPressed = inputSystem->isKeyPressed(ailo::KeyCode::LeftControl);
           m_isRotating = controlPressed == false;
           m_isMoving = controlPressed;
-          m_lastMouseX = mousePressedEvent->x;
-          m_lastMouseY = mousePressedEvent->y;
+          m_lastMouseX = mousePressed->x;
+          m_lastMouseY = mousePressed->y;
         }
       }
     }
-    else if (auto mouseReleasedEvent = std::get_if<ailo::MouseButtonReleasedEvent>(&event)) {
-      if (mouseReleasedEvent->button == ailo::MouseButton::Left) {
+    else if (auto mouseReleased = event.as<ailo::MouseButtonReleasedEvent>()) {
+      if (mouseReleased->button == ailo::MouseButton::Left) {
         m_isRotating = false;
         m_isMoving = false;
       }
     }
-    else if (auto mouseMovedEvent = std::get_if<ailo::MouseMovedEvent>(&event)) {
+    else if (auto mouseMoved = event.as<ailo::MouseMovedEvent>()) {
       if (m_isRotating) {
-        double deltaX = mouseMovedEvent->x - m_lastMouseX;
-        double deltaY = mouseMovedEvent->y - m_lastMouseY;
+        double deltaX = mouseMoved->x - m_lastMouseX;
+        double deltaY = mouseMoved->y - m_lastMouseY;
 
         // Update camera rotation
         m_cameraYaw += static_cast<float>(deltaX) * 0.005f;
@@ -191,12 +184,12 @@ void Application::handleInput() {
         // Clamp pitch to avoid gimbal lock
         m_cameraPitch = glm::clamp(m_cameraPitch, -glm::pi<float>() / 2.0f + 0.1f, glm::pi<float>() / 2.0f - 0.1f);
 
-        m_lastMouseX = mouseMovedEvent->x;
-        m_lastMouseY = mouseMovedEvent->y;
+        m_lastMouseX = mouseMoved->x;
+        m_lastMouseY = mouseMoved->y;
       }
       else if (m_isMoving) {
-        double deltaX = mouseMovedEvent->x - m_lastMouseX;
-        double deltaY = mouseMovedEvent->y - m_lastMouseY;
+        double deltaX = mouseMoved->x - m_lastMouseX;
+        double deltaY = mouseMoved->y - m_lastMouseY;
 
         // Calculate camera direction vectors
         float camX = m_cameraDistance * cos(m_cameraPitch) * cos(m_cameraYaw);
@@ -215,13 +208,13 @@ void Application::handleInput() {
         m_cameraTarget -= right * static_cast<float>(deltaX) * panSpeed;
         m_cameraTarget += up * static_cast<float>(deltaY) * panSpeed;
 
-        m_lastMouseX = mouseMovedEvent->x;
-        m_lastMouseY = mouseMovedEvent->y;
+        m_lastMouseX = mouseMoved->x;
+        m_lastMouseY = mouseMoved->y;
       }
     }
     // Handle camera zoom on scroll
-    else if (auto scrollEvent = std::get_if<ailo::MouseScrolledEvent>(&event)) {
-      m_cameraDistance -= static_cast<float>(scrollEvent->yOffset) * 0.5f;
+    else if (auto scroll = event.as<ailo::MouseScrolledEvent>()) {
+      m_cameraDistance -= static_cast<float>(scroll->yOffset) * 0.5f;
       // Clamp distance to reasonable values
       m_cameraDistance = glm::clamp(m_cameraDistance, 1.0f, 1000.0f);
     }

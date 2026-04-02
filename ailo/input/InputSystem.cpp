@@ -17,7 +17,6 @@ bool InputSystem::pollEvent(Event& outEvent) {
 
     outEvent = m_eventQueue.front();
     m_eventQueue.pop();
-    onEvent(outEvent);
     return true;
 }
 
@@ -100,7 +99,8 @@ void InputSystem::getMouseDelta(double& deltaX, double& deltaY) const {
 }
 
 void InputSystem::pushEvent(Event&& event) {
-    m_eventQueue.push(std::move(event));
+    auto& e = m_eventQueue.emplace(std::move(event));
+    onEvent(e);
 }
 
 } // namespace ailo
