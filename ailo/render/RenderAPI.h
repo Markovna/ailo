@@ -17,6 +17,7 @@
 #include "FrameBufferCache.h"
 #include "PipelineCache.h"
 #include "RenderPassCache.h"
+#include "platform/Platform.h"
 
 namespace ailo {
 
@@ -26,7 +27,7 @@ class SwapChain;
 
 class RenderAPI {
 public:
-    explicit RenderAPI(GLFWwindow* window);
+    explicit RenderAPI(Platform::WindowHandle window);
     ~RenderAPI();
 
     // Initialization and shutdown
@@ -100,8 +101,6 @@ private:
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
     static vk::DescriptorPool createDescriptorPoolS(vk::Device device);
 
-    void createSwapchain();
-    void cleanupSwapchain();
     void recreateSwapchain();
 
     void cleanupDescriptorSets();
@@ -114,8 +113,6 @@ private:
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:
-    // Window
-    GLFWwindow* m_window = nullptr;
     bool m_framebufferResized = false;
 
     // Core Vulkan objects

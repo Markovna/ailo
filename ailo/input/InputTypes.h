@@ -6,8 +6,8 @@
 
 namespace ailo {
 
-enum class KeyCode : uint16_t {
-    Unknown = 0,
+enum class KeyCode : int16_t {
+    Unknown = -1,
 
     // Alphanumeric keys
     A = 65, B, C, D, E, F, G, H, I, J, K, L, M,

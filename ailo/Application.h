@@ -8,6 +8,7 @@
 #include "render/ImGuiProcessor.h"
 #include "input/InputTypes.h"
 #include "ecs/Scene.h"
+#include "platform/Platform.h"
 #include "render/Renderer.h"
 #include "render/Texture.h"
 
@@ -17,7 +18,8 @@ class Application {
     void run();
 
   private:
-    GLFWwindow* m_window = nullptr;
+    ailo::Platform::WindowHandle m_window = nullptr;
+    std::unique_ptr<ailo::Platform> m_platform;
     std::unique_ptr<ailo::Engine> m_engine;
     std::unique_ptr<ailo::Scene> m_scene;
     std::unique_ptr<ailo::ImGuiProcessor> m_imguiProcessor;
@@ -36,13 +38,6 @@ class Application {
     glm::vec3 m_cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
     double m_lastMouseX = 0.0;
     double m_lastMouseY = 0.0;
-
-    // GLFW callback functions
-    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
-    static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
-    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
-    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
     void init();
     void mainLoop();

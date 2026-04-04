@@ -25,11 +25,6 @@
 #include "render/Renderable.h"
 #include "render/Skin.h"
 
-// Helper functions for GLFW to platform-agnostic conversion
-static ailo::KeyCode glfwKeyToKeyCode(int glfwKey);
-static ailo::MouseButton glfwButtonToMouseButton(int glfwButton);
-static ailo::ModifierKey glfwModsToModifierKey(int glfwMods);
-
 const uint32_t WIDTH = 2400;
 const uint32_t HEIGHT = 1400;
 
@@ -39,11 +34,12 @@ void Application::run() {
   cleanup();
 }
 
-std::tuple<ImVec2, ImVec2> ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(GLFWwindow* window) {
+std::tuple<ImVec2, ImVec2> ImGui_GetWindowSizeAndFramebufferScale(ailo::Platform::WindowHandle window) {
   int w, h;
   int display_w, display_h;
-  glfwGetWindowSize(window, &w, &h);
-  glfwGetFramebufferSize(window, &display_w, &display_h);
+  auto win = static_cast<GLFWwindow*>(window);
+  glfwGetWindowSize(win, &w, &h);
+  glfwGetFramebufferSize(win, &display_w, &display_h);
   float fb_scale_x = (w > 0) ? (float)display_w / (float)w : 1.0f;
   float fb_scale_y = (h > 0) ? (float)display_h / (float)h : 1.0f;
 #if GLFW_HAS_X11_OR_WAYLAND
@@ -54,25 +50,11 @@ std::tuple<ImVec2, ImVec2> ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(GLFWw
   return std::make_tuple(ImVec2(w, h), ImVec2(fb_scale_x, fb_scale_y));
 }
 
-void Application::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
-  auto app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  app->m_engine->getRenderAPI()->handleWindowResize();
-}
-
 void Application::init() {
-  glfwInit();
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  m_platform = std::make_unique<ailo::Platform>();
+  m_platform->init();
 
-  m_window = glfwCreateWindow(WIDTH, HEIGHT, "Ailo", nullptr, nullptr);
-
-  glfwSetWindowUserPointer(m_window, this);
-
-  // Register GLFW callbacks
-  glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
-  glfwSetKeyCallback(m_window, keyCallback);
-  glfwSetMouseButtonCallback(m_window, mouseButtonCallback);
-  glfwSetCursorPosCallback(m_window, cursorPosCallback);
-  glfwSetScrollCallback(m_window, scrollCallback);
+  m_window = m_platform->createWindow("Ailo", WIDTH, HEIGHT);
 
   m_engine = std::make_unique<ailo::Engine>(m_window);
   auto* renderAPI = m_engine->getRenderAPI();
@@ -118,12 +100,12 @@ void Application::init() {
 }
 
 void Application::mainLoop() {
-  while (!glfwWindowShouldClose(m_window)) {
-    const auto now = static_cast<float>(glfwGetTime());
+  while (!m_platform->windowShouldClose(m_window)) {
+    const auto now = m_platform->getTime();
     m_deltaTime = now - m_time;
     m_time = now;
 
-    glfwPollEvents();
+    m_platform->pumpEvents(m_window, m_engine->getInputSystem());
     m_engine->getInputSystem()->processEvents();
     handleInput();
 
@@ -135,7 +117,7 @@ void Application::mainLoop() {
 }
 
 void Application::handleImGuiEvent(ailo::Event& event) {
-  if(auto keyPressed = std::get_if<ailo::KeyPressedEvent>(&event)) {
+  if(auto keyPressed = event.as<ailo::KeyPressedEvent>()) {
     ImGuiIO& io = ImGui::GetIO();
     io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (keyPressed->modifiers | ailo::ModifierKey::Control) != ailo::ModifierKey::None);
     io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (keyPressed->modifiers | ailo::ModifierKey::Shift) != ailo::ModifierKey::None);
@@ -156,6 +138,9 @@ void Application::handleInput() {
 
     // Handle camera rotation on mouse drag
     if (auto mousePressed = event.as<ailo::MouseButtonPressedEvent>()) {
+      ImGuiIO& io = ImGui::GetIO();
+      io.AddMouseButtonEvent(static_cast<int>(mousePressed->button), true);
+
       if (mousePressed->button == ailo::MouseButton::Left) {
         if (inputSystem->isKeyPressed(ailo::KeyCode::LeftAlt)) {
           bool controlPressed = inputSystem->isKeyPressed(ailo::KeyCode::LeftControl);
@@ -171,8 +156,14 @@ void Application::handleInput() {
         m_isRotating = false;
         m_isMoving = false;
       }
+
+      ImGuiIO& io = ImGui::GetIO();
+      io.AddMouseButtonEvent(static_cast<int>(mouseReleased->button), false);
     }
     else if (auto mouseMoved = event.as<ailo::MouseMovedEvent>()) {
+      ImGuiIO& io = ImGui::GetIO();
+      io.AddMousePosEvent(static_cast<float>(mouseMoved->x), static_cast<float>(mouseMoved->y));
+
       if (m_isRotating) {
         double deltaX = mouseMoved->x - m_lastMouseX;
         double deltaY = mouseMoved->y - m_lastMouseY;
@@ -243,7 +234,7 @@ void Application::drawFrame() {
   ImGuiIO& io = ImGui::GetIO();
   io.DeltaTime = m_deltaTime;
 
-  auto [size, scale] = ImGui_ImplGlfw_GetWindowSizeAndFramebufferScale(m_window);
+  auto [size, scale] = ImGui_GetWindowSizeAndFramebufferScale(m_window);
   io.DisplaySize = size;
   io.DisplayFramebufferScale = scale;
 
@@ -296,129 +287,6 @@ void Application::cleanup() {
 
   m_engine.reset();
 
-  glfwSetKeyCallback(m_window, nullptr);
-  glfwSetFramebufferSizeCallback(m_window, nullptr);
-  glfwSetMouseButtonCallback(m_window, nullptr);
-  glfwSetCursorPosCallback(m_window, nullptr);
-  glfwSetScrollCallback(m_window, nullptr);
-  glfwDestroyWindow(m_window);
-  glfwTerminate();
-}
-
-void Application::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-  auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto inputSystem = app->m_engine->getInputSystem();
-
-  ailo::KeyCode keyCode = glfwKeyToKeyCode(key);
-  ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
-
-  if (action == GLFW_PRESS) {
-    ailo::KeyPressedEvent event;
-    event.keyCode = keyCode;
-    event.modifiers = modifiers;
-    inputSystem->pushEvent(event);
-  } else if (action == GLFW_RELEASE) {
-    ailo::KeyReleasedEvent event;
-    event.keyCode = keyCode;
-    event.modifiers = modifiers;
-    inputSystem->pushEvent(event);
-  } else if (action == GLFW_REPEAT) {
-    ailo::KeyRepeatedEvent event;
-    event.keyCode = keyCode;
-    event.modifiers = modifiers;
-    inputSystem->pushEvent(event);
-  }
-}
-
-void Application::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-  auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine->getInputSystem();
-
-  ailo::MouseButton mouseButton = glfwButtonToMouseButton(button);
-  ailo::ModifierKey modifiers = glfwModsToModifierKey(mods);
-
-  double mouseX, mouseY;
-  glfwGetCursorPos(window, &mouseX, &mouseY);
-
-  ImGuiIO& io = ImGui::GetIO();
-  if (button >= 0 && button < ImGuiMouseButton_COUNT)
-    io.AddMouseButtonEvent(button, action == GLFW_PRESS);
-
-  if (action == GLFW_PRESS) {
-    ailo::MouseButtonPressedEvent event;
-    event.button = mouseButton;
-    event.modifiers = modifiers;
-    event.x = mouseX;
-    event.y = mouseY;
-    inputSystem->pushEvent(event);
-  } else if (action == GLFW_RELEASE) {
-    ailo::MouseButtonReleasedEvent event;
-    event.button = mouseButton;
-    event.modifiers = modifiers;
-    event.x = mouseX;
-    event.y = mouseY;
-    inputSystem->pushEvent(event);
-  }
-}
-
-void Application::cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
-  auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine->getInputSystem();
-
-  ImGuiIO& io = ImGui::GetIO();
-  io.AddMousePosEvent((float)xpos, (float)ypos);
-
-  ailo::MouseMovedEvent event;
-  event.x = xpos;
-  event.y = ypos;
-  inputSystem->pushEvent(event);
-}
-
-void Application::scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-  auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
-  auto* inputSystem = app->m_engine->getInputSystem();
-
-  ailo::MouseScrolledEvent event;
-  event.xOffset = xoffset;
-  event.yOffset = yoffset;
-  inputSystem->pushEvent(event);
-}
-
-// Conversion functions
-
-ailo::KeyCode glfwKeyToKeyCode(int glfwKey) {
-  // GLFW key codes are designed to match our KeyCode enum values
-  // so we can do a direct cast for most keys
-  if (glfwKey == GLFW_KEY_UNKNOWN) {
-    return ailo::KeyCode::Unknown;
-  }
-  return static_cast<ailo::KeyCode>(glfwKey);
-}
-
-ailo::MouseButton glfwButtonToMouseButton(int glfwButton) {
-  // Direct mapping
-  switch (glfwButton) {
-    case GLFW_MOUSE_BUTTON_LEFT:   return ailo::MouseButton::Left;
-    case GLFW_MOUSE_BUTTON_RIGHT:  return ailo::MouseButton::Right;
-    case GLFW_MOUSE_BUTTON_MIDDLE: return ailo::MouseButton::Middle;
-    case GLFW_MOUSE_BUTTON_4:      return ailo::MouseButton::Button4;
-    case GLFW_MOUSE_BUTTON_5:      return ailo::MouseButton::Button5;
-    case GLFW_MOUSE_BUTTON_6:      return ailo::MouseButton::Button6;
-    case GLFW_MOUSE_BUTTON_7:      return ailo::MouseButton::Button7;
-    case GLFW_MOUSE_BUTTON_8:      return ailo::MouseButton::Button8;
-    default:                        return ailo::MouseButton::Left;
-  }
-}
-
-ailo::ModifierKey glfwModsToModifierKey(int glfwMods) {
-  ailo::ModifierKey mods = ailo::ModifierKey::None;
-
-  if (glfwMods & GLFW_MOD_SHIFT)     mods |= ailo::ModifierKey::Shift;
-  if (glfwMods & GLFW_MOD_CONTROL)   mods |= ailo::ModifierKey::Control;
-  if (glfwMods & GLFW_MOD_ALT)       mods |= ailo::ModifierKey::Alt;
-  if (glfwMods & GLFW_MOD_SUPER)     mods |= ailo::ModifierKey::Super;
-  if (glfwMods & GLFW_MOD_CAPS_LOCK) mods |= ailo::ModifierKey::CapsLock;
-  if (glfwMods & GLFW_MOD_NUM_LOCK)  mods |= ailo::ModifierKey::NumLock;
-
-  return mods;
+  m_platform->destroyWindow(m_window);
+  m_platform.reset();
 }

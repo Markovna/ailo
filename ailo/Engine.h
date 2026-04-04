@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "platform/Platform.h"
+
 struct GLFWwindow;
 
 namespace ailo {
@@ -19,7 +21,7 @@ struct Camera;
 
 class Engine {
  public:
-  Engine(GLFWwindow*);
+  Engine(Platform::WindowHandle);
   ~Engine();
 
  void gc();

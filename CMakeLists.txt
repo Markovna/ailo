@@ -95,6 +95,8 @@ add_executable(ailo
         ailo/ecs/AnimatorComponent.h
         ailo/ecs/AnimationSystem.cpp
         ailo/ecs/AnimationSystem.h
+        ailo/platform/Platform.cpp
+        ailo/platform/Platform.h
 )
 
 # Link libraries

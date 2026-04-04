@@ -8,7 +8,7 @@
 
 namespace ailo {
 
-Engine::Engine(GLFWwindow* window) :
+Engine::Engine(Platform::WindowHandle window) :
   m_renderAPI(std::make_unique<RenderAPI>(window)),
   m_assetManager(std::make_unique<AssetManager>()),
   m_renderer(std::make_unique<Renderer>(*this)),

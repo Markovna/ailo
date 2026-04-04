@@ -11,9 +11,8 @@ namespace ailo {
 
 // Initialization and shutdown
 
-RenderAPI::RenderAPI(GLFWwindow* window)
-    : m_window(window),
-    m_device(window),
+RenderAPI::RenderAPI(Platform::WindowHandle window)
+    : m_device(window),
     m_commandPool(m_device->createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
     m_commands(*m_device, m_commandPool),
     m_descriptorPool(createDescriptorPoolS(*m_device)),
@@ -22,7 +21,7 @@ RenderAPI::RenderAPI(GLFWwindow* window)
     m_renderPassCache(*m_device),
     m_pipelineCache(*m_device, m_graphicsPipelines) {
 
-    createSwapchain();
+    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
 
 RenderAPI::~RenderAPI() = default;
@@ -30,7 +29,7 @@ RenderAPI::~RenderAPI() = default;
 void RenderAPI::shutdown() {
     m_device->waitIdle();
 
-    cleanupSwapchain();
+    m_swapChain->destroy(*m_device);
 
     m_framebufferCache.clear();
     m_renderPassCache.clear();
@@ -66,7 +65,6 @@ bool RenderAPI::beginFrame() {
     m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
-        recreateSwapchain();
         return false;
     }
 
@@ -720,15 +718,7 @@ void RenderAPI::handleWindowResize() {
     m_framebufferResized = true;
 }
 
-// Internal initialization
-
-void RenderAPI::createSwapchain() {
-    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
-}
-
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
-    // Create a descriptor pool that can allocate descriptor sets
-    // We'll allocate enough for a reasonable number of uniform buffers and textures
     std::array poolSizes {
         vk::DescriptorPoolSize {vk::DescriptorType::eUniformBuffer, 500 },
         vk::DescriptorPoolSize {vk::DescriptorType::eUniformBufferDynamic, 500 },
@@ -743,22 +733,11 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     return device.createDescriptorPool(poolInfo);
 }
 
-void RenderAPI::cleanupSwapchain() {
-    m_swapChain->destroy(*m_device);
-}
-
 void RenderAPI::recreateSwapchain() {
-    int width = 0, height = 0;
-    glfwGetFramebufferSize(m_window, &width, &height);
-    while (width == 0 || height == 0) {
-        glfwGetFramebufferSize(m_window, &width, &height);
-        glfwWaitEvents();
-    }
-
     m_device->waitIdle();
 
-    cleanupSwapchain();
-    createSwapchain();
+    m_swapChain->destroy(*m_device);
+    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
 
 void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image,

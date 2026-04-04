@@ -3,12 +3,14 @@
 #include <vulkan/vulkan.hpp>
 #include "GLFW/glfw3.h"
 #include "VulkanConstants.h"
+#include "platform/Platform.h"
 
 namespace ailo {
 
 class VulkanDevice {
 public:
-    explicit VulkanDevice(GLFWwindow* window);
+    explicit VulkanDevice(Platform::WindowHandle window);
+
     ~VulkanDevice();
 
     vk::Device& device() { return m_device; }
@@ -43,7 +45,7 @@ private:
     vk::SampleCountFlagBits getMaxUsableSampleCount();
 
 private:
-    GLFWwindow* m_window;
+    Platform::WindowHandle m_window;
     vk::Instance m_instance;
     vk::SurfaceKHR m_surface;
     vk::PhysicalDevice m_physicalDevice;

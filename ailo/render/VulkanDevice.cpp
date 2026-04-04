@@ -21,12 +21,12 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
     }
 }
 
-VulkanDevice::VulkanDevice(GLFWwindow* window)
+VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     : m_window(window) {
     createInstance();
 
     VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(m_instance, window, nullptr, &surface) != VK_SUCCESS) {
+    if (glfwCreateWindowSurface(m_instance, static_cast<GLFWwindow*>(window), nullptr, &surface) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create window surface!");
     }
 
@@ -171,8 +171,8 @@ void VulkanDevice::createInstance() {
     createInfo.pApplicationInfo = &appInfo;
 
     uint32_t extensionCount = 0;
-    auto glfwRequiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
-    std::vector<const char*> extensions(glfwRequiredExtensions, glfwRequiredExtensions + extensionCount);
+    auto requiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
+    std::vector<const char*> extensions(requiredExtensions, requiredExtensions + extensionCount);
 
     // TODO: this makes app crash in RenderDoc
     // createInfo.flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
@@ -220,7 +220,7 @@ vk::Extent2D VulkanDevice::getSwapExtent() const {
     }
 
     int width, height;
-    glfwGetFramebufferSize(m_window, &width, &height);
+    glfwGetFramebufferSize(static_cast<GLFWwindow*>(m_window), &width, &height);
 
     vk::Extent2D actualExtent = {
         static_cast<uint32_t>(width),
