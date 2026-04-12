@@ -97,6 +97,9 @@ add_executable(ailo
         ailo/ecs/AnimationSystem.h
         ailo/platform/Platform.cpp
         ailo/platform/Platform.h
+        ailo/App.cpp
+        ailo/App.h
+        ailo/di/di.h
 )
 
 # Link libraries
@@ -255,3 +258,7 @@ add_shader(ailo shaders/shadow.vert)
 add_shader(ailo shaders/shadow.frag)
 add_shader(ailo shaders/pbr.vert    DEFINES VARIANT_SKINNING NAME pbr_skinned)
 add_shader(ailo shaders/shadow.vert DEFINES VARIANT_SKINNING NAME shadow_skinned)
+
+
+# Add executable
+add_executable(ditest ailo/di/di_tests.cpp)
