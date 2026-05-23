@@ -29,15 +29,16 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
-Renderer::Renderer(Engine& engine) : m_renderAPI(engine.getRenderAPI()) {
-  m_persistentTextures.push_back(createWhiteTexture(engine));
-  m_persistentTextures.push_back(createBlackTexture(engine));
-  m_persistentTextures.push_back(createDefaultMetallicRoughnessTexture(engine));
-  m_persistentTextures.push_back(createDefaultNormalTexture(engine));
+Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager) : m_renderAPI(renderApi) {
+  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createWhiteTexture(assetManager)));
+  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackTexture(assetManager)));
+  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultMetallicRoughnessTexture(assetManager)));
+  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultNormalTexture(assetManager)));
 
-  m_iblDfgLut = Texture::load(engine, "assets/textures/dfg_lut.hdr", vk::Format::eR32G32B32A32Sfloat);
+  // vk::Format::eR32G32B32A32Sfloat
+  m_iblDfgLut = assetManager->load<Texture>("assets/textures/dfg_lut.hdr");
 
-  auto backend = engine.getRenderAPI();
+  auto backend = m_renderAPI;
   m_viewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
   m_lightsUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_lightUniformsBufferData));
   m_viewDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
@@ -50,8 +51,8 @@ Renderer::Renderer(Engine& engine) : m_renderAPI(engine.getRenderAPI()) {
 
   backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
 
-  m_shadowShader = Shader::load(engine, Shader::getShadowShaderDescription());
-  m_skinnedShadowShader = Shader::load(engine, Shader::getSkinnedShadowShaderDescription());
+  m_shadowShader = Shader::load(assetManager, m_renderAPI, Shader::getShadowShaderDescription());
+  m_skinnedShadowShader = Shader::load(assetManager, m_renderAPI, Shader::getSkinnedShadowShaderDescription());
 
   // Provide a valid (all-identity) bone buffer for non-skinned entities so
   // the descriptor set binding is always satisfied.
@@ -63,13 +64,12 @@ Renderer::Renderer(Engine& engine) : m_renderAPI(engine.getRenderAPI()) {
 
 Renderer::~Renderer() = default;
 
-bool Renderer::beginFrame(Engine& engine) {
-  RenderAPI* backend = engine.getRenderAPI();
-  return backend->beginFrame();
+bool Renderer::beginFrame() {
+  return m_renderAPI->beginFrame();
 }
 
-void Renderer::shadowPass(Engine& engine, Scene& scene) {
-  RenderAPI* backend = engine.getRenderAPI();
+void Renderer::shadowPass(Scene& scene) {
+  RenderAPI* backend = m_renderAPI;
 
   // Create shadow map resources lazily
   if (!m_shadowMapTexture) {
@@ -111,7 +111,7 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
   m_perViewUniformBufferData.viewInverse = inverse(lightView);
 
   // prepare descriptor sets and uniform buffers
-  prepare(engine, scene);
+  prepare(scene);
 
   // Begin depth-only render pass
   RenderPassDescription shadowPassDesc {};
@@ -148,7 +148,7 @@ void Renderer::shadowPass(Engine& engine, Scene& scene) {
   backend->endRenderPass();
 }
 
-void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
+void Renderer::colorPass(Scene& scene, const Camera& camera) {
 
   auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
 
@@ -176,9 +176,9 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
   // prepare descriptor sets and uniform buffers
-  prepare(engine, scene);
+  prepare(scene);
 
-  RenderAPI* backend = engine.getRenderAPI();
+  RenderAPI* backend = m_renderAPI;
 
   RenderPassDescription renderPass {};
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
@@ -210,17 +210,16 @@ void Renderer::colorPass(Engine& engine, Scene& scene, const Camera& camera) {
   backend->endRenderPass();
 }
 
-void Renderer::endFrame(Engine& engine) {
-  RenderAPI* backend = engine.getRenderAPI();
-  backend->endFrame();
+void Renderer::endFrame() {
+  m_renderAPI->endFrame();
 }
 
-void Renderer::onSceneCreated(Engine& engine, Scene& scene) {
+void Renderer::onSceneCreated(Scene& scene) {
   scene.onDestroy<Renderable>().connect<&Renderer::onDestroyRenderable>(*this);
 }
 
-void Renderer::prepare(Engine& engine, Scene& scene) {
-  auto& backend = *engine.getRenderAPI();
+void Renderer::prepare(Scene& scene) {
+  auto& backend = *m_renderAPI;
 
   auto renderableView = scene.view<Renderable>();
   size_t meshCount = renderableView.size();
@@ -316,41 +315,41 @@ void Renderer::onDestroyRenderable(entt::registry& registry, entt::entity entity
     }
 }
 
-asset_ptr<Texture> Renderer::createWhiteTexture(Engine& engine) {
+asset_ptr<Texture> Renderer::createWhiteTexture(AssetManager* assetManager) {
   static const std::array<uint8_t, 4> white = { 255, 255, 255, 255 };
 
-  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/white", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(engine, white.data(), 4);
+  auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/white", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(m_renderAPI, white.data(), 4);
   return texture;
 }
 
-asset_ptr<Texture> Renderer::createBlackTexture(Engine& engine) {
+asset_ptr<Texture> Renderer::createBlackTexture(AssetManager* assetManager) {
   static const std::array<uint8_t, 4> black = { 0, 0, 0, 255 };
 
-  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/black", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(engine, black.data(), 4);
+  auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/black", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(m_renderAPI, black.data(), 4);
   return texture;
 }
 
-asset_ptr<Texture> Renderer::createDefaultNormalTexture(Engine& engine) {
+asset_ptr<Texture> Renderer::createDefaultNormalTexture(AssetManager* assetManager) {
   static const std::array<uint8_t, 4> normal = { 128, 128, 255, 255 };
 
-  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/normal", engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(engine, normal.data(), 4);
+  auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/normal@norm", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(m_renderAPI, normal.data(), 4);
   return texture;
 }
 
-asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(Engine& engine) {
+asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(AssetManager* assetManager) {
   static const std::array<uint8_t, 4> metallicRoughness = { 0, 128, 0, 255 };
 
-  auto texture = engine.getAssetManager()->emplace<Texture>("builtin://textures/default_metallic_roughness",
-    engine, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(engine, metallicRoughness.data(), 4);
+  auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/default_metallic_roughness",
+    m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  texture->updateImage(m_renderAPI, metallicRoughness.data(), 4);
   return texture;
 }
 
-void Renderer::terminate(Engine& engine) {
-  RenderAPI& backend = *engine.getRenderAPI();
+void Renderer::terminate() {
+  RenderAPI& backend = *m_renderAPI;
 
   backend.destroyDescriptorSet(m_viewDescriptorSet);
   backend.destroyDescriptorSet(m_objectDescriptorSet);

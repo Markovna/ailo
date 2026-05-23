@@ -1,5 +1,5 @@
 #include "Mesh.h"
-#include <Engine.h>
+
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -53,14 +53,14 @@ struct MeshData {
     uint32_t materialIndex;
 };
 
-static asset_ptr<Texture> loadTexture(Engine& engine, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
+static asset_ptr<Texture> loadTexture(AssetManager* assetManager, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
     std::filesystem::path fullPath;
     if (std::filesystem::path(texturePath).is_absolute()) {
         fullPath = texturePath;
     } else {
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
-    return Texture::load(engine, fullPath.string(), format, true);
+    return assetManager->load<Texture>(fullPath.string());
 }
 
 static void processNode(
@@ -97,11 +97,11 @@ static constexpr uint16_t sCubeIndices[] = {
     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35
 };
 
-asset_ptr<Mesh> Mesh::cube(Engine& engine) {
-    auto mesh = engine.getAssetManager()->get<Mesh>("builtin://meshes/cube");
+asset_ptr<Mesh> Mesh::cube(AssetManager* assetManager, RenderAPI* renderApi) {
+    auto mesh = assetManager->get<Mesh>("builtin://meshes/cube");
     if (mesh) return mesh;
 
-    mesh = engine.getAssetManager()->emplace<Mesh>("builtin://meshes/cube");
+    mesh = assetManager->emplaceWithPath<Mesh>("builtin://meshes/cube");
 
     vk::VertexInputBindingDescription binding{};
     binding.binding = 0;
@@ -114,13 +114,13 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = 0;
 
-    auto vb = std::make_shared<VertexBuffer>(engine,
+    auto vb = std::make_shared<VertexBuffer>(renderApi,
         VertexInputDescription{ .bindings = {binding}, .attributes = {posAttr} },
         sizeof(sCubeVertices));
-    vb->updateBuffer(engine, sCubeVertices, sizeof(sCubeVertices));
+    vb->updateBuffer(renderApi, sCubeVertices, sizeof(sCubeVertices));
 
-    auto ib = std::make_shared<BufferObject>(engine, BufferBinding::INDEX, sizeof(sCubeIndices));
-    ib->updateBuffer(engine, sCubeIndices, sizeof(sCubeIndices));
+    auto ib = std::make_shared<BufferObject>(renderApi, BufferBinding::INDEX, sizeof(sCubeIndices));
+    ib->updateBuffer(renderApi, sCubeIndices, sizeof(sCubeIndices));
 
     mesh->vertexBuffer = vb;
     mesh->indexBuffer = ib;
@@ -128,7 +128,7 @@ asset_ptr<Mesh> Mesh::cube(Engine& engine) {
     return mesh;
 }
 
-asset_ptr<Texture> load(Engine& engine, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
+asset_ptr<Texture> load(AssetManager* assetManager, RenderAPI* renderApi, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
     if (material->GetTextureCount(textureType) <= 0) return {};
     aiString texturePath;
     if (material->GetTexture(textureType, 0, &texturePath) != AI_SUCCESS) return {};
@@ -136,14 +136,19 @@ asset_ptr<Texture> load(Engine& engine, const aiScene* scene, const aiMaterial* 
     auto embedded = scene->GetEmbeddedTexture(texturePath.C_Str());
     if (embedded) {
         if (embedded->mHeight > 0)
-            return Texture::fromEmbedded(engine, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
-        return Texture::fromEmbeddedCompressed(engine, embedded->pcData, embedded->mWidth, format);
+            return Texture::fromEmbedded(assetManager, renderApi, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
+        return Texture::fromEmbeddedCompressed(assetManager, renderApi, embedded->pcData, embedded->mWidth, format);
     }
-    return loadTexture(engine, texturePath.C_Str(), modelDirectory, format);
+
+    std::string key { texturePath.C_Str() };
+    if (textureType == aiTextureType_NORMALS) {
+        key.append("@norm");
+    }
+    return loadTexture(assetManager, key, modelDirectory, format);
 }
 
 std::vector<Entity> MeshReader::instantiate(
-    Engine& engine, Scene& scene, const std::string& path, const glm::mat4& transform) {
+    AssetManager* assetManager, RenderAPI* renderApi, Scene& scene, const std::string& path, const glm::mat4& transform) {
     Assimp::Importer importer;
 
     const aiScene* aiscene = importer.ReadFile(path,
@@ -157,7 +162,6 @@ std::vector<Entity> MeshReader::instantiate(
     if (!aiscene || aiscene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
         throw std::runtime_error("Failed to load mesh: " + std::string(importer.GetErrorString()));
 
-    auto assetManager = engine.getAssetManager();
     std::filesystem::path modelPath(path);
     std::string modelDirectory = modelPath.parent_path().string();
 
@@ -250,10 +254,10 @@ std::vector<Entity> MeshReader::instantiate(
     // -------------------------------------------------------------------------
     // Shaders
     // -------------------------------------------------------------------------
-    auto shader = Shader::load(engine, Shader::getDefaultShaderDescription());
+    auto shader = Shader::load(assetManager, renderApi, Shader::getDefaultShaderDescription());
     asset_ptr<Shader> skinnedShader;
     if (hasAnySkinning)
-        skinnedShader = Shader::load(engine, Shader::getSkinnedShaderDescription());
+        skinnedShader = Shader::load(assetManager, renderApi, Shader::getSkinnedShaderDescription());
 
     // -------------------------------------------------------------------------
     // Materials
@@ -264,18 +268,18 @@ std::vector<Entity> MeshReader::instantiate(
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* mat = aiscene->mMaterials[i];
 
-        auto diffuse = load(engine, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!diffuse) diffuse = load(engine, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!diffuse) diffuse = assetManager->get<Texture>("builtin://textures/white");
+        auto diffuse = load(assetManager, renderApi, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) diffuse = load(assetManager, renderApi, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) diffuse = assetManager->load<Texture>("builtin://textures/white");
 
-        auto normalMap = load(engine, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
-        if (!normalMap) normalMap = assetManager->get<Texture>("builtin://textures/normal");
+        auto normalMap = load(assetManager, renderApi, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
+        if (!normalMap) normalMap = assetManager->load<Texture>("builtin://textures/normal@norm");
 
-        auto metallicRoughness = load(engine, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!metallicRoughness) metallicRoughness = assetManager->get<Texture>("builtin://textures/default_metallic_roughness");
+        auto metallicRoughness = load(assetManager, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!metallicRoughness) metallicRoughness = assetManager->load<Texture>("builtin://textures/default_metallic_roughness");
 
         auto createMat = [&](asset_ptr<Shader> sh) {
-            auto m2 = assetManager->emplace<Material>(assets::no_path{}, engine, sh);
+            auto m2 = assetManager->emplace<Material>(renderApi, sh);
             if (diffuse) m2->setTexture(0, diffuse);
             if (normalMap) m2->setTexture(1, normalMap);
             if (metallicRoughness) m2->setTexture(2, metallicRoughness);
@@ -336,7 +340,7 @@ std::vector<Entity> MeshReader::instantiate(
 
     for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
         aiMesh* aiMesh = aiscene->mMeshes[i];
-        meshes.push_back(assetManager->emplace<Mesh>(assets::no_path{}));
+        meshes.push_back(assetManager->emplace<Mesh>());
         auto mesh = meshes.back();
 
         std::vector<uint16_t> indices;
@@ -388,8 +392,8 @@ std::vector<Entity> MeshReader::instantiate(
                 }
                 verts.push_back(sv);
             }
-            mesh->vertexBuffer = std::make_shared<VertexBuffer>(engine, skinnedVertexInput, sizeof(SkinnedVertex) * verts.size());
-            mesh->vertexBuffer->updateBuffer(engine, verts.data(), sizeof(SkinnedVertex) * verts.size());
+            mesh->vertexBuffer = std::make_shared<VertexBuffer>(renderApi, skinnedVertexInput, sizeof(SkinnedVertex) * verts.size());
+            mesh->vertexBuffer->updateBuffer(renderApi, verts.data(), sizeof(SkinnedVertex) * verts.size());
         } else {
             std::vector<Vertex> verts;
             verts.reserve(aiMesh->mNumVertices);
@@ -415,12 +419,12 @@ std::vector<Entity> MeshReader::instantiate(
                 }
                 verts.push_back(vx);
             }
-            mesh->vertexBuffer = std::make_shared<VertexBuffer>(engine, vertexInput, sizeof(Vertex) * verts.size());
-            mesh->vertexBuffer->updateBuffer(engine, verts.data(), sizeof(Vertex) * verts.size());
+            mesh->vertexBuffer = std::make_shared<VertexBuffer>(renderApi, vertexInput, sizeof(Vertex) * verts.size());
+            mesh->vertexBuffer->updateBuffer(renderApi, verts.data(), sizeof(Vertex) * verts.size());
         }
 
-        mesh->indexBuffer = std::make_shared<BufferObject>(engine, BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
-        mesh->indexBuffer->updateBuffer(engine, indices.data(), sizeof(uint16_t) * indices.size());
+        mesh->indexBuffer = std::make_shared<BufferObject>(renderApi, BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
+        mesh->indexBuffer->updateBuffer(renderApi, indices.data(), sizeof(uint16_t) * indices.size());
         mesh->faces.push_back({0, static_cast<uint32_t>(indices.size())});
     }
 
@@ -459,7 +463,7 @@ std::vector<Entity> MeshReader::instantiate(
 
     std::shared_ptr<BufferObject> sharedBoneBuffer;
     if (hasAnySkinning)
-        sharedBoneBuffer = std::make_shared<BufferObject>(engine, BufferBinding::UNIFORM, sizeof(BonesUniform));
+        sharedBoneBuffer = std::make_shared<BufferObject>(renderApi, BufferBinding::UNIFORM, sizeof(BonesUniform));
 
     // -------------------------------------------------------------------------
     // Create entities from scene hierarchy

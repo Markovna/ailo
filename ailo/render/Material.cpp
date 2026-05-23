@@ -1,14 +1,17 @@
 #include "Material.h"
 
-#include "Engine.h"
 #include "Renderer.h"
 #include "RenderPrimitive.h"
 
-ailo::Material::Material(Engine& engine, asset_ptr<Shader>& shader)
-    : m_shader(shader) {
+ailo::Material::Material(RenderAPI* renderApi, asset_ptr<Shader>& shader)
+    : m_shader(shader), m_renderAPI(renderApi) {
     if (auto descriptorSetLayout = shader->getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL))) {
-        m_descriptorSet = engine.getRenderAPI()->createDescriptorSet(descriptorSetLayout);
+        m_descriptorSet = renderApi->createDescriptorSet(descriptorSetLayout);
     }
+}
+
+ailo::Material::~Material() {
+    release();
 }
 
 void ailo::Material::setTexture(uint32_t binding, asset_ptr<Texture> texture) {
@@ -47,11 +50,11 @@ void ailo::Material::bindDescriptorSet(RenderAPI& renderAPI) const {
     }
 }
 
-void ailo::Material::destroy(Engine& engine) {
-    engine.getRenderAPI()->destroyDescriptorSet(m_descriptorSet);
+void ailo::Material::release() {
+    m_renderAPI->destroyDescriptorSet(m_descriptorSet);
     m_shader.reset();
 }
 
-ailo::asset_ptr<ailo::Material> ailo::Material::create(Engine& engine, asset_ptr<Shader> shader) {
-    return engine.getAssetManager()->emplace<Material>(assets::no_path{}, engine, shader);
+ailo::asset_ptr<ailo::Material> ailo::Material::create(AssetManager* loader, RenderAPI* renderApi, asset_ptr<Shader> shader) {
+    return loader->emplace<Material>(renderApi, shader);
 }

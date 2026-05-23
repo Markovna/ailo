@@ -57,6 +57,7 @@ void Application::init() {
   m_window = m_platform->createWindow("Ailo", WIDTH, HEIGHT);
 
   m_engine = std::make_unique<ailo::Engine>(m_window);
+
   auto* renderAPI = m_engine->getRenderAPI();
 
   m_scene = m_engine->createScene();
@@ -68,20 +69,22 @@ void Application::init() {
 
   m_camera = std::make_unique<ailo::Camera>();
 
-  auto skyboxShader = ailo::Shader::load(*m_engine, ailo::Shader::getSkyboxShaderDescription());
-  auto skyboxMaterial = ailo::Material::create(*m_engine, skyboxShader);
+  auto skyboxShader = ailo::Shader::load(m_engine->getAssetManager(), m_engine->getRenderAPI(), ailo::Shader::getSkyboxShaderDescription());
+  auto skyboxMaterial = ailo::Material::create(m_engine->getAssetManager(), m_engine->getRenderAPI(), skyboxShader);
   auto cubemapTex = ailo::Texture::loadCubemap(
-      *m_engine,
+      m_engine->getAssetManager(),
+      m_engine->getRenderAPI(),
       "assets/textures/yokohama/yokohama.jpg",
       vk::Format::eR8G8B8A8Srgb);
   skyboxMaterial->setTexture(0, cubemapTex);
   auto skyboxEntity = m_scene->addEntity();
   ailo::Renderable& skybox = m_scene->addComponent<ailo::Renderable>(skyboxEntity);
-  skybox.mesh = ailo::Mesh::cube(*m_engine);
+  skybox.mesh = ailo::Mesh::cube(m_engine->getAssetManager(), m_engine->getRenderAPI());
   skybox.materials.push_back(skyboxMaterial);
 
   auto iblPrefilter = ailo::Texture::loadCubemap(
-    *m_engine,
+    m_engine->getAssetManager(),
+    m_engine->getRenderAPI(),
     "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
     vk::Format::eR32G32B32A32Sfloat,
     true
@@ -95,8 +98,8 @@ void Application::init() {
   // scale = glm::translate(scale, glm::vec3(200.0f, 0.0f, 0.0f));
   scale = glm::rotate(scale, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-  ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/sponza/sponza.gltf");
-  ailo::MeshReader::instantiate(*m_engine, *m_scene, "assets/models/Roundhouse Kick.fbx", scale);
+  ailo::MeshReader::instantiate(m_engine->getAssetManager(), m_engine->getRenderAPI(), *m_scene, "assets/models/sponza/sponza.gltf");
+  ailo::MeshReader::instantiate(m_engine->getAssetManager(), m_engine->getRenderAPI(), *m_scene, "assets/models/Roundhouse Kick.fbx", scale);
 }
 
 void Application::mainLoop() {
@@ -260,20 +263,20 @@ void Application::drawFrame() {
         animator.currentTime = std::fmod(animator.currentTime, clip.duration);
 
       animator.skeleton->updateBoneTransforms(animator.currentTime, clip, bonesData);
-      animator.boneBuffer->updateBuffer(*m_engine, &bonesData, sizeof(bonesData));
+      animator.boneBuffer->updateBuffer(m_engine->getRenderAPI(), &bonesData, sizeof(bonesData));
     }
   }
 
-  if (!renderer->beginFrame(*m_engine)) {
+  if (!renderer->beginFrame()) {
     return;
   }
 
-  renderer->shadowPass(*m_engine, *m_scene);
-  renderer->colorPass(*m_engine, *m_scene, *m_camera);
+  renderer->shadowPass(*m_scene);
+  renderer->colorPass(*m_scene, *m_camera);
 
   drawImGui();
 
-  renderer->endFrame(*m_engine);
+  renderer->endFrame();
 }
 
 void Application::drawImGui() {

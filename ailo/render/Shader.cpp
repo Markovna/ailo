@@ -3,6 +3,7 @@
 #include "Engine.h"
 #include "OS.h"
 #include "Renderer.h"
+#include "assets/Assets.h"
 #include "assimp/Vertex.h"
 
 namespace ailo {
@@ -15,12 +16,12 @@ DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) cons
     return  m_descriptorSetLayouts[setIndex];
 }
 
-void Shader::destroy(Engine& engine) {
+void Shader::release() {
     for (auto& layout : m_descriptorSetLayouts) {
-        engine.getRenderAPI()->destroyDescriptorSetLayout(layout);
+        m_renderApi->destroyDescriptorSetLayout(layout);
     }
 
-    engine.getRenderAPI()->destroyProgram(m_program);
+    m_renderApi->destroyProgram(m_program);
 }
 
 ShaderDescription& Shader::getDefaultShaderDescription() {
@@ -179,18 +180,21 @@ ShaderDescription& Shader::getSkinnedShadowShaderDescription() {
     return description;
 }
 
-asset_ptr<Shader> Shader::load(Engine& engine, const ShaderDescription& description) {
-    return engine.getAssetManager()->emplace<Shader>(assets::no_path{}, engine, description);
+asset_ptr<Shader> Shader::load(AssetManager* assetManager, RenderAPI* renderApi, const ShaderDescription& description) {
+    return assetManager->emplace<Shader>(renderApi, description);
 }
 
-Shader::Shader(Engine& engine, const ShaderDescription& description)
-    : m_description(description) {
+Shader::Shader(RenderAPI* renderApi, const ShaderDescription& description)
+    : m_description(description), m_renderApi(renderApi) {
 
     for (auto& layout : m_description.layout) {
-        m_descriptorSetLayouts.push_back(engine.getRenderAPI()->createDescriptorSetLayout(layout));
+        m_descriptorSetLayouts.push_back(renderApi->createDescriptorSetLayout(layout));
     }
 
-    m_program = engine.getRenderAPI()->createProgram(description);
+    m_program = renderApi->createProgram(description);
 }
 
+Shader::~Shader() {
+    release();
+}
 }

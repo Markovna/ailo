@@ -25,6 +25,7 @@ add_subdirectory(tools/resgen)
 # Add executable
 add_executable(ailo
     ailo/main.cpp
+    ailo/assets/Assets.h
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
     ailo/render/ImGuiProcessor.cpp
@@ -81,7 +82,6 @@ add_executable(ailo
     ailo/render/Program.h
     ailo/render/vulkan/Resources.cpp
     ailo/render/vulkan/Resources.h
-        ailo/common/AssetPool.h
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
         ailo/render/Renderable.cpp
@@ -97,8 +97,6 @@ add_executable(ailo
         ailo/ecs/AnimationSystem.h
         ailo/platform/Platform.cpp
         ailo/platform/Platform.h
-        ailo/App.cpp
-        ailo/App.h
         ailo/di/di.h
 )
 

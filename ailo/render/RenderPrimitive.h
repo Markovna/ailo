@@ -10,8 +10,8 @@ class Shader;
 
 class BufferObject {
  public:
-  BufferObject(Engine&, BufferBinding, size_t byteSize);
-  void updateBuffer(Engine&, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
+  BufferObject(RenderAPI*, BufferBinding, size_t byteSize);
+  void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
   ~BufferObject();
   BufferHandle getHandle() const { return m_handle; }
 
@@ -34,8 +34,8 @@ enum class VertexLocation {
 
 class VertexBuffer {
 public:
- VertexBuffer(Engine&, const VertexInputDescription& description, size_t byteSize);
- void updateBuffer(Engine&, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
+ VertexBuffer(RenderAPI*, const VertexInputDescription& description, size_t byteSize);
+ void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
  ~VertexBuffer();
 
  BufferHandle getBuffer() const { return m_bufferHandle; }

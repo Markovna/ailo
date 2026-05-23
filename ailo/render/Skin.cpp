@@ -6,8 +6,8 @@
 
 namespace ailo {
 
-Skin::Skin(Engine& engine)
-    : m_buffer(std::make_shared<BufferObject>(engine, BufferBinding::UNIFORM, sizeof(BonesUniform)))
+Skin::Skin(RenderAPI* renderApi)
+    : m_buffer(std::make_shared<BufferObject>(renderApi, BufferBinding::UNIFORM, sizeof(BonesUniform)))
 { }
 
 Skin::Skin(std::shared_ptr<BufferObject> sharedBuffer)

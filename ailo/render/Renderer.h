@@ -145,28 +145,28 @@ struct RenderData {
 
 class Renderer {
 public:
-  Renderer(Engine&);
+  Renderer(RenderAPI*, AssetManager*);
   ~Renderer();
 
-  bool beginFrame(Engine&);
-  void shadowPass(Engine&, Scene& scene);
-  void colorPass(Engine&, Scene& scene, const Camera& camera);
-  void endFrame(Engine&);
-  void onSceneCreated(Engine&, Scene&);
+  bool beginFrame();
+  void shadowPass(Scene& scene);
+  void colorPass(Scene& scene, const Camera& camera);
+  void endFrame();
+  void onSceneCreated(Scene&);
 
-  void terminate(Engine&);
+  void terminate();
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:
-  void prepare(Engine&, Scene&);
+  void prepare(Scene&);
   void onDestroyRenderable(entt::registry& registry, entt::entity entity);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
-  static asset_ptr<Texture> createWhiteTexture(Engine&);
-  static asset_ptr<Texture> createBlackTexture(Engine&);
-  static asset_ptr<Texture> createDefaultNormalTexture(Engine&);
-  static asset_ptr<Texture> createDefaultMetallicRoughnessTexture(Engine&);
+  asset_ptr<Texture> createWhiteTexture(AssetManager*);
+  asset_ptr<Texture> createBlackTexture(AssetManager*);
+  asset_ptr<Texture> createDefaultNormalTexture(AssetManager*);
+  asset_ptr<Texture> createDefaultMetallicRoughnessTexture(AssetManager*);
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
@@ -182,7 +182,7 @@ private:
   asset_ptr<Texture> m_iblDfgLut;
   TextureHandle m_iblSpecularMap;
 
-  std::vector<asset_ptr<Texture>> m_persistentTextures;
+  std::vector<asset_ptr<Asset>> m_persistentAssets;
 
   // Shadow mapping
   TextureHandle m_shadowMapTexture;

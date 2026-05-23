@@ -9,7 +9,7 @@ namespace ailo {
 
 class Engine;
 
-struct Mesh : public enable_asset_ptr<Mesh> {
+struct Mesh : public Asset {
     struct Face {
         uint32_t indexOffset;
         uint32_t indexCount;
@@ -19,12 +19,12 @@ struct Mesh : public enable_asset_ptr<Mesh> {
     std::shared_ptr<BufferObject> indexBuffer;
     std::vector<Face> faces;
 
-    static asset_ptr<Mesh> cube(Engine&);
+    static asset_ptr<Mesh> cube(AssetManager* assetManager, RenderAPI* renderApi);
 };
 
 class MeshReader {
 public:
-    static std::vector<Entity> instantiate(Engine&, Scene&, const std::string& path, const glm::mat4& transform = glm::mat4(1.0f));
+    static std::vector<Entity> instantiate(AssetManager* assetManager, RenderAPI* renderApi, Scene&, const std::string& path, const glm::mat4& transform = glm::mat4(1.0f));
 };
 
 }

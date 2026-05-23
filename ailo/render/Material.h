@@ -7,9 +7,10 @@ namespace ailo {
 
 class BufferObject;
 
-class Material : public enable_asset_ptr<Material> {
+class Material : public Asset {
 public:
-    Material(Engine& engine, asset_ptr<Shader>& shader);
+    Material(RenderAPI*, asset_ptr<Shader>& shader);
+    ~Material();
     void setTexture(uint32_t binding, asset_ptr<Texture> texture);
     void setBuffer(uint32_t binding, BufferObject* buffer);
 
@@ -21,9 +22,9 @@ public:
 
     [[nodiscard]] const Shader* getShader() const { return m_shader.get(); }
 
-    void destroy(Engine&);
+    void release();
 
-    static asset_ptr<Material> create(Engine&, asset_ptr<Shader>);
+    static asset_ptr<Material> create(AssetManager*, RenderAPI*, asset_ptr<Shader>);
 
 private:
     DescriptorSetHandle m_descriptorSet;
@@ -31,6 +32,7 @@ private:
     std::unordered_map<uint32_t, BufferObject*> m_buffers;
     std::bitset<64> m_pendingBindings;
     asset_ptr<Shader> m_shader;
+    RenderAPI* m_renderAPI = nullptr;
 };
 
 }
