@@ -6,6 +6,7 @@
 #include "Engine.h"
 #include "Mesh.h"
 #include "Shader.h"
+#include "Material.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"

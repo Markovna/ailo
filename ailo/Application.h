@@ -41,11 +41,14 @@ class Application {
 
     void init();
     void mainLoop();
-    void handleInput();
     void updateTransforms();
     void drawFrame();
     void cleanup();
     void drawImGui();
 
     void handleImGuiEvent(ailo::Event&);
+    void handleInput(const ailo::MouseButtonPressedEvent& e);
+    void handleInput(const ailo::MouseButtonReleasedEvent& e);
+    void handleInput(const ailo::MouseMovedEvent& mouseMoved);
+    void handleInput(const ailo::MouseScrolledEvent& scroll);
 };

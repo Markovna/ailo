@@ -1,5 +1,7 @@
 #include "Platform.h"
 #include <GLFW/glfw3.h>
+#include "input/InputTypes.h"
+#include "input/InputSystem.h"
 
 namespace ailo {
 

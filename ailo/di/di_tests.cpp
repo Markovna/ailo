@@ -260,6 +260,24 @@ void test_reference_injection() {
     std::cout << "\n";
 }
 
+void test_injector_builder() {
+    std::cout << "=== test_injector_builder ===\n";
+
+    auto injector = di::build_injector()
+        .add(di::bind<ILogger>.to<ConsoleLogger>())
+        .add(di::bind<IDatabase>.to<SqlDatabase>())
+        .build();
+
+    // AppService depends on ILogger + IDatabase.
+    // IDatabase (SqlDatabase) depends on ILogger.
+    // The injector resolves the whole graph.
+    auto service = injector.create<std::shared_ptr<AppService>>();
+    int result = service->run();
+    assert(result == 42);
+    std::cout << "service result: " << result << "\n\n";
+
+}
+
 int main() {
     test_basic_binding();
     test_transitive_dependencies();
@@ -270,6 +288,7 @@ int main() {
     test_unique_ptr_injection();
     test_raw_pointer_injection();
     test_reference_injection();
+    test_injector_builder();
 
     std::cout << "All tests passed!\n";
     return 0;

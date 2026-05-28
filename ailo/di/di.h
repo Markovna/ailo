@@ -374,4 +374,27 @@ auto make_injector(TDeps... deps) {
     return injector<TDeps...>(std::move(deps)...);
 }
 
+template<typename ...TDeps>
+class injector_builder {
+public:
+    injector_builder(std::tuple<TDeps...> deps) : bindings_(deps) {}
+
+    template<typename TDep>
+    auto add(TDep&& dep) {
+        return injector_builder<TDep, TDeps...>(
+            std::tuple_cat(std::make_tuple(std::forward<TDep>(dep)), bindings_));
+    }
+
+    auto build() {
+        return make_injector(std::get<TDeps>(bindings_)...);
+    }
+
+private:
+    std::tuple<TDeps...> bindings_;
+};
+
+inline auto build_injector() {
+    return injector_builder(std::tuple<>());
+}
+
 } // namespace di

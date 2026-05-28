@@ -3,6 +3,7 @@
 #include "RenderPrimitive.h"
 #include <memory>
 
+#include "assets/Assets.h"
 #include "ecs/Scene.h"
 
 namespace ailo {

@@ -12,8 +12,12 @@
 #include <functional>
 
 #include "Renderable.h"
+#include "Shader.h"
 #include "Skeleton.h"
 #include "Skin.h"
+#include "Texture.h"
+#include "Material.h"
+#include "assets/Assets.h"
 #include "ecs/AnimatorComponent.h"
 #include "ecs/Scene.h"
 #include "ecs/Transform.h"

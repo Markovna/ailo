@@ -5,6 +5,7 @@
 #include "render/Renderer.h"
 #include "input/InputSystem.h"
 #include "assets/Assets.h"
+#include "render/Texture.h"
 
 namespace ailo {
 

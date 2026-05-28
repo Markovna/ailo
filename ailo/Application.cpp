@@ -15,15 +15,12 @@
 
 #include <memory>
 #include <vector>
-#include <iostream>
 
-#include "OS.h"
 #include "ecs/SceneLighting.h"
-#include "ecs/Transform.h"
 #include "ecs/AnimatorComponent.h"
+#include "render/Material.h"
 #include "render/Mesh.h"
 #include "render/Renderable.h"
-#include "render/Skin.h"
 
 const uint32_t WIDTH = 2400;
 const uint32_t HEIGHT = 1400;
@@ -100,6 +97,30 @@ void Application::init() {
 
   ailo::MeshReader::instantiate(m_engine->getAssetManager(), m_engine->getRenderAPI(), *m_scene, "assets/models/sponza/sponza.gltf");
   ailo::MeshReader::instantiate(m_engine->getAssetManager(), m_engine->getRenderAPI(), *m_scene, "assets/models/Roundhouse Kick.fbx", scale);
+
+  auto inputSystem = m_engine->getInputSystem();
+  inputSystem->subscribe<ailo::KeyPressedEvent>([](const ailo::KeyPressedEvent& e) {
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (e.modifiers | ailo::ModifierKey::Control) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (e.modifiers | ailo::ModifierKey::Shift) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Alt, (e.modifiers | ailo::ModifierKey::Alt) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Super, (e.modifiers | ailo::ModifierKey::Super) != ailo::ModifierKey::None);
+
+    //TODO: map ailo keys to imgui keys
+  });
+
+  inputSystem->subscribe<ailo::MouseButtonPressedEvent>(
+    [this](auto& e) { this->handleInput(e); });
+
+  inputSystem->subscribe<ailo::MouseButtonReleasedEvent>(
+    [this](auto& e) { this->handleInput(e); });
+
+  inputSystem->subscribe<ailo::MouseMovedEvent>(
+    [this](auto& e) { this->handleInput(e); });
+
+  inputSystem->subscribe<ailo::MouseScrolledEvent>(
+    [this](auto& e) { this->handleInput(e); });
 }
 
 void Application::mainLoop() {
@@ -110,7 +131,6 @@ void Application::mainLoop() {
 
     m_platform->pumpEvents(m_window, m_engine->getInputSystem());
     m_engine->getInputSystem()->processEvents();
-    handleInput();
 
     drawFrame();
 
@@ -132,87 +152,80 @@ void Application::handleImGuiEvent(ailo::Event& event) {
   }
 }
 
-void Application::handleInput() {
-  auto* inputSystem = m_engine->getInputSystem();
+void Application::handleInput(const ailo::MouseButtonPressedEvent& e) {
+  ImGuiIO& io = ImGui::GetIO();
+  io.AddMouseButtonEvent(static_cast<int>(e.button), true);
 
-  ailo::Event event;
-  while (inputSystem->pollEvent(event)) {
-    handleImGuiEvent(event);
-
-    // Handle camera rotation on mouse drag
-    if (auto mousePressed = event.as<ailo::MouseButtonPressedEvent>()) {
-      ImGuiIO& io = ImGui::GetIO();
-      io.AddMouseButtonEvent(static_cast<int>(mousePressed->button), true);
-
-      if (mousePressed->button == ailo::MouseButton::Left) {
-        if (inputSystem->isKeyPressed(ailo::KeyCode::LeftAlt)) {
-          bool controlPressed = inputSystem->isKeyPressed(ailo::KeyCode::LeftControl);
-          m_isRotating = controlPressed == false;
-          m_isMoving = controlPressed;
-          m_lastMouseX = mousePressed->x;
-          m_lastMouseY = mousePressed->y;
-        }
-      }
-    }
-    else if (auto mouseReleased = event.as<ailo::MouseButtonReleasedEvent>()) {
-      if (mouseReleased->button == ailo::MouseButton::Left) {
-        m_isRotating = false;
-        m_isMoving = false;
-      }
-
-      ImGuiIO& io = ImGui::GetIO();
-      io.AddMouseButtonEvent(static_cast<int>(mouseReleased->button), false);
-    }
-    else if (auto mouseMoved = event.as<ailo::MouseMovedEvent>()) {
-      ImGuiIO& io = ImGui::GetIO();
-      io.AddMousePosEvent(static_cast<float>(mouseMoved->x), static_cast<float>(mouseMoved->y));
-
-      if (m_isRotating) {
-        double deltaX = mouseMoved->x - m_lastMouseX;
-        double deltaY = mouseMoved->y - m_lastMouseY;
-
-        // Update camera rotation
-        m_cameraYaw += static_cast<float>(deltaX) * 0.005f;
-        m_cameraPitch += static_cast<float>(deltaY) * 0.005f;
-
-        // Clamp pitch to avoid gimbal lock
-        m_cameraPitch = glm::clamp(m_cameraPitch, -glm::pi<float>() / 2.0f + 0.1f, glm::pi<float>() / 2.0f - 0.1f);
-
-        m_lastMouseX = mouseMoved->x;
-        m_lastMouseY = mouseMoved->y;
-      }
-      else if (m_isMoving) {
-        double deltaX = mouseMoved->x - m_lastMouseX;
-        double deltaY = mouseMoved->y - m_lastMouseY;
-
-        // Calculate camera direction vectors
-        float camX = m_cameraDistance * cos(m_cameraPitch) * cos(m_cameraYaw);
-        float camY = m_cameraDistance * sin(m_cameraPitch);
-        float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
-
-        glm::vec3 cameraPos = m_cameraTarget + glm::vec3(camX, camY, camZ);
-        glm::vec3 forward = glm::normalize(m_cameraTarget - cameraPos);
-        glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
-        glm::vec3 up = glm::normalize(glm::cross(right, forward));
-
-        // Pan speed based on distance from target
-        float panSpeed = m_cameraDistance * 0.001f;
-
-        // Move camera target based on mouse delta
-        m_cameraTarget -= right * static_cast<float>(deltaX) * panSpeed;
-        m_cameraTarget += up * static_cast<float>(deltaY) * panSpeed;
-
-        m_lastMouseX = mouseMoved->x;
-        m_lastMouseY = mouseMoved->y;
-      }
-    }
-    // Handle camera zoom on scroll
-    else if (auto scroll = event.as<ailo::MouseScrolledEvent>()) {
-      m_cameraDistance -= static_cast<float>(scroll->yOffset) * 0.5f;
-      // Clamp distance to reasonable values
-      m_cameraDistance = glm::clamp(m_cameraDistance, 1.0f, 1000.0f);
+  if (e.button == ailo::MouseButton::Left) {
+    if (m_engine->getInputSystem()->isKeyPressed(ailo::KeyCode::LeftAlt)) {
+      bool controlPressed = m_engine->getInputSystem()->isKeyPressed(ailo::KeyCode::LeftControl);
+      m_isRotating = controlPressed == false;
+      m_isMoving = controlPressed;
+      m_lastMouseX = e.x;
+      m_lastMouseY = e.y;
     }
   }
+}
+
+void Application::handleInput(const ailo::MouseButtonReleasedEvent& e) {
+    if (e.button == ailo::MouseButton::Left) {
+      m_isRotating = false;
+      m_isMoving = false;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMouseButtonEvent(static_cast<int>(e.button), false);
+}
+
+void Application::handleInput(const ailo::MouseMovedEvent& mouseMoved) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMousePosEvent(static_cast<float>(mouseMoved.x), static_cast<float>(mouseMoved.y));
+
+    if (m_isRotating) {
+      double deltaX = mouseMoved.x - m_lastMouseX;
+      double deltaY = mouseMoved.y - m_lastMouseY;
+
+      // Update camera rotation
+      m_cameraYaw += static_cast<float>(deltaX) * 0.005f;
+      m_cameraPitch += static_cast<float>(deltaY) * 0.005f;
+
+      // Clamp pitch to avoid gimbal lock
+      m_cameraPitch = glm::clamp(m_cameraPitch, -glm::pi<float>() / 2.0f + 0.1f, glm::pi<float>() / 2.0f - 0.1f);
+
+      m_lastMouseX = mouseMoved.x;
+      m_lastMouseY = mouseMoved.y;
+    }
+    else if (m_isMoving) {
+      double deltaX = mouseMoved.x - m_lastMouseX;
+      double deltaY = mouseMoved.y - m_lastMouseY;
+
+      // Calculate camera direction vectors
+      float camX = m_cameraDistance * cos(m_cameraPitch) * cos(m_cameraYaw);
+      float camY = m_cameraDistance * sin(m_cameraPitch);
+      float camZ = m_cameraDistance * cos(m_cameraPitch) * sin(m_cameraYaw);
+
+      glm::vec3 cameraPos = m_cameraTarget + glm::vec3(camX, camY, camZ);
+      glm::vec3 forward = glm::normalize(m_cameraTarget - cameraPos);
+      glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+      glm::vec3 up = glm::normalize(glm::cross(right, forward));
+
+      // Pan speed based on distance from target
+      float panSpeed = m_cameraDistance * 0.001f;
+
+      // Move camera target based on mouse delta
+      m_cameraTarget -= right * static_cast<float>(deltaX) * panSpeed;
+      m_cameraTarget += up * static_cast<float>(deltaY) * panSpeed;
+
+      m_lastMouseX = mouseMoved.x;
+      m_lastMouseY = mouseMoved.y;
+    }
+}
+
+void Application::handleInput(const ailo::MouseScrolledEvent& scroll) {
+    // Handle camera zoom on scroll
+    m_cameraDistance -= static_cast<float>(scroll.yOffset) * 0.5f;
+    // Clamp distance to reasonable values
+    m_cameraDistance = glm::clamp(m_cameraDistance, 1.0f, 1000.0f);
 }
 
 void Application::updateTransforms() {

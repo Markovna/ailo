@@ -1,7 +1,9 @@
 #pragma once
-#include "input/InputSystem.h"
+#include "GLFW/glfw3.h"
+#include "input/InputTypes.h"
 
 namespace ailo {
+class InputSystem;
 
 class Platform {
 public:

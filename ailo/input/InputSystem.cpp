@@ -8,6 +8,11 @@ void InputSystem::processEvents() {
     // Reset mouse delta each frame
     m_mouseDeltaX = 0.0;
     m_mouseDeltaY = 0.0;
+
+    Event event;
+    while (pollEvent(event)) {
+        onEvent(event);
+    }
 }
 
 bool InputSystem::pollEvent(Event& outEvent) {
@@ -22,12 +27,12 @@ bool InputSystem::pollEvent(Event& outEvent) {
 
 void InputSystem::onEvent(Event& event) {
     std::visit(utils::overloaded {
-      [this](KeyPressedEvent& e) { onKeyPressed(e); },
-      [this](KeyReleasedEvent& e) { onKeyReleased(e); },
-      [this](MouseButtonPressedEvent& e) { onMouseButtonPressed(e); },
-      [this](MouseButtonReleasedEvent& e) { onMouseButtonReleased(e); },
-      [this](MouseMovedEvent& e) { onMouseMoved(e); },
-      [](auto&& e) {  }
+      [this](KeyPressedEvent& e)           { onKeyPressed(e);           notify(e); },
+      [this](KeyReleasedEvent& e)          { onKeyReleased(e);          notify(e); },
+      [this](MouseButtonPressedEvent& e)   { onMouseButtonPressed(e);   notify(e); },
+      [this](MouseButtonReleasedEvent& e)  { onMouseButtonReleased(e);  notify(e); },
+      [this](MouseMovedEvent& e)           { onMouseMoved(e);           notify(e); },
+      [this](auto& e)                      { notify(e); }
     }, event);
 }
 
@@ -99,8 +104,7 @@ void InputSystem::getMouseDelta(double& deltaX, double& deltaY) const {
 }
 
 void InputSystem::pushEvent(Event&& event) {
-    auto& e = m_eventQueue.emplace(std::move(event));
-    onEvent(e);
+    m_eventQueue.emplace(std::move(event));
 }
 
 } // namespace ailo
