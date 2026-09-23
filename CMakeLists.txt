@@ -209,7 +209,7 @@ function(add_radiance_map TARGET INPUT_HDR)
 
     set(OPTIONAL_ARGS "")
     if(RADIANCE_SIZE)
-        list(APPEND OPTIONAL_ARGS $RADIANCE_SIZE})
+        list(APPEND OPTIONAL_ARGS ${RADIANCE_SIZE})
         if(RADIANCE_SAMPLES)
             list(APPEND OPTIONAL_ARGS ${RADIANCE_SAMPLES})
         endif()
@@ -218,25 +218,19 @@ function(add_radiance_map TARGET INPUT_HDR)
     set(OUTPUT_DIR ${CMAKE_BINARY_DIR}/assets/textures/${OUTPUT_NAME})
     set(OUTPUT_BASE ${OUTPUT_DIR}/${OUTPUT_NAME}.hdr)
 
-    # The 6 cubemap face files that resgen produces
-    set(FACE_OUTPUTS
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_px.hdr
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_nx.hdr
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_py.hdr
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_ny.hdr
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_pz.hdr
-            ${OUTPUT_DIR}/${OUTPUT_NAME}_nz.hdr
-    )
+    set(STAMP ${OUTPUT_DIR}/${OUTPUT_NAME}.stamp)
 
     add_custom_command(
-            OUTPUT ${FACE_OUTPUTS}
+            OUTPUT ${STAMP}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
             COMMAND $<TARGET_FILE:resgen> ibl-prefilter ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
+            COMMAND ${CMAKE_COMMAND} -E touch ${STAMP}
             DEPENDS resgen ${CMAKE_SOURCE_DIR}/${INPUT_HDR}
             COMMENT "Generating radiance map from ${INPUT_HDR}"
+            USES_TERMINAL
     )
 
-    target_sources(${TARGET} PRIVATE ${FACE_OUTPUTS})
+    target_sources(${TARGET} PRIVATE ${STAMP})
 endfunction()
 
 add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
