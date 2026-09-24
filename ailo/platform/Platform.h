@@ -17,6 +17,7 @@ public:
     WindowHandle createWindow(const char* title, int width, int height);
     bool windowShouldClose(WindowHandle window_handle);
     void destroyWindow(WindowHandle handle);
+    void getFramebufferSize(WindowHandle handle, int& width, int& height);
 
     void pumpEvents(WindowHandle, InputSystem*);
     float getTime();

@@ -102,10 +102,10 @@ void Application::init() {
   inputSystem->subscribe<ailo::KeyPressedEvent>([](const ailo::KeyPressedEvent& e) {
 
     ImGuiIO& io = ImGui::GetIO();
-    io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (e.modifiers | ailo::ModifierKey::Control) != ailo::ModifierKey::None);
-    io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (e.modifiers | ailo::ModifierKey::Shift) != ailo::ModifierKey::None);
-    io.AddKeyEvent(ImGuiKey::ImGuiMod_Alt, (e.modifiers | ailo::ModifierKey::Alt) != ailo::ModifierKey::None);
-    io.AddKeyEvent(ImGuiKey::ImGuiMod_Super, (e.modifiers | ailo::ModifierKey::Super) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Ctrl, (e.modifiers & ailo::ModifierKey::Control) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Shift, (e.modifiers & ailo::ModifierKey::Shift) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Alt, (e.modifiers & ailo::ModifierKey::Alt) != ailo::ModifierKey::None);
+    io.AddKeyEvent(ImGuiKey::ImGuiMod_Super, (e.modifiers & ailo::ModifierKey::Super) != ailo::ModifierKey::None);
 
     //TODO: map ailo keys to imgui keys
   });
@@ -239,8 +239,14 @@ void Application::updateTransforms() {
 
   m_camera->view = glm::lookAt(m_cameraTarget + cameraPos, m_cameraTarget, up);
 
+  int fbWidth = 0, fbHeight = 0;
+  m_platform->getFramebufferSize(m_window, fbWidth, fbHeight);
+  if (fbWidth == 0 || fbHeight == 0) {
+    return;
+  }
+
   auto fov = glm::radians(60.0f);
-  m_camera->projection = glm::perspective(fov, WIDTH / (float) HEIGHT, 0.1f, 1000.0f);
+  m_camera->projection = glm::perspective(fov, fbWidth / (float) fbHeight, 0.1f, 1000.0f);
   m_camera->projection[1][1] *= -1; // Flip Y for Vulkan
 }
 

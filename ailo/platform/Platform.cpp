@@ -33,6 +33,10 @@ void Platform::destroyWindow(WindowHandle handle) {
     glfwDestroyWindow(static_cast<GLFWwindow*>(handle));
 }
 
+void Platform::getFramebufferSize(WindowHandle handle, int& width, int& height) {
+    glfwGetFramebufferSize(static_cast<GLFWwindow*>(handle), &width, &height);
+}
+
 void Platform::pumpEvents(WindowHandle handle, InputSystem* inputSystem) {
     glfwSetWindowUserPointer(static_cast<GLFWwindow*>(handle), inputSystem);
 

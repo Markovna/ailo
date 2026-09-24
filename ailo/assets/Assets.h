@@ -3,7 +3,7 @@
 #include <functional>
 
 #include <entt/entt.hpp>
-#include "Assets.h"
+#include "common/slot_map.h"
 
 namespace ailo {
 
