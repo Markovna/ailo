@@ -5,7 +5,6 @@
 
 namespace ailo {
 
-class Engine;
 
 class Shader : public Asset {
  public:

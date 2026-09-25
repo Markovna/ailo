@@ -1,6 +1,8 @@
 #pragma once
 
 #include "RenderPrimitive.h"
+#include <functional>
+#include <string>
 #include <vector>
 
 #include "Renderable.h"
@@ -54,8 +56,14 @@ struct BonesUniform {
 };
 
 struct Camera {
-  glm::mat4 projection;
-  glm::mat4 view;
+  glm::mat4 projection = glm::mat4(1.0f);
+  glm::mat4 view = glm::mat4(1.0f);
+};
+
+struct RendererSettings {
+  uint32_t shadowMapSize = 1024;
+  glm::vec4 clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
+  std::string dfgLutPath = "assets/textures/dfg_lut.hdr";
 };
 
 enum class DescriptorSetBindingPoints : uint8_t {
@@ -145,14 +153,24 @@ struct RenderData {
 
 class Renderer {
 public:
-  Renderer(RenderAPI*, AssetManager*);
+  using OverlayPass = std::move_only_function<void()>;
+
+  Renderer(RenderAPI*, AssetManager*, const RendererSettings& settings = {});
   ~Renderer();
+
+  // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
+  // Skips the frame if the swapchain image could not be acquired (e.g. during resize).
+  void render(Scene& scene, const Camera& camera);
+
+  // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
+  void addOverlayPass(OverlayPass pass);
 
   bool beginFrame();
   void shadowPass(Scene& scene);
   void colorPass(Scene& scene, const Camera& camera);
   void endFrame();
   void onSceneCreated(Scene&);
+  void onSceneDestroyed(Scene&);
 
   void terminate();
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
@@ -189,7 +207,9 @@ private:
   RenderTargetHandle m_shadowMapRenderTarget;
   asset_ptr<Shader> m_shadowShader;
   asset_ptr<Shader> m_skinnedShadowShader;
-  static constexpr uint32_t kShadowMapSize = 1024;
+
+  RendererSettings m_settings;
+  std::vector<OverlayPass> m_overlayPasses;
 
   BufferHandle m_dummyBonesBuffer;
 

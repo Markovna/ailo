@@ -24,10 +24,13 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
 
-RenderAPI::~RenderAPI() = default;
-
-void RenderAPI::shutdown() {
-    m_device->waitIdle();
+RenderAPI::~RenderAPI() {
+    // Destructors must not throw; on device loss there is nothing to wait for, so keep releasing.
+    try {
+        m_device->waitIdle();
+    } catch (const vk::SystemError& e) {
+        std::cerr << "RenderAPI: waitIdle failed during destruction: " << e.what() << std::endl;
+    }
 
     m_swapChain->destroy(*m_device);
 

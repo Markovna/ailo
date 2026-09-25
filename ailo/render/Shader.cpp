@@ -1,6 +1,5 @@
 #include "Shader.h"
 
-#include "Engine.h"
 #include "OS.h"
 #include "Renderer.h"
 #include "assets/Assets.h"

@@ -3,7 +3,6 @@
 #include "../assets/Assets.h"
 
 namespace ailo {
-class Engine;
 
 class Texture : public Asset {
 public:

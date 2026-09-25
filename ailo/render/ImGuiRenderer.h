@@ -5,22 +5,27 @@
 
 namespace ailo {
 
-class ImGuiProcessor {
+// Owns the ImGui context and renders its draw data with the RenderAPI.
+// Constructing it creates (and makes current) the ImGui context; destroying it releases the GPU objects
+// and then the context. Must be destroyed before the RenderAPI, while the GPU is idle.
+class ImGuiRenderer {
 public:
-    ImGuiProcessor(RenderAPI* renderAPI);
-    ~ImGuiProcessor();
+    explicit ImGuiRenderer(RenderAPI* renderAPI);
+    ~ImGuiRenderer();
 
-    void init();
-    void shutdown();
+    ImGuiRenderer(const ImGuiRenderer&) = delete;
+    ImGuiRenderer& operator=(const ImGuiRenderer&) = delete;
 
     void processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io);
 
 private:
     void createPipeline();
+    void releaseResources();
     void setupRenderState(ImDrawData* drawData, const ImGuiIO& io, uint32_t fbWidth, uint32_t fbHeight);
     void updateTexture(ImTextureData* tex);
 
     RenderAPI* m_renderAPI;
+    ImGuiContext* m_context = nullptr;
 
     // Resources
     ProgramHandle m_program;

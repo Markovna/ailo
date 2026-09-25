@@ -8,7 +8,6 @@
 
 namespace ailo {
 
-class Engine;
 
 struct Mesh : public Asset {
     struct Face {

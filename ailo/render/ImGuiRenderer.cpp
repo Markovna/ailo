@@ -1,12 +1,13 @@
-#include "ImGuiProcessor.h"
+#include "ImGuiRenderer.h"
 #include <OS.h>
 #include <cstring>
 #include <iostream>
 
 namespace ailo {
 
-ImGuiProcessor::ImGuiProcessor(RenderAPI* renderAPI)
-    : m_renderAPI(renderAPI)
+ImGuiRenderer::ImGuiRenderer(RenderAPI* renderAPI)
+    : m_renderAPI(renderAPI),
+      m_context(ImGui::CreateContext())
 {
   ImGuiIO& io = ImGui::GetIO();
 
@@ -14,17 +15,17 @@ ImGuiProcessor::ImGuiProcessor(RenderAPI* renderAPI)
   io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;   // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
   io.Fonts->TexDesiredFormat = ImTextureFormat_Alpha8;
+
+  createPipeline();
 }
 
-ImGuiProcessor::~ImGuiProcessor() {
-    shutdown();
+ImGuiRenderer::~ImGuiRenderer() {
+    // Texture cleanup reads the context's platform IO, so the context goes last.
+    releaseResources();
+    ImGui::DestroyContext(m_context);
 }
 
-void ImGuiProcessor::init() {
-    createPipeline();
-}
-
-void ImGuiProcessor::shutdown() {
+void ImGuiRenderer::releaseResources() {
 
     // Destroy all textures
     for (ImTextureData* tex : ImGui::GetPlatformIO().Textures) {
@@ -48,7 +49,7 @@ void ImGuiProcessor::shutdown() {
     m_renderAPI->destroyProgram(m_program);
 }
 
-void ImGuiProcessor::createPipeline() {
+void ImGuiRenderer::createPipeline() {
     // Create uniform buffer for projection matrix (2 vec2s = 16 bytes)
     m_uniformBuffer = m_renderAPI->createBuffer(ailo::BufferBinding::UNIFORM, 16);
 
@@ -96,7 +97,7 @@ void ImGuiProcessor::createPipeline() {
     );
 }
 
-void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, uint32_t fbWidth, uint32_t fbHeight) {
+void ImGuiRenderer::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, uint32_t fbWidth, uint32_t fbHeight) {
     // Bind pipeline
     m_renderAPI->bindPipeline(PipelineState{
         .program = m_program,
@@ -120,7 +121,7 @@ void ImGuiProcessor::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, u
     m_renderAPI->setViewport(0.0f, 0.0f, static_cast<float>(fbWidth), static_cast<float>(fbHeight));
 }
 
-void ImGuiProcessor::updateTexture(ImTextureData* tex) {
+void ImGuiRenderer::updateTexture(ImTextureData* tex) {
   if (tex->Status == ImTextureStatus_OK)
     return;
 
@@ -174,7 +175,7 @@ void ImGuiProcessor::updateTexture(ImTextureData* tex) {
   }
 }
 
-void ImGuiProcessor::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io) {
+void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io) {
     // Avoid rendering when minimized
     if (drawData->DisplaySize.x <= 0.0f || drawData->DisplaySize.y <= 0.0f) {
         return;

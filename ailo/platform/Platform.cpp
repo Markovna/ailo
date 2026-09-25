@@ -3,13 +3,17 @@
 #include "input/InputTypes.h"
 #include "input/InputSystem.h"
 
+#include <stdexcept>
+
 namespace ailo {
 
-void Platform::init() {
-    glfwInit();
+Platform::Platform() {
+    if (!glfwInit()) {
+        throw std::runtime_error("Failed to initialize GLFW");
+    }
 }
 
-void Platform::shutdown() {
+Platform::~Platform() {
     glfwTerminate();
 }
 
@@ -35,6 +39,10 @@ void Platform::destroyWindow(WindowHandle handle) {
 
 void Platform::getFramebufferSize(WindowHandle handle, int& width, int& height) {
     glfwGetFramebufferSize(static_cast<GLFWwindow*>(handle), &width, &height);
+}
+
+void Platform::getWindowSize(WindowHandle handle, int& width, int& height) {
+    glfwGetWindowSize(static_cast<GLFWwindow*>(handle), &width, &height);
 }
 
 void Platform::pumpEvents(WindowHandle handle, InputSystem* inputSystem) {

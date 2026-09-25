@@ -28,15 +28,11 @@ add_executable(ailo
     ailo/assets/Assets.h
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
-    ailo/render/ImGuiProcessor.cpp
-    ailo/render/ImGuiProcessor.h
+    ailo/render/ImGuiRenderer.cpp
+    ailo/render/ImGuiRenderer.h
     ailo/input/InputSystem.cpp
     ailo/input/InputSystem.h
     ailo/input/InputTypes.h
-    ailo/Engine.cpp
-    ailo/Engine.h
-    ailo/Application.cpp
-    ailo/Application.h
     ailo/render/vulkan/VulkanUtils.cpp
     ailo/render/vulkan/VulkanUtils.h
     ailo/render/RenderPrimitive.cpp
@@ -98,6 +94,17 @@ add_executable(ailo
         ailo/platform/Platform.cpp
         ailo/platform/Platform.h
         ailo/di/di.h
+        ailo/app/App.cpp
+        ailo/app/App.h
+        ailo/app/System.h
+        ailo/app/World.h
+        ailo/assets/AssetPlugin.h
+        ailo/platform/PlatformPlugin.cpp
+        ailo/platform/PlatformPlugin.h
+        ailo/render/RenderPlugin.cpp
+        ailo/render/RenderPlugin.h
+        ailo/sandbox/SandboxPlugin.cpp
+        ailo/sandbox/SandboxPlugin.h
 )
 
 # Link libraries
@@ -254,3 +261,15 @@ add_shader(ailo shaders/shadow.vert DEFINES VARIANT_SKINNING NAME shadow_skinned
 
 # Add executable
 add_executable(ditest ailo/di/di_tests.cpp)
+
+add_executable(apptest
+        ailo/app/app_tests.cpp
+        ailo/app/App.cpp
+        ailo/ecs/Scene.cpp
+)
+target_link_libraries(apptest EnTT::EnTT)
+target_include_directories(apptest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
+
+add_executable(assettest ailo/assets/asset_tests.cpp)
+target_link_libraries(assettest EnTT::EnTT)
+target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)

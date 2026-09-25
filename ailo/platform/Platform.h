@@ -8,16 +8,18 @@ class InputSystem;
 class Platform {
 public:
     using WindowHandle = void*;
-    Platform() = default;
-    ~Platform() = default;
+    // Initializes / terminates the windowing system (GLFW).
+    Platform();
+    ~Platform();
 
-    void init();
-    void shutdown();
+    Platform(const Platform&) = delete;
+    Platform& operator=(const Platform&) = delete;
 
     WindowHandle createWindow(const char* title, int width, int height);
     bool windowShouldClose(WindowHandle window_handle);
     void destroyWindow(WindowHandle handle);
     void getFramebufferSize(WindowHandle handle, int& width, int& height);
+    void getWindowSize(WindowHandle handle, int& width, int& height);
 
     void pumpEvents(WindowHandle, InputSystem*);
     float getTime();

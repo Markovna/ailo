@@ -3,7 +3,6 @@
 #include <iostream>
 #include <ecs/Scene.h>
 
-#include "Engine.h"
 #include "Mesh.h"
 #include "Shader.h"
 #include "Material.h"
@@ -30,14 +29,15 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
-Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager) : m_renderAPI(renderApi) {
+Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const RendererSettings& settings)
+  : m_settings(settings), m_renderAPI(renderApi) {
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createWhiteTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultMetallicRoughnessTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultNormalTexture(assetManager)));
 
   // vk::Format::eR32G32B32A32Sfloat
-  m_iblDfgLut = assetManager->load<Texture>("assets/textures/dfg_lut.hdr");
+  m_iblDfgLut = assetManager->load<Texture>(m_settings.dfgLutPath);
 
   auto backend = m_renderAPI;
   m_viewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
@@ -65,6 +65,25 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager) : m_renderA
 
 Renderer::~Renderer() = default;
 
+void Renderer::render(Scene& scene, const Camera& camera) {
+  if (!beginFrame()) {
+    return;
+  }
+
+  shadowPass(scene);
+  colorPass(scene, camera);
+
+  for (auto& pass : m_overlayPasses) {
+    pass();
+  }
+
+  endFrame();
+}
+
+void Renderer::addOverlayPass(OverlayPass pass) {
+  m_overlayPasses.push_back(std::move(pass));
+}
+
 bool Renderer::beginFrame() {
   return m_renderAPI->beginFrame();
 }
@@ -77,14 +96,14 @@ void Renderer::shadowPass(Scene& scene) {
     m_shadowMapTexture = backend->createTexture(
         TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
-        kShadowMapSize, kShadowMapSize);
+        m_settings.shadowMapSize, m_settings.shadowMapSize);
 
     backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture, std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP));
   }
 
   if (!m_shadowMapRenderTarget) {
     m_shadowMapRenderTarget = backend->createRenderTarget(
-        {}, m_shadowMapTexture, kShadowMapSize, kShadowMapSize, vk::SampleCountFlagBits::e1);
+        {}, m_shadowMapTexture, m_settings.shadowMapSize, m_settings.shadowMapSize, vk::SampleCountFlagBits::e1);
   }
 
   auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
@@ -185,7 +204,7 @@ void Renderer::colorPass(Scene& scene, const Camera& camera) {
   renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
   renderPass.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare };
 
-  backend->beginRenderPass(renderPass, vk::ClearColorValue(0.1f, 0.1f, 0.3f, 1.0f));
+  backend->beginRenderPass(renderPass, vk::ClearColorValue(m_settings.clearColor.r, m_settings.clearColor.g, m_settings.clearColor.b, m_settings.clearColor.a));
 
   PipelineState pipelineState {};
 
@@ -217,6 +236,10 @@ void Renderer::endFrame() {
 
 void Renderer::onSceneCreated(Scene& scene) {
   scene.onDestroy<Renderable>().connect<&Renderer::onDestroyRenderable>(*this);
+}
+
+void Renderer::onSceneDestroyed(Scene& scene) {
+  scene.onDestroy<Renderable>().disconnect<&Renderer::onDestroyRenderable>(*this);
 }
 
 void Renderer::prepare(Scene& scene) {
@@ -365,6 +388,16 @@ void Renderer::terminate() {
   backend.destroyTexture(m_shadowMapTexture);
   backend.destroyRenderTarget(m_shadowMapRenderTarget);
   backend.destroyBuffer(m_dummyBonesBuffer);
+
+  // Release asset references so the AssetManager can free them; after this the destructor touches nothing.
+  m_persistentAssets.clear();
+  m_iblDfgLut.reset();
+  m_shadowShader.reset();
+  m_skinnedShadowShader.reset();
+
+  // Raw Material pointers and overlay callbacks may refer to objects that are about to be destroyed.
+  m_renderData.clear();
+  m_overlayPasses.clear();
 }
 
 }

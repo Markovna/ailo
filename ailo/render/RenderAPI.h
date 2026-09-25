@@ -28,10 +28,12 @@ class SwapChain;
 class RenderAPI {
 public:
     explicit RenderAPI(Platform::WindowHandle window);
+    // Waits for the GPU and destroys every remaining GPU object, then the device.
+    // Everything that calls into the RenderAPI (Renderer, GPU assets, ImGuiRenderer) must be gone by then.
     ~RenderAPI();
 
-    // Initialization and shutdown
-    void shutdown();
+    RenderAPI(const RenderAPI&) = delete;
+    RenderAPI& operator=(const RenderAPI&) = delete;
 
     // Frame lifecycle
     bool beginFrame();

@@ -1,6 +1,12 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include <entt/entt.hpp>
 #include "common/slot_map.h"
@@ -35,6 +41,7 @@ class Asset {
     std::atomic<uint32_t> ref_count {0};
     asset_key key = {};
     AssetGCQueue* gc_queue = nullptr;
+    std::string path;
 
     template<typename T>
     friend class asset_ptr;
@@ -159,8 +166,12 @@ asset_ptr<U> asset_ptr_cast(const asset_ptr<V>& ptr) {
 class AssetPoolBase {
 public:
     virtual ~AssetPoolBase() = default;
-    virtual void gc() = 0;
-    virtual void clear() = 0;
+
+    // Returns the number of assets freed.
+    virtual size_t gc() = 0;
+
+    // Gives up ownership of all remaining assets without destroying them, and reports each one to stderr as a leak.
+    virtual void abandon() = 0;
 };
 
 template<typename T>
@@ -176,6 +187,7 @@ public:
         auto* asset = m_assets.get(key);
         asset->key = key;
         asset->gc_queue = &m_gcQueue;
+        asset->path = path;
         return asset;
     }
 
@@ -201,28 +213,53 @@ public:
         return m_assets.get(key);
     }
 
-    void erase(asset_key key) {
-        m_assets.erase(key);
-    }
-
-    void gc() override {
-        auto batch = m_gcQueue.drain();
-        for (auto key : batch) {
+    size_t gc() override {
+        size_t freed = 0;
+        for (auto key : m_gcQueue.drain()) {
             auto ptr = m_assets.get(key);
             if (!ptr || ptr->ref_count.load(std::memory_order_acquire) > 0) continue;
 
-            m_assets.erase(key);
+            erase(key);
+            freed++;
         }
+        return freed;
     }
 
-    void clear() override {
-        m_assets.clear();
+    void abandon() override {
+        for (T& asset : m_assets) {
+            std::cerr << "[AssetManager] leaked " << entt::type_name<T>::value()
+                      << " '" << (asset.path.empty() ? "<no path>" : asset.path) << "'"
+                      << " (" << asset.ref_count.load(std::memory_order_acquire) << " references)" << std::endl;
+
+            // The pool is going away; a holder releasing its reference later must not touch the queue.
+            asset.gc_queue = nullptr;
+        }
+
+        if (!m_assets.empty()) {
+            // Intentionally leaked: destroying these would leave their holders with dangling asset_ptrs,
+            // and their destructors could call into subsystems (e.g. the RenderAPI) that are already gone.
+            [[maybe_unused]] auto* leaked = new dod::slot_map<T, key_type>(std::move(m_assets));
+        }
         m_pathIndex.clear();
         m_gcQueue.clear();
     }
 
 private:
     using key_type = asset_key;
+
+    void erase(key_type key) {
+        auto* asset = m_assets.get(key);
+        if (!asset) return;
+
+        // The path may have been re-bound to a newer asset; only unbind it if it still points here.
+        if (!asset->path.empty()) {
+            auto it = m_pathIndex.find(asset->path);
+            if (it != m_pathIndex.end() && it->second == key) {
+                m_pathIndex.erase(it);
+            }
+        }
+        m_assets.erase(key);
+    }
 
     dod::slot_map<T, key_type> m_assets;
     std::unordered_map<std::string, key_type> m_pathIndex;
@@ -263,6 +300,12 @@ public:
 
 class AssetManager {
 public:
+    AssetManager() = default;
+    ~AssetManager() { shutdown(); }
+
+    AssetManager(const AssetManager&) = delete;
+    AssetManager& operator=(const AssetManager&) = delete;
+
     template<class T>
     void registerLoader(std::unique_ptr<AssetLoader<T>> loader) {
         const id_type id = entt::type_hash<T>::value();
@@ -316,15 +359,21 @@ public:
         return asset_ptr<T> { ptr };
     }
 
-    void gc() {
+    // Frees assets whose last reference was dropped since the previous call.
+    // Assets released by those (e.g. a Material's textures) are freed on a later call.
+    size_t gc() {
+        size_t freed = 0;
         for (auto [id, pool] : m_pools) {
-            pool->gc();
+            freed += pool->gc();
         }
+        return freed;
     }
 
-    void reset() {
+    void shutdown() {
+        while (gc() > 0) {}
+
         for (auto [id, pool] : m_pools) {
-            pool->clear();
+            pool->abandon();
         }
     }
 

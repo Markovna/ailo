@@ -2,8 +2,6 @@
 
 #include <entt/entt.hpp>
 
-#include "Engine.h"
-
 namespace ailo {
 
 using Entity = entt::entity;
@@ -17,6 +15,12 @@ class Scene {
 
   auto addEntity() { return m_registry.create(); }
   void removeEntity(entt::entity entity) { m_registry.destroy(entity); }
+
+  // Destroys all entities (firing onDestroy signals) and recreates the singleton entity.
+  void clear() {
+    m_registry.clear();
+    m_singleEntity = m_registry.create();
+  }
 
   template<typename ...Types>
   decltype(auto) view() { return m_registry.view<Types...>(); }
