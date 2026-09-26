@@ -24,6 +24,7 @@ static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMesse
 VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     : m_window(window) {
     createInstance();
+    setupDebugMessenger();
 
     VkSurfaceKHR surface;
     if (glfwCreateWindowSurface(m_instance, static_cast<GLFWwindow*>(window), nullptr, &surface) != VK_SUCCESS) {
@@ -181,7 +182,7 @@ void VulkanDevice::createInstance() {
 
     std::vector<const char*> enabledLayers;
 
-#if AILO_VK_ENABLED(AILO_VK_VALIDATION)
+#if AILO_VK_ENABLED(AILO_VK_ENABLE_VALIDATION_LAYERS)
     extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     enabledLayers.emplace_back("VK_LAYER_KHRONOS_validation");
 #endif
@@ -245,7 +246,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debugCallback(
 
     std::ostream* out = nullptr;
     auto errorMask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    if((pCallbackData->flags & errorMask) > 0) {
+    if((messageSeverity & errorMask) != 0) {
         out = &std::cerr;
     } else {
         out = &std::cout;
