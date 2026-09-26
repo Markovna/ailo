@@ -37,7 +37,9 @@ RenderAPI::~RenderAPI() {
         std::cerr << "RenderAPI: waitIdle failed during destruction: " << e.what() << std::endl;
     }
 
-    m_swapChain->destroy(*m_device);
+    if (m_swapChain) {
+        m_swapChain->destroy(*m_device);
+    }
     m_currentRenderPassState = {};
 
     m_framebufferCache.clear();
@@ -67,12 +69,16 @@ RenderAPI::~RenderAPI() {
 // Frame lifecycle
 
 bool RenderAPI::beginFrame() {
+    if (m_swapChainOutdated && !recreateSwapchain()) {
+        return false;
+    }
+
     UniqueVkHandle acquireSemaphore { *m_device, m_device->createSemaphore(vk::SemaphoreCreateInfo{}) };
 
     auto result = m_swapChain->acquireNextImage(*m_device, acquireSemaphore.get(), UINT64_MAX);
-    m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
+        m_swapChainOutdated = true;
         return false;
     }
 
@@ -80,6 +86,7 @@ bool RenderAPI::beginFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+    m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
     return true;
 }
 
@@ -729,13 +736,24 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     return device.createDescriptorPool(poolInfo);
 }
 
-void RenderAPI::recreateSwapchain() {
+bool RenderAPI::recreateSwapchain() {
+    m_swapChainOutdated = true;
+
+    const vk::Extent2D extent = m_device.getSwapExtent();
+    if (extent.width == 0 || extent.height == 0) {
+        return false;
+    }
+
     m_device->waitIdle();
 
     m_framebufferCache.clear();
 
     m_swapChain->destroy(*m_device);
+    m_swapChain.reset();
     m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
+
+    m_swapChainOutdated = false;
+    return true;
 }
 
 void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image,

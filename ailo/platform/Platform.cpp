@@ -51,6 +51,12 @@ void Platform::pumpEvents(WindowHandle handle, InputSystem* inputSystem) {
     glfwPollEvents();
 }
 
+void Platform::waitEvents(WindowHandle handle, InputSystem* inputSystem) {
+    glfwSetWindowUserPointer(static_cast<GLFWwindow*>(handle), inputSystem);
+
+    glfwWaitEvents();
+}
+
 float Platform::getTime() {
     return static_cast<float>(glfwGetTime());
 }

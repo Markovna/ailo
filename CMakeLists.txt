@@ -137,6 +137,8 @@ target_compile_definitions(ailo PRIVATE
 
 target_compile_definitions(ailo PRIVATE GLFW_INCLUDE_VULKAN)
 
+target_compile_definitions(ailo PRIVATE VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
+
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
 # Find glslc shader compiler

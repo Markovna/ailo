@@ -104,7 +104,7 @@ private:
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
     static vk::DescriptorPool createDescriptorPoolS(vk::Device device);
 
-    void recreateSwapchain();
+    bool recreateSwapchain();
 
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
     void freeDescriptorSet(vk::DescriptorSet);
@@ -116,6 +116,7 @@ private:
 
 private:
     bool m_framebufferResized = false;
+    bool m_swapChainOutdated = false;
 
     // Core Vulkan objects
     VulkanDevice m_device;

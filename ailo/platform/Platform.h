@@ -22,6 +22,7 @@ public:
     void getWindowSize(WindowHandle handle, int& width, int& height);
 
     void pumpEvents(WindowHandle, InputSystem*);
+    void waitEvents(WindowHandle, InputSystem*);
     float getTime();
 
 private:
