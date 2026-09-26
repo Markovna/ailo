@@ -242,9 +242,37 @@ function(add_radiance_map TARGET INPUT_HDR)
     )
 
     target_sources(${TARGET} PRIVATE ${STAMP})
+
+    # Only resgen reads the source HDR; the engine loads the prefiltered output.
+    set_property(GLOBAL APPEND PROPERTY AILO_ASSET_BUILD_INPUTS ${INPUT_HDR})
 endfunction()
 
 add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
+
+# Copy source assets into the build folder, next to generated ones, so the executable can run from there.
+# One rule per file: only new or changed files are copied. New files are picked up on the next build.
+file(GLOB_RECURSE AILO_ASSET_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/assets/*)
+get_property(AILO_ASSET_BUILD_INPUTS GLOBAL PROPERTY AILO_ASSET_BUILD_INPUTS)
+if(AILO_ASSET_BUILD_INPUTS)
+    list(REMOVE_ITEM AILO_ASSET_FILES ${AILO_ASSET_BUILD_INPUTS})
+endif()
+
+set(AILO_ASSET_OUTPUTS "")
+foreach(ASSET IN LISTS AILO_ASSET_FILES)
+    set(ASSET_OUTPUT "${CMAKE_BINARY_DIR}/${ASSET}")
+    get_filename_component(ASSET_OUTPUT_DIR "${ASSET_OUTPUT}" DIRECTORY)
+    add_custom_command(
+            OUTPUT "${ASSET_OUTPUT}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${ASSET_OUTPUT_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/${ASSET}" "${ASSET_OUTPUT}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/${ASSET}"
+            COMMENT "Copying ${ASSET}"
+    )
+    list(APPEND AILO_ASSET_OUTPUTS "${ASSET_OUTPUT}")
+endforeach()
+
+add_custom_target(ailo_assets ALL DEPENDS ${AILO_ASSET_OUTPUTS})
+add_dependencies(ailo ailo_assets)
 
 # Add shaders
 add_shader(ailo shaders/shader.vert)
