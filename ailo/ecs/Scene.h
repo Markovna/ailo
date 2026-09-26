@@ -15,6 +15,7 @@ class Scene {
 
   auto addEntity() { return m_registry.create(); }
   void removeEntity(entt::entity entity) { m_registry.destroy(entity); }
+  bool isValid(entt::entity entity) const { return m_registry.valid(entity); }
 
   // Destroys all entities (firing onDestroy signals) and recreates the singleton entity.
   void clear() {

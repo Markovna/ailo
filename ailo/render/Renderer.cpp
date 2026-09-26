@@ -13,6 +13,7 @@
 
 #include "Renderable.h"
 #include "Skin.h"
+#include "ecs/AnimatorComponent.h"
 
 namespace ailo {
 
@@ -277,9 +278,17 @@ void Renderer::prepare(Scene& scene) {
       auto& entry = m_renderData.emplace_back();
 
       if (skin) {
+        BufferHandle bones = m_dummyBonesBuffer;
+        if (scene.isValid(skin->animator)) {
+          if (auto animator = scene.tryGet<AnimatorComponent>(skin->animator)) {
+            bones = animator->boneBuffer.getHandle();
+          }
+        }
+
         auto& objectDescriptor = renderable.descriptorSet;
-        if (!objectDescriptor) {
+        if (!objectDescriptor || renderable.descriptorSetBones != bones) {
           objectDescriptor = backend.createDescriptorSet(m_objectDescriptorSetLayout);
+          renderable.descriptorSetBones = bones;
 
           backend.updateDescriptorSetBuffer(
           objectDescriptor, m_objectsUniformBufferHandle,
@@ -287,7 +296,7 @@ void Renderer::prepare(Scene& scene) {
           0, sizeof(PerObjectUniforms));
 
           backend.updateDescriptorSetBuffer(
-            objectDescriptor, skin->getBuffer().getHandle(),
+            objectDescriptor, bones,
             std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
             0, sizeof(BonesUniform));
         }
@@ -300,10 +309,10 @@ void Renderer::prepare(Scene& scene) {
 
       entry.objectBufferOffset = objectIndex * sizeof(PerObjectUniforms);
       entry.program = material->getShader()->program();
-      entry.vertexBufferLayout = mesh->vertexBuffer->getLayout();
+      entry.vertexBufferLayout = mesh->vertexBuffer.getLayout();
       entry.material = material.get();
-      entry.indexBuffer = mesh->indexBuffer->getHandle();
-      entry.vertexBuffer = mesh->vertexBuffer->getBuffer();
+      entry.indexBuffer = mesh->indexBuffer.getHandle();
+      entry.vertexBuffer = mesh->vertexBuffer.getBuffer();
       entry.indexCount = indexCount;
       entry.indexOffset = indexOffset;
       entry.hasTransform = tr != nullptr;

@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include "Animation.h"
 #include "Renderer.h"
+#include "assets/Assets.h"
 
 namespace ailo {
 
@@ -19,7 +20,7 @@ struct NodeInfo {
     int boneOutputIndex;        // index into BonesUniform::bones[]; -1 for non-bone nodes
 };
 
-class Skeleton {
+class Skeleton : public Asset {
 public:
     // All nodes in parent-first (DFS) order: bones + their non-bone ancestors.
     std::vector<NodeInfo> nodes;

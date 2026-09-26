@@ -118,16 +118,14 @@ asset_ptr<Mesh> Mesh::cube(AssetManager* assetManager, RenderAPI* renderApi) {
     posAttr.format = vk::Format::eR32G32B32Sfloat;
     posAttr.offset = 0;
 
-    auto vb = std::make_shared<VertexBuffer>(renderApi,
+    mesh->vertexBuffer = VertexBuffer(renderApi,
         VertexInputDescription{ .bindings = {binding}, .attributes = {posAttr} },
         sizeof(sCubeVertices));
-    vb->updateBuffer(renderApi, sCubeVertices, sizeof(sCubeVertices));
+    mesh->vertexBuffer.updateBuffer(renderApi, sCubeVertices, sizeof(sCubeVertices));
 
-    auto ib = std::make_shared<BufferObject>(renderApi, BufferBinding::INDEX, sizeof(sCubeIndices));
-    ib->updateBuffer(renderApi, sCubeIndices, sizeof(sCubeIndices));
+    mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(sCubeIndices));
+    mesh->indexBuffer.updateBuffer(renderApi, sCubeIndices, sizeof(sCubeIndices));
 
-    mesh->vertexBuffer = vb;
-    mesh->indexBuffer = ib;
     mesh->faces.emplace_back(0, 36);
     return mesh;
 }
@@ -206,7 +204,9 @@ std::vector<Entity> MeshReader::instantiate(
     // Step 3: build skeleton — all included nodes in parent-first DFS order.
     //   globalBoneRegistry: bone name → boneOutputIndex (index in BonesUniform::bones[])
     //   non-bone nodes get boneOutputIndex = -1 and don't write to BonesUniform.
-    auto skeleton = std::make_shared<Skeleton>();
+    asset_ptr<Skeleton> skeleton;
+    if (hasAnySkinning)
+        skeleton = assetManager->emplace<Skeleton>();
     std::unordered_map<std::string, uint32_t> globalBoneRegistry; // bone name → boneOutputIndex
 
     if (hasAnySkinning) {
@@ -396,8 +396,8 @@ std::vector<Entity> MeshReader::instantiate(
                 }
                 verts.push_back(sv);
             }
-            mesh->vertexBuffer = std::make_shared<VertexBuffer>(renderApi, skinnedVertexInput, sizeof(SkinnedVertex) * verts.size());
-            mesh->vertexBuffer->updateBuffer(renderApi, verts.data(), sizeof(SkinnedVertex) * verts.size());
+            mesh->vertexBuffer = VertexBuffer(renderApi, skinnedVertexInput, sizeof(SkinnedVertex) * verts.size());
+            mesh->vertexBuffer.updateBuffer(renderApi, verts.data(), sizeof(SkinnedVertex) * verts.size());
         } else {
             std::vector<Vertex> verts;
             verts.reserve(aiMesh->mNumVertices);
@@ -423,12 +423,12 @@ std::vector<Entity> MeshReader::instantiate(
                 }
                 verts.push_back(vx);
             }
-            mesh->vertexBuffer = std::make_shared<VertexBuffer>(renderApi, vertexInput, sizeof(Vertex) * verts.size());
-            mesh->vertexBuffer->updateBuffer(renderApi, verts.data(), sizeof(Vertex) * verts.size());
+            mesh->vertexBuffer = VertexBuffer(renderApi, vertexInput, sizeof(Vertex) * verts.size());
+            mesh->vertexBuffer.updateBuffer(renderApi, verts.data(), sizeof(Vertex) * verts.size());
         }
 
-        mesh->indexBuffer = std::make_shared<BufferObject>(renderApi, BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
-        mesh->indexBuffer->updateBuffer(renderApi, indices.data(), sizeof(uint16_t) * indices.size());
+        mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(uint16_t) * indices.size());
+        mesh->indexBuffer.updateBuffer(renderApi, indices.data(), sizeof(uint16_t) * indices.size());
         mesh->faces.push_back({0, static_cast<uint32_t>(indices.size())});
     }
 
@@ -465,10 +465,6 @@ std::vector<Entity> MeshReader::instantiate(
         }
     }
 
-    std::shared_ptr<BufferObject> sharedBoneBuffer;
-    if (hasAnySkinning)
-        sharedBoneBuffer = std::make_shared<BufferObject>(renderApi, BufferBinding::UNIFORM, sizeof(BonesUniform));
-
     // -------------------------------------------------------------------------
     // Create entities from scene hierarchy
     // -------------------------------------------------------------------------
@@ -477,6 +473,16 @@ std::vector<Entity> MeshReader::instantiate(
 
     std::vector<Entity> entities;
     entities.reserve(meshDataList.size() + (hasAnySkinning ? 1 : 0));
+
+    // The animator owns the bone buffer that every skinned mesh of this model reads.
+    Entity animatorEntity = entt::null;
+    if (hasAnySkinning && !animationClips.empty()) {
+        animatorEntity = scene.addEntity();
+        auto& animator = scene.addComponent<AnimatorComponent>(animatorEntity);
+        animator.skeleton = skeleton;
+        animator.clips = std::move(animationClips);
+        animator.boneBuffer = BufferObject(renderApi, BufferBinding::UNIFORM, sizeof(BonesUniform));
+    }
 
     uint32_t renderableCount = 0;
     for (const auto& md : meshDataList) {
@@ -496,19 +502,13 @@ std::vector<Entity> MeshReader::instantiate(
         tr.transform = md.transform;
 
         if (isSkinned)
-            scene.addComponent<Skin>(entity, sharedBoneBuffer);
+            scene.addComponent<Skin>(entity, animatorEntity);
 
         renderableCount++;
     }
 
-    if (hasAnySkinning && !animationClips.empty()) {
-        auto skelEntity = scene.addEntity();
-        auto& animator = scene.addComponent<AnimatorComponent>(skelEntity);
-        animator.skeleton = skeleton;
-        animator.clips = std::move(animationClips);
-        animator.boneBuffer = sharedBoneBuffer;
-        entities.push_back(skelEntity);
-    }
+    if (animatorEntity != entt::null)
+        entities.push_back(animatorEntity);
 
     return entities;
 }

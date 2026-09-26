@@ -83,7 +83,6 @@ add_executable(ailo
         ailo/ecs/SceneLighting.h
         ailo/render/Renderable.cpp
         ailo/render/Renderable.h
-        ailo/render/Skin.cpp
         ailo/render/Skin.h
         ailo/render/Animation.h
         ailo/render/Skeleton.cpp

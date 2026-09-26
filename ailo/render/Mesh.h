@@ -1,7 +1,6 @@
 #pragma once
 #include "RenderAPI.h"
 #include "RenderPrimitive.h"
-#include <memory>
 
 #include "assets/Assets.h"
 #include "ecs/Scene.h"
@@ -15,8 +14,8 @@ struct Mesh : public Asset {
         uint32_t indexCount;
     };
 
-    std::shared_ptr<VertexBuffer> vertexBuffer;
-    std::shared_ptr<BufferObject> indexBuffer;
+    VertexBuffer vertexBuffer;
+    BufferObject indexBuffer;
     std::vector<Face> faces;
 
     static asset_ptr<Mesh> cube(AssetManager* assetManager, RenderAPI* renderApi);

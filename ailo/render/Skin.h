@@ -1,17 +1,12 @@
 #pragma once
-#include "RenderPrimitive.h"
-#include <memory>
+#include "ecs/Scene.h"
 
 namespace ailo {
 
+// Marks a mesh entity as skinned. Its bone matrices come from the AnimatorComponent on `animator`;
+// if that entity is gone (or was never created), the renderer binds identity bones instead.
 struct Skin {
-public:
-    explicit Skin(RenderAPI*);
-    explicit Skin(std::shared_ptr<BufferObject> sharedBuffer);
-    BufferObject& getBuffer() { return *m_buffer; }
-
-private:
-    std::shared_ptr<BufferObject> m_buffer;
+    Entity animator = entt::null;
 };
 
 }

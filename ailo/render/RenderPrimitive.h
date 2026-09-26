@@ -9,6 +9,7 @@ class Shader;
 
 class BufferObject {
  public:
+  BufferObject() = default;
   BufferObject(RenderAPI*, BufferBinding, size_t byteSize);
   void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
   BufferHandle getHandle() const { return m_buffer; }
@@ -31,6 +32,7 @@ enum class VertexLocation {
 
 class VertexBuffer {
 public:
+ VertexBuffer() = default;
  VertexBuffer(RenderAPI*, const VertexInputDescription& description, size_t byteSize);
  void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
 

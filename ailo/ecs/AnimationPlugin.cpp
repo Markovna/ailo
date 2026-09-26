@@ -26,7 +26,7 @@ void animate(Query<AnimatorComponent> animators, const Time& time, RenderAPI& ap
         }
 
         animator.skeleton->updateBoneTransforms(animator.currentTime, clip, bonesData);
-        animator.boneBuffer->updateBuffer(&api, &bonesData, sizeof(bonesData));
+        animator.boneBuffer.updateBuffer(&api, &bonesData, sizeof(bonesData));
     }
 }
 

@@ -10,6 +10,8 @@ struct Renderable {
 
     // Per-object set for skinned meshes (their bone buffer differs per entity); created lazily by the Renderer.
     Unique<gpu::DescriptorSet> descriptorSet;
+    // Bone buffer `descriptorSet` was written with; the set is rebuilt when the animator's buffer changes.
+    BufferHandle descriptorSetBones;
 };
 
 }
