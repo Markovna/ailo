@@ -4,6 +4,8 @@
 #include <ranges>
 #include <stdexcept>
 
+#include "utils/Utils.h"
+
 namespace ailo {
 
 static constexpr std::array kFrameStages = {
@@ -21,7 +23,7 @@ App::App() {
 
 void App::run() {
     m_running = true;
-    struct ResetRunning { bool& flag; ~ResetRunning() { flag = false; } } resetRunning { m_running };
+    auto runningGuard = utils::scope_exit {[&] { m_running = false; }};
 
     // Validated right before each phase, so Startup systems can insert resources used by later stages.
     validate(std::array { Stage::Startup });
