@@ -98,6 +98,7 @@ public:
 
     void clear() {
         m_cache.clear();
+        m_pipelineState = {};
     }
 
 

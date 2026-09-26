@@ -55,6 +55,8 @@ add_executable(ailo
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
     ailo/render/CommandBuffer.cpp
+    ailo/render/DeletionQueue.cpp
+    ailo/render/DeletionQueue.h
     ailo/render/CommandBuffer.h
     ailo/render/UniqueVkHandle.cpp
     ailo/render/UniqueVkHandle.h
@@ -76,7 +78,6 @@ add_executable(ailo
     ailo/render/PipelineCache.h
     ailo/render/Program.cpp
     ailo/render/Program.h
-    ailo/render/vulkan/Resources.cpp
     ailo/render/vulkan/Resources.h
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
@@ -84,7 +85,6 @@ add_executable(ailo
         ailo/render/Renderable.h
         ailo/render/Skin.cpp
         ailo/render/Skin.h
-        ailo/render/Cleanup.h
         ailo/render/Animation.h
         ailo/render/Skeleton.cpp
         ailo/render/Skeleton.h

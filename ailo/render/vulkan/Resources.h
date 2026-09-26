@@ -8,7 +8,6 @@
 #include "render/Constants.h"
 
 namespace ailo {
-class FenceStatus;
 
 namespace gpu {
 struct RenderTarget;
@@ -97,15 +96,6 @@ inline TextureUsage operator|(TextureUsage lhs, TextureUsage rhs) {
     return static_cast<TextureUsage>(static_cast<uint16_t>(lhs) | static_cast<uint16_t>(rhs));
 }
 
-class Acquirable {
-public:
-    void setFence(const std::shared_ptr<FenceStatus>& fence) { m_fenceStatus = fence; }
-    bool isAcquired() const;
-
-private:
-    std::shared_ptr<FenceStatus> m_fenceStatus;
-};
-
 class ColorAttachmentMask : public std::bitset<kMaxColorAttachments> {};
 
 template<typename T>
@@ -132,7 +122,7 @@ struct VertexBufferLayout {
     size_t bindingsCount;
 };
 
-struct StageBuffer : public Acquirable {
+struct StageBuffer {
     vk::Buffer buffer;
     uint64_t size;
     VmaAllocation vmaAllocation;
@@ -151,9 +141,7 @@ struct DescriptorSet {
     DescriptorSetLayout::bitmask_t boundBindings;
     DescriptorSetLayout::bitmask_t dynamicBindings;
     DescriptorSetLayoutHandle layoutHandle;
-    std::shared_ptr<FenceStatus> boundFence;
-
-    bool isBound() const;
+    uint64_t lastUsedSerial = 0;
 };
 
 struct RenderTarget : public enable_resource_ptr<RenderTarget> {

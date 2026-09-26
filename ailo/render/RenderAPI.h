@@ -14,6 +14,7 @@
 #include "Program.h"
 #include "ResourceContainer.h"
 #include "CommandBuffer.h"
+#include "DeletionQueue.h"
 #include "FrameBufferCache.h"
 #include "PipelineCache.h"
 #include "RenderPassCache.h"
@@ -105,13 +106,12 @@ private:
 
     void recreateSwapchain();
 
-    void cleanupDescriptorSets();
-
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
+    void freeDescriptorSetLater(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
-    StageBuffer allocateStageBuffer(uint32_t capacity);
-    void destroyStageBuffers();
-    void loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
+    // The staging buffer is freed once `commands` completes, so the copy reading from it must be recorded into `commands`.
+    StageBuffer allocateStageBuffer(CommandBuffer& commands, uint32_t capacity);
+    void loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:
@@ -126,13 +126,12 @@ private:
     vk::CommandPool m_commandPool;
     CommandsPool m_commands;
 
+    DeletionQueue m_deletionQueue;
+
     // Descriptor pool
     vk::DescriptorPool m_descriptorPool;
 
     VmaAllocator m_Allocator = nullptr;
-
-    std::vector<StageBuffer> m_stageBuffers;
-    std::vector<DescriptorSet> m_descriptorSetsToDestroy;
 
     // resources
     ResourceContainer<Buffer> m_buffers;

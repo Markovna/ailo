@@ -6,22 +6,12 @@
 
 namespace ailo {
 
-class FenceStatus {
-public:
-    void setSignaled() { m_signaled = true; }
-    bool isSignaled() const { return m_signaled; }
-
-private:
-    bool m_signaled = false;
-};
-
 class CommandBuffer {
 public:
     CommandBuffer(vk::CommandBuffer commandBuffer, vk::Device device) :
         m_commandBuffer(commandBuffer),
         m_device(device),
-        m_fence(m_device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled })),
-        m_fenceStatus(std::make_shared<FenceStatus>()) {
+        m_fence(m_device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled })) {
 
     }
 
@@ -33,25 +23,22 @@ public:
 
     ~CommandBuffer() {
         m_device.destroyFence(m_fence);
-
-        if (m_fenceStatus) {
-            m_fenceStatus->setSignaled();
-        }
     }
 
     vk::CommandBuffer& operator*() { return m_commandBuffer; }
     vk::CommandBuffer* operator->() { return &m_commandBuffer; }
 
-    void begin() {
+    void begin(uint64_t serial) {
         vk::CommandBufferBeginInfo beginInfo{};
         m_commandBuffer.begin(beginInfo);
 
-        m_fenceStatus = std::make_shared<FenceStatus>();
+        m_serial = serial;
+        m_submitted = false;
     }
 
     vk::CommandBuffer& buffer() { return m_commandBuffer; }
 
-    void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) const;
+    void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore);
 
     void addWait(vk::Semaphore waitSemaphore, vk::PipelineStageFlags waitStageMask) {
         m_waitSemaphores.push_back(waitSemaphore);
@@ -69,13 +56,18 @@ public:
     void reset();
 
     vk::Fence& getFence() { return m_fence; }
-    std::shared_ptr<FenceStatus> getFenceStatusShared() { return m_fenceStatus; }
+
+    // Serial of the last recording started on this buffer (0 if never used).
+    uint64_t serial() const { return m_serial; }
+    // True unless the buffer was submitted and the GPU has not finished executing it yet.
+    bool isComplete() const;
 
 private:
     vk::CommandBuffer m_commandBuffer;
     vk::Device m_device;
     vk::Fence m_fence;
-    std::shared_ptr<FenceStatus> m_fenceStatus;
+    uint64_t m_serial = 0;
+    bool m_submitted = false;
     UniqueVkHandle<vk::Semaphore> m_submitSemaphore;
     std::vector<vk::Semaphore> m_waitSemaphores;
     std::vector<vk::PipelineStageFlags> m_waitStages;
@@ -90,10 +82,17 @@ public:
     void next();
     void destroy();
 
+    uint64_t currentSerial() const { return m_recording ? m_nextSerial : m_nextSerial - 1; }
+
+    // Highest serial whose command buffer, and all before it, finished executing on the GPU.
+    uint64_t completedSerial();
+
 private:
     std::vector<CommandBuffer> m_commandBuffers;
     uint8_t m_currentBufferIndex = 0;
     bool m_recording = false;
+    uint64_t m_nextSerial = 1;
+    uint64_t m_completedSerial = 0;
 };
 
 }

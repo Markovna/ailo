@@ -2,7 +2,7 @@
 
 namespace ailo {
 
-void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) const {
+void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) {
     m_commandBuffer.end();
 
     vk::SubmitInfo submitInfo{};
@@ -15,6 +15,11 @@ void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) con
     submitInfo.pSignalSemaphores = &signalSemaphore;
 
     queue.submit(submitInfo, m_fence);
+    m_submitted = true;
+}
+
+bool CommandBuffer::isComplete() const {
+    return !m_submitted || m_device.getFenceStatus(m_fence) == vk::Result::eSuccess;
 }
 
 CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) {
@@ -40,14 +45,33 @@ CommandBuffer& CommandsPool::get() {
     buffer.wait();
 
     buffer.reset();
-    buffer.begin();
+    buffer.begin(m_nextSerial);
     m_recording = true;
     return buffer;
 }
 
 void CommandsPool::next() {
+    if (m_recording) {
+        m_nextSerial++;
+    }
     m_currentBufferIndex = (m_currentBufferIndex + 1) % m_commandBuffers.size();
     m_recording = false;
+}
+
+uint64_t CommandsPool::completedSerial() {
+    // TODO: replace with Timeline semaphores
+    // Fences may be observed signalled out of order, so the result is capped just below
+    // the oldest submitted buffer that is still pending.
+    uint64_t completed = m_nextSerial - 1;
+    for (const auto& cb : m_commandBuffers) {
+        const uint64_t serial = cb.serial();
+        if (serial > m_completedSerial && serial < m_nextSerial && !cb.isComplete()) {
+            completed = std::min(completed, serial - 1);
+        }
+    }
+
+    m_completedSerial = std::max(m_completedSerial, completed);
+    return m_completedSerial;
 }
 
 void CommandsPool::destroy() {
@@ -59,7 +83,6 @@ void CommandsPool::destroy() {
 
 void CommandBuffer::wait() {
     (void)m_device.waitForFences(1, &m_fence, VK_TRUE, UINT64_MAX);
-    m_fenceStatus->setSignaled();
 }
 
 void CommandBuffer::reset() {
@@ -68,9 +91,7 @@ void CommandBuffer::reset() {
     m_commandBuffer.reset();
 
     (void)m_device.resetFences(1, &m_fence);
-
-    m_fenceStatus->setSignaled();
-    m_fenceStatus.reset();
+    m_submitted = false;
 
     m_submitSemaphore.reset();
 }

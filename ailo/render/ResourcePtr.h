@@ -130,7 +130,7 @@ private:
     }
 
     static void destroy(T* ptr) {
-        ptr->m_container->erase(ptr->m_handle);
+        ptr->m_container->release(ptr->m_handle);
     }
 
     T* m_ptr = nullptr;

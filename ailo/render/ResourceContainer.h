@@ -4,6 +4,7 @@
 
 #include "common/slot_map.h"
 #include "ResourcePtr.h"
+#include "DeletionQueue.h"
 
 namespace ailo {
 
@@ -29,6 +30,18 @@ public:
         m_resources.erase(key_type {handle.getId()});
     }
 
+    // Called when the last resource_ptr goes away. Resources whose destructor frees Vulkan objects
+    // (textures, programs, pipelines) stay alive until the GPU has finished with them.
+    void release(Handle handle) {
+        if (m_deletionQueue) {
+            m_deletionQueue->defer([this, handle] { erase(handle); });
+        } else {
+            erase(handle);
+        }
+    }
+
+    void setDeletionQueue(DeletionQueue* deletionQueue) { m_deletionQueue = deletionQueue; }
+
     reference get(Handle handle) {
         using key_type = typename dod::slot_map<ResourceType>::key;
         auto ptr = m_resources.get(key_type {handle.getId()});
@@ -42,6 +55,7 @@ public:
 
 private:
     dod::slot_map<ResourceType> m_resources {};
+    DeletionQueue* m_deletionQueue = nullptr;
 };
 
 template<typename T>

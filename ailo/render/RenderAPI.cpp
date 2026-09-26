@@ -15,11 +15,16 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     : m_device(window),
     m_commandPool(m_device->createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
     m_commands(*m_device, m_commandPool),
+    m_deletionQueue(m_commands),
     m_descriptorPool(createDescriptorPoolS(*m_device)),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
     m_framebufferCache(*m_device),
     m_renderPassCache(*m_device),
     m_pipelineCache(*m_device, m_graphicsPipelines) {
+
+    m_textures.setDeletionQueue(&m_deletionQueue);
+    m_programs.setDeletionQueue(&m_deletionQueue);
+    m_graphicsPipelines.setDeletionQueue(&m_deletionQueue);
 
     m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
@@ -33,25 +38,25 @@ RenderAPI::~RenderAPI() {
     }
 
     m_swapChain->destroy(*m_device);
+    m_currentRenderPassState = {};
 
     m_framebufferCache.clear();
     m_renderPassCache.clear();
     m_pipelineCache.clear();
 
+    m_deletionQueue.shutdown();
+
+    // Holders before what they hold: render targets -> textures, pipelines -> programs.
+    m_renderTargets.clear();
+    m_graphicsPipelines.clear();
     m_buffers.clear();
     m_descriptorSetLayouts.clear();
     m_descriptorSets.clear();
     m_textures.clear();
     m_programs.clear();
-    m_graphicsPipelines.clear();
     m_vertexBufferLayouts.clear();
-    m_renderTargets.clear();
 
     m_commands.destroy();
-
-    destroyStageBuffers();
-
-    cleanupDescriptorSets();
 
     vmaDestroyAllocator(m_Allocator);
 
@@ -90,29 +95,13 @@ void RenderAPI::endFrame() {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    // free resources acquired by command buffer
-    destroyStageBuffers();
-    cleanupDescriptorSets();
-
     m_commands.next();
-}
-
-void RenderAPI::cleanupDescriptorSets() {
-    const auto [first, last] =
-        std::ranges::remove_if(m_descriptorSetsToDestroy, [this](const DescriptorSet& descriptorSet) {
-            if (descriptorSet.isBound()) {
-                return false;
-            }
-
-            (void) m_device->freeDescriptorSets(m_descriptorPool, 1, &descriptorSet.descriptorSet);
-            return true;
-        });
-
-    m_descriptorSetsToDestroy.erase(first, last);
+    m_deletionQueue.collect();
 }
 
 void RenderAPI::waitIdle() {
     m_device->waitIdle();
+    m_deletionQueue.collect();
 }
 
 VertexBufferLayoutHandle RenderAPI::createVertexBufferLayout(const VertexInputDescription& description) {
@@ -148,7 +137,7 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
 
     auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(*commands, vertexBuffer, data, 0, size);
+        loadFromCpu(commands, vertexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -160,7 +149,7 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     indexBuffer.binding = BufferBinding::INDEX;
     auto& commands = m_commands.get();
     if(data != nullptr) {
-        loadFromCpu(*commands, indexBuffer, data, 0, size);
+        loadFromCpu(commands, indexBuffer, data, 0, size);
     }
     return handle;
 }
@@ -248,14 +237,16 @@ void RenderAPI::destroyBuffer(const BufferHandle& handle) {
   if(!handle) { return; }
 
   auto& buffer = m_buffers.get(handle);
-  vmaDestroyBuffer(m_Allocator, buffer.buffer, buffer.vmaAllocation);
+  m_deletionQueue.defer([allocator = m_Allocator, vkBuffer = buffer.buffer, allocation = buffer.vmaAllocation] {
+    vmaDestroyBuffer(allocator, vkBuffer, allocation);
+  });
   m_buffers.erase(handle);
 }
 
 void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset) {
     auto& buffer = m_buffers.get(handle);
     auto& commands = m_commands.get();
-    loadFromCpu(*commands, buffer, data, byteOffset, size);
+    loadFromCpu(commands, buffer, data, byteOffset, size);
 }
 
 TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
@@ -282,11 +273,12 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     uint32_t level) {
     auto& texture = m_textures.get(handle);
 
-    auto stageBuffer = allocateStageBuffer(dataSize);
+    CommandBuffer& commands = m_commands.get();
+    vk::CommandBuffer commandBuffer = *commands;
+
+    auto stageBuffer = allocateStageBuffer(commands, dataSize);
     memcpy(stageBuffer.mapping, data, dataSize);
     vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
-
-    vk::CommandBuffer commandBuffer = *m_commands.get();
 
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eTransferDstOptimal);
 
@@ -377,7 +369,9 @@ void RenderAPI::destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& hand
   if(!handle) { return; }
 
   auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
-  m_device->destroyDescriptorSetLayout(descriptorSetLayout.layout);
+  m_deletionQueue.defer([device = *m_device, layout = descriptorSetLayout.layout] {
+    device.destroyDescriptorSetLayout(layout);
+  });
   m_descriptorSetLayouts.erase(handle);
 }
 
@@ -403,14 +397,14 @@ void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetL
     descriptorSet.boundBindings.reset();
     descriptorSet.dynamicBindings = descriptorSetLayout.dynamicBindings;
     descriptorSet.layoutHandle = layoutHandle;
-    descriptorSet.boundFence = nullptr;
+    descriptorSet.lastUsedSerial = 0;
 }
 
 void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
     auto& descriptorSet = m_descriptorSets.get(handle);
-    m_descriptorSetsToDestroy.push_back(descriptorSet);
+    freeDescriptorSetLater(descriptorSet.descriptorSet);
     m_descriptorSets.erase(handle);
 }
 
@@ -449,10 +443,9 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
     auto& texture = m_textures.get(textureHandle);
 
-    // if (false) {
-    if (descriptorSet.isBound()) {
-        // re-create descriptor set
-        m_descriptorSetsToDestroy.push_back(descriptorSet);
+    if (descriptorSet.lastUsedSerial > m_commands.completedSerial()) {
+        // The GPU may still read this set: write into a copy and retire the original
+        freeDescriptorSetLater(descriptorSet.descriptorSet);
 
         DescriptorSet newDescriptorSet;
         createDescriptorSet(newDescriptorSet, descriptorSet.layoutHandle);
@@ -516,7 +509,7 @@ RenderTargetHandle RenderAPI::createRenderTarget(const PerColorAttachment<Textur
 }
 
 void RenderAPI::destroyRenderTarget(const RenderTargetHandle& handle) {
-    auto rt = m_renderTargets.get(handle);
+    auto& rt = m_renderTargets.get(handle);
     rt.release();
 }
 
@@ -540,7 +533,7 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
         dynamicOffsetsArray.data()
     );
 
-    descriptorSet.boundFence = commands.getFenceStatusShared();
+    descriptorSet.lastUsedSerial = m_commands.currentSerial();
 }
 
 ProgramHandle RenderAPI::createProgram(const ShaderDescription& description) {
@@ -761,7 +754,7 @@ void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer bu
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 }
 
-gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
+gpu::StageBuffer RenderAPI::allocateStageBuffer(CommandBuffer& commands, uint32_t capacity) {
     VkBufferCreateInfo bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = capacity,
@@ -782,24 +775,20 @@ gpu::StageBuffer RenderAPI::allocateStageBuffer(uint32_t capacity) {
       .vmaAllocation = memory,
       .mapping = pMapping
     };
-    stageBuffer.setFence(m_commands.get().getFenceStatusShared());
-    m_stageBuffers.push_back(stageBuffer);
+
+    // defer() tags the buffer with the serial being recorded, which must be the one the copy goes into.
+    assert(commands.serial() == m_commands.currentSerial());
+    m_deletionQueue.defer([allocator = m_Allocator, buffer, memory] {
+        vmaUnmapMemory(allocator, memory);
+        vmaDestroyBuffer(allocator, buffer, memory);
+    });
     return stageBuffer;
 }
 
-void RenderAPI::destroyStageBuffers() {
-    const auto [first, last] =
-        std::ranges::remove_if(m_stageBuffers, [this](const StageBuffer& stageBuffer) {
-            if (stageBuffer.isAcquired()) {
-                return false;
-            }
-
-            vmaUnmapMemory(m_Allocator, stageBuffer.vmaAllocation);
-            vmaDestroyBuffer(m_Allocator, stageBuffer.buffer, stageBuffer.vmaAllocation);
-            return true;
-        });
-
-    m_stageBuffers.erase(first, last);
+void RenderAPI::freeDescriptorSetLater(vk::DescriptorSet descriptorSet) {
+    m_deletionQueue.defer([device = *m_device, pool = m_descriptorPool, descriptorSet] {
+        (void) device.freeDescriptorSets(pool, 1, &descriptorSet);
+    });
 }
 
 void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& access, VkPipelineStageFlags& stage) {
@@ -816,9 +805,11 @@ void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& ac
 
 }
 
-void RenderAPI::loadFromCpu(vk::CommandBuffer& commandBuffer, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
+void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
+  vk::CommandBuffer commandBuffer = *commands;
+
   // allocate stage buffer
-  auto stageBuffer = allocateStageBuffer(numBytes);
+  auto stageBuffer = allocateStageBuffer(commands, numBytes);
 
   // mem copy to stage buffer
   memcpy(stageBuffer.mapping, data, numBytes);
