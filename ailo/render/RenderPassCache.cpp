@@ -4,7 +4,8 @@
 #include <ostream>
 
 namespace ailo {
-RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m_device(device) {
+RenderPass::RenderPass(vk::Device device, DeletionQueue& deletionQueue, const RenderPassCacheQuery& query)
+    : m_device(device), m_deletionQueue(deletionQueue) {
     std::array<vk::AttachmentDescription, 2 * kMaxColorAttachments + 1> attachments; // color / resolve / depth
     std::array<vk::AttachmentReference, kMaxColorAttachments> colorAttachmentRefs;
     std::array<vk::AttachmentReference, kMaxColorAttachments> resolveAttachmentRefs;
@@ -102,7 +103,9 @@ RenderPass::RenderPass(vk::Device device, const RenderPassCacheQuery& query) : m
 }
 
 RenderPass::~RenderPass() {
-    m_device.destroyRenderPass(m_renderPass);
+    m_deletionQueue.defer([device = m_device, renderPass = m_renderPass] {
+        device.destroyRenderPass(renderPass);
+    });
 }
 
 RenderPass& RenderPassCache::getOrCreate(const RenderPassDescription& description,
@@ -124,7 +127,7 @@ RenderPass& RenderPassCache::getOrCreate(const RenderPassDescription& descriptio
     query.hasResolve = format.hasResolve;
     query.samples = format.samples;
 
-    auto [it, result] = m_cache.tryEmplace(query, m_device, query);
+    auto [it, result] = m_cache.tryEmplace(query, m_device, m_deletionQueue, query);
     return it->second;
 }
 

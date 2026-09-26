@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 #include "render/vulkan/Resources.h"
 
+#include "render/DeletionQueue.h"
 #include "common/LRUCache.h"
 #include "utils/Utils.h"
 
@@ -10,15 +11,19 @@ namespace ailo {
 
 class FrameBuffer {
 public:
-    FrameBuffer(vk::Device device, vk::RenderPass renderPass, const gpu::FrameBufferImageView& views, uint32_t width,
-                uint32_t height);
+    FrameBuffer(vk::Device device, DeletionQueue& deletionQueue, vk::RenderPass renderPass,
+                const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height);
     ~FrameBuffer();
+
+    FrameBuffer(const FrameBuffer&) = delete;
+    FrameBuffer& operator=(const FrameBuffer&) = delete;
 
     vk::Framebuffer operator*() const noexcept { return m_framebuffer; }
     operator vk::Framebuffer() const noexcept { return m_framebuffer; }
 
 private:
     vk::Device m_device;
+    DeletionQueue& m_deletionQueue;
     vk::Framebuffer m_framebuffer;
 };
 
@@ -54,7 +59,7 @@ private:
 public:
     static constexpr size_t kDefaultCacheSize = 32;
 
-    explicit FrameBufferCache(vk::Device device) : m_device(device) {}
+    FrameBufferCache(vk::Device device, DeletionQueue& deletionQueue) : m_device(device), m_deletionQueue(deletionQueue) {}
 
     FrameBuffer& getOrCreate(
         vk::RenderPass,
@@ -67,6 +72,7 @@ public:
 private:
     LRUCache<CacheKey, FrameBuffer, CacheKeyHash> m_cache { kDefaultCacheSize };
     vk::Device m_device;
+    DeletionQueue& m_deletionQueue;
 };
 
 }

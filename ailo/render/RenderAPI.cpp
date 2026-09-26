@@ -18,8 +18,8 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_deletionQueue(m_commands),
     m_descriptorPool(createDescriptorPoolS(*m_device)),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
-    m_framebufferCache(*m_device),
-    m_renderPassCache(*m_device),
+    m_framebufferCache(*m_device, m_deletionQueue),
+    m_renderPassCache(*m_device, m_deletionQueue),
     m_pipelineCache(*m_device, m_graphicsPipelines) {
 
     m_textures.setDeletionQueue(&m_deletionQueue);
@@ -404,7 +404,7 @@ void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
     auto& descriptorSet = m_descriptorSets.get(handle);
-    freeDescriptorSetLater(descriptorSet.descriptorSet);
+    freeDescriptorSet(descriptorSet.descriptorSet);
     m_descriptorSets.erase(handle);
 }
 
@@ -445,7 +445,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 
     if (descriptorSet.lastUsedSerial > m_commands.completedSerial()) {
         // The GPU may still read this set: write into a copy and retire the original
-        freeDescriptorSetLater(descriptorSet.descriptorSet);
+        freeDescriptorSet(descriptorSet.descriptorSet);
 
         DescriptorSet newDescriptorSet;
         createDescriptorSet(newDescriptorSet, descriptorSet.layoutHandle);
@@ -732,6 +732,8 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
 void RenderAPI::recreateSwapchain() {
     m_device->waitIdle();
 
+    m_framebufferCache.clear();
+
     m_swapChain->destroy(*m_device);
     m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
@@ -785,7 +787,7 @@ gpu::StageBuffer RenderAPI::allocateStageBuffer(CommandBuffer& commands, uint32_
     return stageBuffer;
 }
 
-void RenderAPI::freeDescriptorSetLater(vk::DescriptorSet descriptorSet) {
+void RenderAPI::freeDescriptorSet(vk::DescriptorSet descriptorSet) {
     m_deletionQueue.defer([device = *m_device, pool = m_descriptorPool, descriptorSet] {
         (void) device.freeDescriptorSets(pool, 1, &descriptorSet);
     });

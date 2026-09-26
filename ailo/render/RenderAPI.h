@@ -107,7 +107,7 @@ private:
     void recreateSwapchain();
 
     void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
-    void freeDescriptorSetLater(vk::DescriptorSet);
+    void freeDescriptorSet(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     // The staging buffer is freed once `commands` completes, so the copy reading from it must be recorded into `commands`.
     StageBuffer allocateStageBuffer(CommandBuffer& commands, uint32_t capacity);

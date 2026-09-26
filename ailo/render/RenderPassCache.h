@@ -6,6 +6,7 @@
 #include "Constants.h"
 #include "render/vulkan/Resources.h"
 #include "vulkan/vulkan.hpp"
+#include "render/DeletionQueue.h"
 #include "common/LRUCache.h"
 #include "utils/Utils.h"
 
@@ -28,14 +29,18 @@ struct RenderPassCacheQuery {
 
 class RenderPass {
 public:
-    RenderPass(vk::Device device, const RenderPassCacheQuery& query);
+    RenderPass(vk::Device device, DeletionQueue& deletionQueue, const RenderPassCacheQuery& query);
     ~RenderPass();
+
+    RenderPass(const RenderPass&) = delete;
+    RenderPass& operator=(const RenderPass&) = delete;
 
     const vk::RenderPass& operator*() const& noexcept { return m_renderPass; }
     operator vk::RenderPass() const noexcept { return m_renderPass; }
 
 private:
     vk::Device m_device;
+    DeletionQueue& m_deletionQueue;
     vk::RenderPass m_renderPass;
 };
 
@@ -59,7 +64,7 @@ class RenderPassCache {
 public:
     static constexpr size_t kDefaultCacheSize = 32;
 
-    explicit RenderPassCache(vk::Device device) : m_device(device) {}
+    RenderPassCache(vk::Device device, DeletionQueue& deletionQueue) : m_device(device), m_deletionQueue(deletionQueue) {}
     RenderPass& getOrCreate(const RenderPassDescription&, const gpu::FrameBufferFormat&);
 
     void clear();
@@ -67,5 +72,6 @@ public:
 private:
     LRUCache<key_type, RenderPass, RenderPassCacheQueryHash> m_cache { kDefaultCacheSize };
     vk::Device m_device;
+    DeletionQueue& m_deletionQueue;
 };
 }
