@@ -45,7 +45,6 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   m_viewDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perView());
   m_objectDescriptorSetLayout = backend->createDescriptorSetLayout(DescriptorSetLayoutBindings::perObject());
   m_viewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
-  m_objectDescriptorSet = backend->createDescriptorSet(m_objectDescriptorSetLayout);
 
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
@@ -55,12 +54,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   m_shadowShader = Shader::load(assetManager, m_renderAPI, Shader::getShadowShaderDescription());
   m_skinnedShadowShader = Shader::load(assetManager, m_renderAPI, Shader::getSkinnedShadowShaderDescription());
 
-  // Provide a valid (all-identity) bone buffer for non-skinned entities so
-  // the descriptor set binding is always satisfied.
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
-  backend->updateDescriptorSetBuffer(m_objectDescriptorSet, m_dummyBonesBuffer,
-      std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
-      0, sizeof(BonesUniform));
 }
 
 Renderer::~Renderer() = default;
@@ -91,7 +85,6 @@ bool Renderer::beginFrame() {
 void Renderer::shadowPass(Scene& scene) {
   RenderAPI* backend = m_renderAPI;
 
-  // Create shadow map resources lazily
   if (!m_shadowMapTexture) {
     m_shadowMapTexture = backend->createTexture(
         TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
@@ -130,10 +123,8 @@ void Renderer::shadowPass(Scene& scene) {
   m_perViewUniformBufferData.view = lightView;
   m_perViewUniformBufferData.viewInverse = inverse(lightView);
 
-  // prepare descriptor sets and uniform buffers
   prepare(scene);
 
-  // Begin depth-only render pass
   RenderPassDescription shadowPassDesc {};
   shadowPassDesc.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
 
@@ -240,24 +231,37 @@ void Renderer::prepare(Scene& scene) {
   auto renderableView = scene.view<Renderable>();
   size_t meshCount = renderableView.size();
 
-  // prepare per object buffer
   if(meshCount > m_perObjectUniformBufferData.size() || !m_objectsUniformBufferHandle) {
     m_perObjectUniformBufferData.resize(std::max(meshCount, m_perObjectUniformBufferData.size()));
 
     m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
+    m_objectDescriptorSetDirty = true;
+  }
 
-    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS), 0, sizeof(PerObjectUniforms));
+  if (m_objectDescriptorSetDirty) {
+    m_objectDescriptorSet = backend.createDescriptorSet(m_objectDescriptorSetLayout);
+    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle,
+      std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS), 0, sizeof(PerObjectUniforms));
+
+    backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_dummyBonesBuffer,
+      std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS), 0, sizeof(BonesUniform));
+
+    for (auto&& [entity, renderable] : renderableView.each()) {
+      renderable.descriptorSet.reset();
+    }
+
+    m_objectDescriptorSetDirty = false;
   }
 
   m_renderData.clear();
   m_renderData.reserve(meshCount * 2);
 
-  uint32_t index = 0;
+  uint32_t objectIndex = 0;
   for(const auto& [entity, renderable] : renderableView.each()) {
     const auto tr = scene.tryGet<Transform>(entity);
     auto skin = scene.tryGet<Skin>(entity);
 
-    auto& uniformBufferData = m_perObjectUniformBufferData[index];
+    auto& uniformBufferData = m_perObjectUniformBufferData[objectIndex];
     uniformBufferData.model = tr ? tr->transform : glm::mat4(1.0f);
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
@@ -294,7 +298,7 @@ void Renderer::prepare(Scene& scene) {
         entry.objectDescriptorSet = m_objectDescriptorSet;
       }
 
-      entry.objectBufferOffset = index * sizeof(PerObjectUniforms);
+      entry.objectBufferOffset = objectIndex * sizeof(PerObjectUniforms);
       entry.program = material->getShader()->program();
       entry.vertexBufferLayout = mesh->vertexBuffer->getLayout();
       entry.material = material.get();
@@ -304,9 +308,9 @@ void Renderer::prepare(Scene& scene) {
       entry.indexOffset = indexOffset;
       entry.hasTransform = tr != nullptr;
       entry.isSkinned = (skin != nullptr);
-
-      index++;
     }
+
+    objectIndex++;
   }
 
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
@@ -360,7 +364,6 @@ void Renderer::releaseAssets() {
   m_shadowShader.reset();
   m_skinnedShadowShader.reset();
 
-  // Raw Material pointers and overlay callbacks may refer to objects that are about to be destroyed.
   m_renderData.clear();
   m_overlayPasses.clear();
 }

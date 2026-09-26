@@ -196,6 +196,7 @@ private:
   Unique<gpu::DescriptorSetLayout> m_objectDescriptorSetLayout;
   Unique<gpu::DescriptorSet> m_viewDescriptorSet;
   Unique<gpu::DescriptorSet> m_objectDescriptorSet;
+  bool m_objectDescriptorSetDirty = true;
   asset_ptr<Texture> m_iblDfgLut;
   TextureHandle m_iblSpecularMap;
 
