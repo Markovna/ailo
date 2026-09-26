@@ -11,12 +11,10 @@ class BufferObject {
  public:
   BufferObject(RenderAPI*, BufferBinding, size_t byteSize);
   void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
-  ~BufferObject();
-  BufferHandle getHandle() const { return m_handle; }
+  BufferHandle getHandle() const { return m_buffer; }
 
  private:
-  RenderAPI* m_renderAPI;
-  BufferHandle m_handle;
+  Unique<gpu::Buffer> m_buffer;
 };
 
 enum class VertexLocation {
@@ -35,15 +33,13 @@ class VertexBuffer {
 public:
  VertexBuffer(RenderAPI*, const VertexInputDescription& description, size_t byteSize);
  void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
- ~VertexBuffer();
 
- BufferHandle getBuffer() const { return m_bufferHandle; }
- VertexBufferLayoutHandle getLayout() const { return m_layoutHandle; }
+ BufferHandle getBuffer() const { return m_buffer; }
+ VertexBufferLayoutHandle getLayout() const { return m_layout; }
 
 private:
- RenderAPI* m_renderAPI;
- VertexBufferLayoutHandle m_layoutHandle;
- BufferHandle m_bufferHandle;
+ Unique<gpu::VertexBufferLayout> m_layout;
+ Unique<gpu::Buffer> m_buffer;
 };
 
 }

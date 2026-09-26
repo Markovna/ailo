@@ -17,17 +17,11 @@ void render(Renderer& renderer, World& world, const Camera& camera) {
 void shutdown(World& world, RenderAPI& api, Renderer& renderer, AssetManager& assets) {
     api.waitIdle();
 
-    // Entities hold asset_ptrs and descriptor sets; release them while the renderer is alive.
     world.scene().clear();
-    renderer.onSceneDestroyed(world.scene());
 
-    // Releases the renderer's GPU objects and asset references; the Renderer itself is destroyed later with the World.
-    renderer.terminate();
+    renderer.releaseAssets();
 
-    // Frees every asset while the RenderAPI is still alive; anything still referenced is reported as a leak.
     assets.shutdown();
-
-    // The RenderAPI shuts the device down in its destructor, after every resource inserted later is destroyed.
 }
 
 }
@@ -39,8 +33,7 @@ void RenderPlugin::build(App& app) {
     auto& api = app.insertResource<RenderAPI>(window.handle());
     assets.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
 
-    auto& renderer = app.insertResource<Renderer>(&api, &assets, settings);
-    renderer.onSceneCreated(app.world().scene());
+    app.insertResource<Renderer>(&api, &assets, settings);
 
     app.insertResource<Camera>();
 

@@ -169,15 +169,14 @@ public:
   void shadowPass(Scene& scene);
   void colorPass(Scene& scene, const Camera& camera);
   void endFrame();
-  void onSceneCreated(Scene&);
-  void onSceneDestroyed(Scene&);
 
-  void terminate();
+  // Drops the renderer's asset references so the AssetManager can free them before it shuts down.
+  // GPU objects owned by the renderer are released by its destructor.
+  void releaseAssets();
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:
   void prepare(Scene&);
-  void onDestroyRenderable(entt::registry& registry, entt::entity entity);
 
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
@@ -190,28 +189,28 @@ private:
   PerViewUniforms m_perViewUniformBufferData {};
   std::array<LightUniform, kLightUniformArraySize> m_lightUniformsBufferData {};
 
-  BufferHandle m_objectsUniformBufferHandle;
-  BufferHandle m_viewUniformBufferHandle;
-  BufferHandle m_lightsUniformBufferHandle;
-  DescriptorSetHandle m_viewDescriptorSet;
-  DescriptorSetHandle m_objectDescriptorSet;
-  DescriptorSetLayoutHandle m_viewDescriptorSetLayout;
-  DescriptorSetLayoutHandle m_objectDescriptorSetLayout;
+  Unique<gpu::Buffer> m_objectsUniformBufferHandle;
+  Unique<gpu::Buffer> m_viewUniformBufferHandle;
+  Unique<gpu::Buffer> m_lightsUniformBufferHandle;
+  Unique<gpu::DescriptorSetLayout> m_viewDescriptorSetLayout;
+  Unique<gpu::DescriptorSetLayout> m_objectDescriptorSetLayout;
+  Unique<gpu::DescriptorSet> m_viewDescriptorSet;
+  Unique<gpu::DescriptorSet> m_objectDescriptorSet;
   asset_ptr<Texture> m_iblDfgLut;
   TextureHandle m_iblSpecularMap;
 
   std::vector<asset_ptr<Asset>> m_persistentAssets;
 
   // Shadow mapping
-  TextureHandle m_shadowMapTexture;
-  RenderTargetHandle m_shadowMapRenderTarget;
+  Unique<gpu::Texture> m_shadowMapTexture;
+  Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
   asset_ptr<Shader> m_shadowShader;
   asset_ptr<Shader> m_skinnedShadowShader;
 
   RendererSettings m_settings;
   std::vector<OverlayPass> m_overlayPasses;
 
-  BufferHandle m_dummyBonesBuffer;
+  Unique<gpu::Buffer> m_dummyBonesBuffer;
 
   std::vector<RenderData> m_renderData;
   RenderAPI* m_renderAPI;

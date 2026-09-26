@@ -111,7 +111,7 @@ void RenderAPI::waitIdle() {
     m_deletionQueue.collect();
 }
 
-VertexBufferLayoutHandle RenderAPI::createVertexBufferLayout(const VertexInputDescription& description) {
+Unique<gpu::VertexBufferLayout> RenderAPI::createVertexBufferLayout(const VertexInputDescription& description) {
     auto [handle, vbl] = m_vertexBufferLayouts.emplace();
     for(size_t i = 0; i < vbl.attributes.size(); i++) {
         if (i < description.attributes.size()) {
@@ -128,16 +128,17 @@ VertexBufferLayoutHandle RenderAPI::createVertexBufferLayout(const VertexInputDe
     vbl.attributesCount = static_cast<uint32_t>(description.attributes.size());
     vbl.bindingsCount = static_cast<uint32_t>(description.bindings.size());
 
-    return handle;
+    return { this, handle };
 }
 
-void RenderAPI::destroyVertexBufferLayout(VertexBufferLayoutHandle handle) {
+void RenderAPI::destroy(const VertexBufferLayoutHandle& handle) {
+    if (!handle) { return; }
     m_vertexBufferLayouts.erase(handle);
 }
 
 // Buffer management
 
-BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
+Unique<gpu::Buffer> RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     auto [handle, vertexBuffer] = m_buffers.emplace();
     allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
     vertexBuffer.binding = BufferBinding::VERTEX;
@@ -146,10 +147,10 @@ BufferHandle RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
     if(data != nullptr) {
         loadFromCpu(commands, vertexBuffer, data, 0, size);
     }
-    return handle;
+    return { this, handle };
 }
 
-BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
+Unique<gpu::Buffer> RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     // Create staging buffer
     auto [handle, indexBuffer] = m_buffers.emplace();
     allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
@@ -158,7 +159,7 @@ BufferHandle RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
     if(data != nullptr) {
         loadFromCpu(commands, indexBuffer, data, 0, size);
     }
-    return handle;
+    return { this, handle };
 }
 
 VmaAllocator RenderAPI::createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
@@ -232,15 +233,15 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
     buffer.buffer = vkBuffer;
 }
 
-BufferHandle RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
+Unique<gpu::Buffer> RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
   auto [handle, buffer] = m_buffers.emplace();
   auto usageFlags = vkutils::getBufferUsage(bufferBinding);
   allocateBuffer(buffer, usageFlags, size);
   buffer.binding = bufferBinding;
-  return handle;
+  return { this, handle };
 }
 
-void RenderAPI::destroyBuffer(const BufferHandle& handle) {
+void RenderAPI::destroy(const BufferHandle& handle) {
   if(!handle) { return; }
 
   auto& buffer = m_buffers.get(handle);
@@ -256,7 +257,7 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
     loadFromCpu(commands, buffer, data, byteOffset, size);
 }
 
-TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
+Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
     auto ptr = resource_ptr<Texture>::make(
         m_textures, *m_device, m_device.physicalDevice(),
         type, format, levels, width, height,
@@ -264,10 +265,10 @@ TextureHandle RenderAPI::createTexture(TextureType type, vk::Format format, Text
         (usage & TextureUsage::DepthStencilAttachment) != TextureUsage::None ?
             vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor);
     ptr->acquire(ptr);
-    return ptr.getHandle();
+    return { this, ptr.getHandle() };
 }
 
-void RenderAPI::destroyTexture(const TextureHandle& handle) {
+void RenderAPI::destroy(const TextureHandle& handle) {
     if (!handle) { return; }
 
     auto& texture = m_textures.get(handle);
@@ -346,7 +347,7 @@ void RenderAPI::generateMipmaps(const TextureHandle& handle) {
     texture.transitionLayout(*m_commands.get(), oldLayout);
 }
 
-DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
+Unique<gpu::DescriptorSetLayout> RenderAPI::createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings) {
     auto [handle, descriptorSetLayout] = m_descriptorSetLayouts.emplace();
 
     std::vector<vk::DescriptorSetLayoutBinding> vkBindings;
@@ -369,10 +370,10 @@ DescriptorSetLayoutHandle RenderAPI::createDescriptorSetLayout(const std::vector
       }
     }
 
-    return handle;
+    return { this, handle };
 }
 
-void RenderAPI::destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& handle) {
+void RenderAPI::destroy(const DescriptorSetLayoutHandle& handle) {
   if(!handle) { return; }
 
   auto& descriptorSetLayout = m_descriptorSetLayouts.get(handle);
@@ -382,12 +383,12 @@ void RenderAPI::destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& hand
   m_descriptorSetLayouts.erase(handle);
 }
 
-DescriptorSetHandle RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
+Unique<gpu::DescriptorSet> RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
     auto [handle, descriptorSet] = m_descriptorSets.emplace();
 
     createDescriptorSet(descriptorSet, layoutHandle);
 
-    return handle;
+    return { this, handle };
 }
 
 void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetLayoutHandle layoutHandle) {
@@ -407,7 +408,7 @@ void RenderAPI::createDescriptorSet(DescriptorSet& descriptorSet, DescriptorSetL
     descriptorSet.lastUsedSerial = 0;
 }
 
-void RenderAPI::destroyDescriptorSet(const DescriptorSetHandle& handle) {
+void RenderAPI::destroy(const DescriptorSetHandle& handle) {
     if(!handle) { return; }
 
     auto& descriptorSet = m_descriptorSets.get(handle);
@@ -497,7 +498,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     descriptorSet.boundBindings[binding] = true;
 }
 
-RenderTargetHandle RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples) {
+Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples) {
     auto renderTarget = resource_ptr<gpu::RenderTarget>::make(m_renderTargets);
     renderTarget->acquire(renderTarget);
 
@@ -512,10 +513,12 @@ RenderTargetHandle RenderAPI::createRenderTarget(const PerColorAttachment<Textur
     renderTarget->width = width;
     renderTarget->height = height;
     renderTarget->samples = samples;
-    return renderTarget.getHandle();
+    return { this, renderTarget.getHandle() };
 }
 
-void RenderAPI::destroyRenderTarget(const RenderTargetHandle& handle) {
+void RenderAPI::destroy(const RenderTargetHandle& handle) {
+    if (!handle) { return; }
+
     auto& rt = m_renderTargets.get(handle);
     rt.release();
 }
@@ -543,13 +546,15 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
     descriptorSet.lastUsedSerial = m_commands.currentSerial();
 }
 
-ProgramHandle RenderAPI::createProgram(const ShaderDescription& description) {
+Unique<gpu::Program> RenderAPI::createProgram(const ShaderDescription& description) {
     auto ptr = resource_ptr<gpu::Program>::make(m_programs, *m_device, description);
     ptr->acquire(ptr);
-    return ptr.getHandle();
+    return { this, ptr.getHandle() };
 }
 
-void RenderAPI::destroyProgram(const ProgramHandle& handle) {
+void RenderAPI::destroy(const ProgramHandle& handle) {
+    if (!handle) { return; }
+
     auto& program = m_programs.get(handle);
     program.release();
 }

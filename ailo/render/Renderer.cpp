@@ -234,14 +234,6 @@ void Renderer::endFrame() {
   m_renderAPI->endFrame();
 }
 
-void Renderer::onSceneCreated(Scene& scene) {
-  scene.onDestroy<Renderable>().connect<&Renderer::onDestroyRenderable>(*this);
-}
-
-void Renderer::onSceneDestroyed(Scene& scene) {
-  scene.onDestroy<Renderable>().disconnect<&Renderer::onDestroyRenderable>(*this);
-}
-
 void Renderer::prepare(Scene& scene) {
   auto& backend = *m_renderAPI;
 
@@ -252,9 +244,6 @@ void Renderer::prepare(Scene& scene) {
   if(meshCount > m_perObjectUniformBufferData.size() || !m_objectsUniformBufferHandle) {
     m_perObjectUniformBufferData.resize(std::max(meshCount, m_perObjectUniformBufferData.size()));
 
-    if(m_objectsUniformBufferHandle) {
-      backend.destroyBuffer(m_objectsUniformBufferHandle);
-    }
     m_objectsUniformBufferHandle = backend.createBuffer(BufferBinding::UNIFORM, m_perObjectUniformBufferData.size() * sizeof(PerObjectUniforms));
 
     backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_objectsUniformBufferHandle, std::to_underlying(PerObjectDescriptorBindings::OBJECT_UNIFORMS), 0, sizeof(PerObjectUniforms));
@@ -332,13 +321,6 @@ void Renderer::prepare(Scene& scene) {
   }
 }
 
-void Renderer::onDestroyRenderable(entt::registry& registry, entt::entity entity) {
-    Renderable& renderable = registry.get<Renderable>(entity);
-    if (renderable.descriptorSet) {
-        m_renderAPI->destroyDescriptorSet(renderable.descriptorSet);
-    }
-}
-
 asset_ptr<Texture> Renderer::createWhiteTexture(AssetManager* assetManager) {
   static const std::array<uint8_t, 4> white = { 255, 255, 255, 255 };
 
@@ -372,24 +354,7 @@ asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(AssetManager*
   return texture;
 }
 
-void Renderer::terminate() {
-  RenderAPI& backend = *m_renderAPI;
-
-  backend.destroyDescriptorSet(m_viewDescriptorSet);
-  backend.destroyDescriptorSet(m_objectDescriptorSet);
-
-  backend.destroyDescriptorSetLayout(m_viewDescriptorSetLayout);
-  backend.destroyDescriptorSetLayout(m_objectDescriptorSetLayout);
-
-  backend.destroyBuffer(m_viewUniformBufferHandle);
-  backend.destroyBuffer(m_lightsUniformBufferHandle);
-  backend.destroyBuffer(m_objectsUniformBufferHandle);
-
-  backend.destroyTexture(m_shadowMapTexture);
-  backend.destroyRenderTarget(m_shadowMapRenderTarget);
-  backend.destroyBuffer(m_dummyBonesBuffer);
-
-  // Release asset references so the AssetManager can free them; after this the destructor touches nothing.
+void Renderer::releaseAssets() {
   m_persistentAssets.clear();
   m_iblDfgLut.reset();
   m_shadowShader.reset();

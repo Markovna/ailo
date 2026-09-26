@@ -8,7 +8,8 @@ struct Renderable {
     asset_ptr<Mesh> mesh;
     std::vector<asset_ptr<Material>> materials;
 
-    DescriptorSetHandle descriptorSet;
+    // Per-object set for skinned meshes (their bone buffer differs per entity); created lazily by the Renderer.
+    Unique<gpu::DescriptorSet> descriptorSet;
 };
 
 }

@@ -7,12 +7,10 @@ namespace ailo {
 class Texture : public Asset {
 public:
     Texture(RenderAPI*, TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
-    ~Texture();
 
     void updateImage(RenderAPI*, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
     void updateImage(RenderAPI*, const void* data, size_t dataSize);
     void generateMipmaps(RenderAPI*);
-    void release();
 
     TextureHandle getHandle() const { return m_handle; }
     uint32_t getLevels() const { return m_levels; }
@@ -23,9 +21,8 @@ public:
     static asset_ptr<Texture> fromEmbeddedCompressed(AssetManager*, RenderAPI*, const void* data, size_t dataSize, vk::Format format);
 
 private:
-    TextureHandle m_handle;
+    Unique<gpu::Texture> m_handle;
     uint8_t m_levels;
-    RenderAPI* m_renderApi;
 };
 
 class TextureLoader : public AssetLoader<Texture> {

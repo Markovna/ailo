@@ -11,11 +11,7 @@
 namespace ailo {
 
 Texture::Texture(RenderAPI* renderApi, TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels)
-    : m_handle(renderApi->createTexture(type, format, usage, width, height, levels)), m_levels(levels), m_renderApi(renderApi) {
-}
-
-Texture::~Texture() {
-    release();
+    : m_handle(renderApi->createTexture(type, format, usage, width, height, levels)), m_levels(levels) {
 }
 
 void Texture::updateImage(RenderAPI* renderApi, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset,
@@ -29,10 +25,6 @@ void Texture::updateImage(RenderAPI* renderApi, const void* data, size_t dataSiz
 
 void Texture::generateMipmaps(RenderAPI* renderApi) {
     renderApi->generateMipmaps(m_handle);
-}
-
-void Texture::release() {
-    m_renderApi->destroyTexture(m_handle);
 }
 
 void Texture::load(LoadContext<Texture>& ctx, RenderAPI* renderApi, const std::string& key, bool mipmaps) {

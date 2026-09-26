@@ -4,14 +4,10 @@
 #include "RenderPrimitive.h"
 
 ailo::Material::Material(RenderAPI* renderApi, asset_ptr<Shader>& shader)
-    : m_shader(shader), m_renderAPI(renderApi) {
+    : m_shader(shader) {
     if (auto descriptorSetLayout = shader->getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL))) {
         m_descriptorSet = renderApi->createDescriptorSet(descriptorSetLayout);
     }
-}
-
-ailo::Material::~Material() {
-    release();
 }
 
 void ailo::Material::setTexture(uint32_t binding, asset_ptr<Texture> texture) {
@@ -48,11 +44,6 @@ void ailo::Material::bindDescriptorSet(RenderAPI& renderAPI) const {
     if (m_descriptorSet) {
         renderAPI.bindDescriptorSet(m_descriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL));
     }
-}
-
-void ailo::Material::release() {
-    m_renderAPI->destroyDescriptorSet(m_descriptorSet);
-    m_shader.reset();
 }
 
 ailo::asset_ptr<ailo::Material> ailo::Material::create(AssetManager* loader, RenderAPI* renderApi, asset_ptr<Shader> shader) {

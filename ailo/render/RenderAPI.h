@@ -22,9 +22,10 @@
 
 namespace ailo {
 
-
-
 class SwapChain;
+
+template<typename T>
+class Unique;
 
 class RenderAPI {
 public:
@@ -42,18 +43,15 @@ public:
     void waitIdle();
 
     // Buffer management
-    VertexBufferLayoutHandle createVertexBufferLayout(const VertexInputDescription& description);
-    void destroyVertexBufferLayout(VertexBufferLayoutHandle);
+    Unique<gpu::VertexBufferLayout> createVertexBufferLayout(const VertexInputDescription& description);
 
-    BufferHandle createVertexBuffer(const void* data, uint64_t size);
-    BufferHandle createIndexBuffer(const void* data, uint64_t size);
-    BufferHandle createBuffer(BufferBinding, uint64_t size);
-    void destroyBuffer(const BufferHandle& handle);
+    Unique<gpu::Buffer> createVertexBuffer(const void* data, uint64_t size);
+    Unique<gpu::Buffer> createIndexBuffer(const void* data, uint64_t size);
+    Unique<gpu::Buffer> createBuffer(BufferBinding, uint64_t size);
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
     // Texture management
-    TextureHandle createTexture(TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
-    void destroyTexture(const TextureHandle& handle);
+    Unique<gpu::Texture> createTexture(TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize,
         uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0,
         uint32_t baseLayer = 0, uint32_t layerCount = 1,
@@ -61,20 +59,15 @@ public:
     void generateMipmaps(const TextureHandle& handle);
 
     // Descriptor set management
-    DescriptorSetLayoutHandle createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
-    void destroyDescriptorSetLayout(const DescriptorSetLayoutHandle& dslh);
-    DescriptorSetHandle createDescriptorSet(DescriptorSetLayoutHandle dslh);
-    void destroyDescriptorSet(const DescriptorSetHandle& handle);
+    Unique<gpu::DescriptorSetLayout> createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
+    Unique<gpu::DescriptorSet> createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
 
-    RenderTargetHandle createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
-    void destroyRenderTarget(const RenderTargetHandle&);
+    Unique<gpu::RenderTarget> createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
 
     // Program management
-
-    ProgramHandle createProgram(const ShaderDescription& description);
-    void destroyProgram(const ProgramHandle& handle);
+    Unique<gpu::Program> createProgram(const ShaderDescription& description);
 
     // Command recording (call between beginFrame and endFrame)
     void beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
@@ -93,6 +86,17 @@ public:
     void handleWindowResize();
 
 private:
+    template<typename T>
+    friend class Unique;
+
+    void destroy(const VertexBufferLayoutHandle&);
+    void destroy(const BufferHandle&);
+    void destroy(const TextureHandle&);
+    void destroy(const DescriptorSetLayoutHandle&);
+    void destroy(const DescriptorSetHandle&);
+    void destroy(const RenderTargetHandle&);
+    void destroy(const ProgramHandle&);
+
     using Buffer = gpu::Buffer;
     using DescriptorSet = gpu::DescriptorSet;
     using Texture = gpu::Texture;
@@ -123,13 +127,11 @@ private:
 
     friend class SwapChain;
 
-    // Command buffers
     vk::CommandPool m_commandPool;
     CommandsPool m_commands;
 
     DeletionQueue m_deletionQueue;
 
-    // Descriptor pool
     vk::DescriptorPool m_descriptorPool;
 
     VmaAllocator m_Allocator = nullptr;
@@ -149,6 +151,44 @@ private:
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
     RenderPassState m_currentRenderPassState;
+};
+
+template<typename T>
+class Unique {
+public:
+    Unique() noexcept = default;
+    Unique(RenderAPI* api, Handle<T> handle) noexcept : m_api(api), m_handle(handle) {}
+
+    Unique(Unique&& other) noexcept : m_api(other.m_api), m_handle(std::exchange(other.m_handle, {})) {}
+
+    Unique& operator=(Unique&& other) noexcept {
+        if (this != &other) {
+            reset();
+            m_api = other.m_api;
+            m_handle = std::exchange(other.m_handle, {});
+        }
+        return *this;
+    }
+
+    Unique(const Unique&) = delete;
+    Unique& operator=(const Unique&) = delete;
+
+    ~Unique() { reset(); }
+
+    void reset() noexcept {
+        if (m_handle) {
+            m_api->destroy(m_handle);
+            m_handle = {};
+        }
+    }
+
+    [[nodiscard]] Handle<T> get() const noexcept { return m_handle; }
+    operator Handle<T>() const noexcept { return m_handle; }
+    explicit operator bool() const noexcept { return static_cast<bool>(m_handle); }
+
+private:
+    RenderAPI* m_api = nullptr;
+    Handle<T> m_handle {};
 };
 
 } // namespace ailo

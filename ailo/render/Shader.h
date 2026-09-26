@@ -9,13 +9,10 @@ namespace ailo {
 class Shader : public Asset {
  public:
     Shader(RenderAPI*, const ShaderDescription&);
-    ~Shader();
 
-    auto program() const { return m_program; }
+    ProgramHandle program() const { return m_program; }
 
     DescriptorSetLayoutHandle getDescriptorSetLayout(uint32_t setIndex) const;
-
-    void release();
 
     static ShaderDescription& getDefaultShaderDescription();
     static ShaderDescription& getSkyboxShaderDescription();
@@ -27,10 +24,9 @@ class Shader : public Asset {
     static asset_ptr<Shader> load(AssetManager* assetManager, RenderAPI*, const ShaderDescription&);
 
  private:
-    std::vector<DescriptorSetLayoutHandle> m_descriptorSetLayouts;
+    std::vector<Unique<gpu::DescriptorSetLayout>> m_descriptorSetLayouts;
     ShaderDescription m_description;
-    Handle<gpu::Program> m_program;
-    RenderAPI* m_renderApi = nullptr;
+    Unique<gpu::Program> m_program;
 };
 
 }

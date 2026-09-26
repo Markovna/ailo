@@ -15,14 +15,6 @@ DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) cons
     return  m_descriptorSetLayouts[setIndex];
 }
 
-void Shader::release() {
-    for (auto& layout : m_descriptorSetLayouts) {
-        m_renderApi->destroyDescriptorSetLayout(layout);
-    }
-
-    m_renderApi->destroyProgram(m_program);
-}
-
 ShaderDescription& Shader::getDefaultShaderDescription() {
     static ShaderDescription shaderDescription {
         .vertexShader = os::readFile("shaders/pbr.vert.spv"),
@@ -184,16 +176,12 @@ asset_ptr<Shader> Shader::load(AssetManager* assetManager, RenderAPI* renderApi,
 }
 
 Shader::Shader(RenderAPI* renderApi, const ShaderDescription& description)
-    : m_description(description), m_renderApi(renderApi) {
+    : m_description(description) {
 
     for (auto& layout : m_description.layout) {
         m_descriptorSetLayouts.push_back(renderApi->createDescriptorSetLayout(layout));
     }
 
     m_program = renderApi->createProgram(description);
-}
-
-Shader::~Shader() {
-    release();
 }
 }

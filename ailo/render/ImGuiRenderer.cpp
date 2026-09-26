@@ -20,33 +20,8 @@ ImGuiRenderer::ImGuiRenderer(RenderAPI* renderAPI)
 }
 
 ImGuiRenderer::~ImGuiRenderer() {
-    // Texture cleanup reads the context's platform IO, so the context goes last.
-    releaseResources();
+    // GPU objects are released by the members' destructors.
     ImGui::DestroyContext(m_context);
-}
-
-void ImGuiRenderer::releaseResources() {
-
-    // Destroy all textures
-    for (ImTextureData* tex : ImGui::GetPlatformIO().Textures) {
-      if (tex->Status != ImTextureStatus_WantCreate && tex->RefCount == 1) {
-        auto texHandleId = tex->GetTexID();
-        TextureHandle texHandle(texHandleId);
-        m_renderAPI->destroyTexture(texHandle);
-      }
-    }
-
-    for (auto& [id, descriptor] : m_samplerDescriptors) {
-        m_renderAPI->destroyDescriptorSet(descriptor);
-    }
-
-    m_renderAPI->destroyBuffer(m_vertexBuffer);
-    m_renderAPI->destroyBuffer(m_indexBuffer);
-    m_renderAPI->destroyBuffer(m_uniformBuffer);
-    m_renderAPI->destroyDescriptorSet(m_uniformDescriptor);
-    m_renderAPI->destroyDescriptorSetLayout(m_uniformDescriptorLayout);
-    m_renderAPI->destroyDescriptorSetLayout(m_samplerDescriptorLayout);
-    m_renderAPI->destroyProgram(m_program);
 }
 
 void ImGuiRenderer::createPipeline() {
@@ -127,7 +102,7 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
 
   if (tex->Status == ImTextureStatus_WantCreate) {
     // Create texture
-    auto textureHandle = m_renderAPI->createTexture(
+    auto texture = m_renderAPI->createTexture(
         TextureType::TEXTURE_2D,
         vk::Format::eR8Unorm,
         TextureUsage::Sampled,
@@ -135,12 +110,13 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
         static_cast<uint32_t>(tex->Height)
     );
 
-    ImTextureID texId = textureHandle.getId();
+    ImTextureID texId = texture.get().getId();
     tex->SetTexID(texId);
 
-    auto descriptor = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
-    m_samplerDescriptors[texId] = descriptor;
-    m_renderAPI->updateDescriptorSetTexture(descriptor, TextureHandle(texId), 0);
+    auto& descriptor = m_samplerDescriptors[texId] = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
+    m_renderAPI->updateDescriptorSetTexture(descriptor, texture, 0);
+
+    m_textures[texId] = std::move(texture);
   }
 
   if (tex->Status == ImTextureStatus_WantCreate || tex->Status == ImTextureStatus_WantUpdates) {
@@ -162,16 +138,12 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
 
   if (tex->Status == ImTextureStatus_WantDestroy) {
     auto texHandleId = tex->GetTexID();
-    ailo::TextureHandle texHandle(texHandleId);
-
-    m_renderAPI->destroyTexture(texHandle);
+    m_samplerDescriptors.erase(texHandleId);
+    m_textures.erase(texHandleId);
 
     // Clear identifiers and mark as destroyed (in order to allow e.g. calling InvalidateDeviceObjects while running)
     tex->SetTexID(ImTextureID_Invalid);
     tex->SetStatus(ImTextureStatus_Destroyed);
-
-    auto descriptor = m_samplerDescriptors[texHandleId];
-      m_renderAPI->destroyDescriptorSet(descriptor);
   }
 }
 
@@ -216,9 +188,6 @@ void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io
 
     // Create or resize vertex buffer if needed
     if (!m_vertexBuffer || m_vertexBufferSize < vertexSize) {
-        if (m_vertexBuffer) {
-            m_renderAPI->destroyBuffer(m_vertexBuffer);
-        }
         m_vertexBufferSize = vertexSize + 5000 * sizeof(ImDrawVert); // Add some extra space
         m_vertexBuffer = m_renderAPI->createVertexBuffer(nullptr, m_vertexBufferSize);
     }
@@ -263,9 +232,6 @@ void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io
 
     // Create or resize index buffer if needed
     if (!m_indexBuffer || m_indexBufferSize < indexSize) {
-        if (m_indexBuffer) {
-            m_renderAPI->destroyBuffer(m_indexBuffer);
-        }
         m_indexBufferSize = indexSize + 10000 * sizeof(ImDrawIdx); // Add some extra space
         m_indexBuffer = m_renderAPI->createIndexBuffer(nullptr, m_indexBufferSize);
     }
@@ -348,12 +314,11 @@ void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io
                 if (texId != ImTextureID_Invalid) {
                     auto descriptorIt = m_samplerDescriptors.find(texId);
                     if (descriptorIt != m_samplerDescriptors.end()) {
-                        DescriptorSetHandle descriptorSet = descriptorIt->second;
-                        m_renderAPI->bindDescriptorSet(descriptorSet, 1);
+                        m_renderAPI->bindDescriptorSet(descriptorIt->second, 1);
                     } else {
-                        // TODO: when do we destroy created descriptor set?
-                        DescriptorSetHandle descriptorSet = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
-                        m_samplerDescriptors[texId] = descriptorSet;
+                        // A texture owned elsewhere (e.g. drawn with ImGui::Image); its set lives as long as this renderer.
+                        // TODO: drop sets of textures that are no longer drawn
+                        auto& descriptorSet = m_samplerDescriptors[texId] = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);
                         m_renderAPI->updateDescriptorSetTexture(descriptorSet, TextureHandle(texId), 0);
                         m_renderAPI->bindDescriptorSet(descriptorSet, 1);
                     }
