@@ -77,4 +77,10 @@ private:
     void onMouseMoved(MouseMovedEvent&);
 };
 
+
+struct InputCapture {
+    bool mouse = false;
+    bool keyboard = false;
+};
+
 } // namespace ailo

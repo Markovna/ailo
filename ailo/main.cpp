@@ -1,8 +1,11 @@
 #include "app/App.h"
 #include "assets/AssetPlugin.h"
+#include "ecs/AnimationPlugin.h"
 #include "platform/PlatformPlugin.h"
 #include "render/RenderPlugin.h"
 #include "sandbox/SandboxPlugin.h"
+#include "ui/ImGuiPlugin.h"
+#include "ui/OrbitCameraPlugin.h"
 
 #include <iostream>
 #include <stdexcept>
@@ -15,6 +18,9 @@ int main() {
             .addPlugin(PlatformPlugin { .window = { .title = "Ailo", .width = 2400, .height = 1400 } })
             .addPlugin(AssetPlugin {})
             .addPlugin(RenderPlugin { .settings = { .shadowMapSize = 1024 } })
+            .addPlugin(ImGuiPlugin {})
+            .addPlugin(AnimationPlugin {})
+            .addPlugin(OrbitCameraPlugin { .camera = { .distance = 10.0f } })
             .addPlugin(SandboxPlugin {})
             .run();
     } catch (const std::exception& e) {

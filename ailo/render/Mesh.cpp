@@ -510,7 +510,6 @@ std::vector<Entity> MeshReader::instantiate(
         entities.push_back(skelEntity);
     }
 
-    std::cout << "Loaded " << renderableCount << " renderables" << std::endl;
     return entities;
 }
 

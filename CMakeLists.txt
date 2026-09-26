@@ -89,8 +89,8 @@ add_executable(ailo
         ailo/render/Skeleton.cpp
         ailo/render/Skeleton.h
         ailo/ecs/AnimatorComponent.h
-        ailo/ecs/AnimationSystem.cpp
-        ailo/ecs/AnimationSystem.h
+        ailo/ecs/AnimationPlugin.cpp
+        ailo/ecs/AnimationPlugin.h
         ailo/platform/Platform.cpp
         ailo/platform/Platform.h
         ailo/di/di.h
@@ -105,6 +105,10 @@ add_executable(ailo
         ailo/render/RenderPlugin.h
         ailo/sandbox/SandboxPlugin.cpp
         ailo/sandbox/SandboxPlugin.h
+        ailo/ui/ImGuiPlugin.cpp
+        ailo/ui/ImGuiPlugin.h
+        ailo/ui/OrbitCameraPlugin.cpp
+        ailo/ui/OrbitCameraPlugin.h
 )
 
 # Link libraries
