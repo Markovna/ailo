@@ -12,14 +12,14 @@ FrameBuffer::FrameBuffer(
 
     std::array<vk::ImageView, 2 * views.color.size() + 1> attachments;
     uint32_t attachmentCount = 0;
-    for (size_t i = 0; i < views.color.size(); i++) {
-        if (views.color[i] != VK_NULL_HANDLE) {
-            attachments[attachmentCount++] = views.color[i];
+    for (auto i : views.color) {
+        if (i != VK_NULL_HANDLE) {
+            attachments[attachmentCount++] = i;
         }
     }
-    for (size_t i = 0; i < views.resolve.size(); i++) {
-        if (views.resolve[i] != VK_NULL_HANDLE) {
-            attachments[attachmentCount++] = views.resolve[i];
+    for (auto i : views.resolve) {
+        if (i != VK_NULL_HANDLE) {
+            attachments[attachmentCount++] = i;
         }
     }
 

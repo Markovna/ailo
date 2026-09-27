@@ -13,9 +13,10 @@ class BufferObject {
   BufferObject(RenderAPI*, BufferBinding, size_t byteSize);
   void updateBuffer(RenderAPI*, const void* data, uint64_t byteSize, uint64_t byteOffset = 0);
   BufferHandle getHandle() const { return m_buffer; }
+  Shared<gpu::Buffer>& shared() { return m_buffer; }
 
  private:
-  Unique<gpu::Buffer> m_buffer;
+  Shared<gpu::Buffer> m_buffer;
 };
 
 enum class VertexLocation {

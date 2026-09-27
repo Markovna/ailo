@@ -1,7 +1,6 @@
 #include "Material.h"
 
 #include "Renderer.h"
-#include "RenderPrimitive.h"
 
 ailo::Material::Material(RenderAPI* renderApi, asset_ptr<Shader>& shader)
     : m_shader(shader) {
@@ -15,8 +14,8 @@ void ailo::Material::setTexture(uint32_t binding, asset_ptr<Texture> texture) {
     m_pendingBindings[binding] = true;
 }
 
-void ailo::Material::setBuffer(uint32_t binding, BufferObject* buffer) {
-    m_buffers[binding] = buffer;
+void ailo::Material::setBuffer(uint32_t binding, Shared<gpu::Buffer> buffer) {
+    m_buffers[binding] = std::move(buffer);
     m_pendingBindings[binding] = true;
 }
 
@@ -35,7 +34,7 @@ void ailo::Material::updateBuffers(RenderAPI& renderAPI) {
         if(!m_pendingBindings.test(binding)) {
             continue;
         }
-        renderAPI.updateDescriptorSetBuffer(m_descriptorSet, buffer->getHandle(), binding);
+        renderAPI.updateDescriptorSetBuffer(m_descriptorSet, buffer.getHandle(), binding);
         m_pendingBindings.reset(binding);
     }
 }

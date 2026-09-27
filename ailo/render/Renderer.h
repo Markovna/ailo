@@ -166,8 +166,9 @@ public:
   void addOverlayPass(OverlayPass pass);
 
   bool beginFrame();
-  void shadowPass(Scene& scene);
-  void colorPass(Scene& scene, const Camera& camera);
+  void prepare(Scene& scene, const Camera& camera);
+  void shadowPass();
+  void colorPass();
   void endFrame();
 
   // Drops the renderer's asset references so the AssetManager can free them before it shuts down.
@@ -176,8 +177,6 @@ public:
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:
-  void prepare(Scene&);
-
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
   asset_ptr<Texture> createWhiteTexture(AssetManager*);
@@ -187,14 +186,17 @@ private:
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
+  PerViewUniforms m_shadowViewUniformBufferData {};
   std::array<LightUniform, kLightUniformArraySize> m_lightUniformsBufferData {};
 
   Unique<gpu::Buffer> m_objectsUniformBufferHandle;
   Unique<gpu::Buffer> m_viewUniformBufferHandle;
+  Unique<gpu::Buffer> m_shadowViewUniformBufferHandle;
   Unique<gpu::Buffer> m_lightsUniformBufferHandle;
   Unique<gpu::DescriptorSetLayout> m_viewDescriptorSetLayout;
   Unique<gpu::DescriptorSetLayout> m_objectDescriptorSetLayout;
   Unique<gpu::DescriptorSet> m_viewDescriptorSet;
+  Unique<gpu::DescriptorSet> m_shadowViewDescriptorSet;
   Unique<gpu::DescriptorSet> m_objectDescriptorSet;
   bool m_objectDescriptorSetDirty = true;
   asset_ptr<Texture> m_iblDfgLut;
