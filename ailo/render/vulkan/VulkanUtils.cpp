@@ -70,7 +70,8 @@ std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::I
     case vk::ImageLayout::eTransferDstOptimal:
       return { vk::AccessFlagBits::eTransferWrite, vk::PipelineStageFlagBits::eTransfer };
     case vk::ImageLayout::ePresentSrcKHR:
-      return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eTransfer };
+      // Must match the acquire semaphore's wait stage so the layout transition waits for the acquire.
+      return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eColorAttachmentOutput };
     case vk::ImageLayout::eShaderReadOnlyOptimal:
       return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eFragmentShader };
     default: return { vk::AccessFlagBits::eNone, vk::PipelineStageFlagBits::eNone };
