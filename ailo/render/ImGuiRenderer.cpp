@@ -110,7 +110,7 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
         static_cast<uint32_t>(tex->Height)
     );
 
-    ImTextureID texId = texture.get().getId();
+    ImTextureID texId = texture.getHandle().getId();
     tex->SetTexID(texId);
 
     auto& descriptor = m_samplerDescriptors[texId] = m_renderAPI->createDescriptorSet(m_samplerDescriptorLayout);

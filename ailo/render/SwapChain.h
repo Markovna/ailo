@@ -14,11 +14,11 @@ public:
     vk::Result present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue);
     void destroy(vk::Device device);
 
-    resource_ptr<gpu::RenderTarget> getCurrentRenderTarget() { return m_renderTargets[m_currentImageIndex]; }
+    const Shared<gpu::RenderTarget>& getCurrentRenderTarget() const { return m_renderTargets[m_currentImageIndex]; }
 
 private:
     vk::SwapchainKHR m_swapchain;
-    std::vector<resource_ptr<gpu::RenderTarget>> m_renderTargets;
+    std::vector<Shared<gpu::RenderTarget>> m_renderTargets;
     uint32_t m_currentImageIndex = 0;
     std::vector<vk::Semaphore> m_renderFinishedSemaphores;
 };

@@ -24,9 +24,6 @@ namespace ailo {
 
 class SwapChain;
 
-template<typename T>
-class Unique;
-
 class RenderAPI {
 public:
     explicit RenderAPI(Platform::WindowHandle window);
@@ -86,17 +83,6 @@ public:
     void handleWindowResize();
 
 private:
-    template<typename T>
-    friend class Unique;
-
-    void destroy(const VertexBufferLayoutHandle&);
-    void destroy(const BufferHandle&);
-    void destroy(const TextureHandle&);
-    void destroy(const DescriptorSetLayoutHandle&);
-    void destroy(const DescriptorSetHandle&);
-    void destroy(const RenderTargetHandle&);
-    void destroy(const ProgramHandle&);
-
     using Buffer = gpu::Buffer;
     using DescriptorSet = gpu::DescriptorSet;
     using Texture = gpu::Texture;
@@ -110,7 +96,10 @@ private:
 
     bool recreateSwapchain();
 
-    void createDescriptorSet(DescriptorSet&, DescriptorSetLayoutHandle);
+    // Erases resources whose last reference is gone and that the GPU no longer uses.
+    void collectGarbage();
+
+    vk::DescriptorSet allocateDescriptorSet(DescriptorSetLayoutHandle);
     void freeDescriptorSet(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     // The staging buffer is freed once `commands` completes, so the copy reading from it must be recorded into `commands`.
@@ -151,44 +140,6 @@ private:
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
     RenderPassState m_currentRenderPassState;
-};
-
-template<typename T>
-class Unique {
-public:
-    Unique() noexcept = default;
-    Unique(RenderAPI* api, Handle<T> handle) noexcept : m_api(api), m_handle(handle) {}
-
-    Unique(Unique&& other) noexcept : m_api(other.m_api), m_handle(std::exchange(other.m_handle, {})) {}
-
-    Unique& operator=(Unique&& other) noexcept {
-        if (this != &other) {
-            reset();
-            m_api = other.m_api;
-            m_handle = std::exchange(other.m_handle, {});
-        }
-        return *this;
-    }
-
-    Unique(const Unique&) = delete;
-    Unique& operator=(const Unique&) = delete;
-
-    ~Unique() { reset(); }
-
-    void reset() noexcept {
-        if (m_handle) {
-            m_api->destroy(m_handle);
-            m_handle = {};
-        }
-    }
-
-    [[nodiscard]] Handle<T> get() const noexcept { return m_handle; }
-    operator Handle<T>() const noexcept { return m_handle; }
-    explicit operator bool() const noexcept { return static_cast<bool>(m_handle); }
-
-private:
-    RenderAPI* m_api = nullptr;
-    Handle<T> m_handle {};
 };
 
 } // namespace ailo

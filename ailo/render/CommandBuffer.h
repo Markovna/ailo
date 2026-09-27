@@ -2,6 +2,7 @@
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
+#include "Resource.h"
 #include "UniqueVkHandle.h"
 
 namespace ailo {

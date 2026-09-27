@@ -1,70 +1,91 @@
 #pragma once
 
 #include <stdexcept>
+#include <vector>
 
 #include "common/slot_map.h"
-#include "ResourcePtr.h"
-#include "DeletionQueue.h"
+#include "Resource.h"
+#include "CommandBuffer.h"
 
 namespace ailo {
 
 template<typename ResourceType>
 class ResourceContainer {
+    static_assert(std::is_base_of_v<Resource, ResourceType>, "GPU resources must derive from Resource");
+
 public:
     using Handle = Handle<ResourceType>;
     using value_type = ResourceType;
     using reference = value_type&;
-    using const_reference = const value_type&;
     using pointer = value_type*;
-    using const_pointer = const value_type*;
 
-    template<typename...Args>
-    std::pair<Handle, reference> emplace(Args&&... args) {
+    explicit ResourceContainer(const CommandsPool& commands) : m_commands(commands) {}
+
+    ResourceContainer(const ResourceContainer&) = delete;
+    ResourceContainer& operator=(const ResourceContainer&) = delete;
+
+    template<typename... Args>
+    Unique<ResourceType> make(Args&&... args) {
         auto key = m_resources.emplace(std::forward<Args>(args)...);
-        auto ptr = m_resources.get(key);
-        return { Handle { key.raw }, *ptr };
+        return { this, Handle { key.raw }, m_resources.get(key) };
     }
 
-    void erase(Handle handle) {
-        using key_type = typename dod::slot_map<ResourceType>::key;
-        m_resources.erase(key_type {handle.getId()});
+    // Adds a reference to a live resource.
+    Shared<ResourceType> share(Handle handle) {
+        return { this, handle, &get(handle) };
     }
-
-    // Called when the last resource_ptr goes away. Resources whose destructor frees Vulkan objects
-    // (textures, programs, pipelines) stay alive until the GPU has finished with them.
-    void release(Handle handle) {
-        if (m_deletionQueue) {
-            m_deletionQueue->defer([this, handle] { erase(handle); });
-        } else {
-            erase(handle);
-        }
-    }
-
-    void setDeletionQueue(DeletionQueue* deletionQueue) { m_deletionQueue = deletionQueue; }
 
     reference get(Handle handle) {
         using key_type = typename dod::slot_map<ResourceType>::key;
-        auto ptr = m_resources.get(key_type {handle.getId()});
+        auto ptr = m_resources.get(key_type { handle.getId() });
         if (ptr == nullptr) {
             throw std::runtime_error("Resource not found");
         }
+        assert(!ptr->isDestroyed() && "Resource is used after its last reference was dropped");
         return *ptr;
     }
 
-    void clear() { m_resources.clear(); }
+    void release(Handle handle) {
+        m_pending.push_back({ m_commands.currentSerial(), handle });
+    }
+
+    // Erases released resources whose command buffers have completed. Call once per frame.
+    void collect(uint64_t completedSerial) {
+        // Index-based: destructors may release resources into other containers, never into this one,
+        // but don't rely on references into m_pending staying valid.
+        size_t count = 0;
+        while (count < m_pending.size() && m_pending[count].serial <= completedSerial) {
+            erase(m_pending[count].handle);
+            ++count;
+        }
+        m_pending.erase(m_pending.begin(), m_pending.begin() + static_cast<ptrdiff_t>(count));
+    }
+
+    // Erases every released resource regardless of GPU progress. Only valid once the device is idle.
+    void flush() {
+        collect(std::numeric_limits<uint64_t>::max());
+    }
+
+    // Destroys every resource, referenced or not. Only valid on shutdown, once all owners are gone.
+    void clear() {
+        m_pending.clear();
+        m_resources.clear();
+    }
 
 private:
-    dod::slot_map<ResourceType> m_resources {};
-    DeletionQueue* m_deletionQueue = nullptr;
-};
+    struct PendingRelease {
+        uint64_t serial;
+        Handle handle;
+    };
 
-template<typename T>
-template<typename ...Args>
-resource_ptr<T> resource_ptr<T>::make(ResourceContainer<T>& container, Args&& ...args) {
-    auto [handle, ref] = container.emplace(std::forward<Args>(args)...);
-    ref.m_container = &container;
-    ref.m_handle = handle;
-    return resource_ptr { &ref };
-}
+    void erase(Handle handle) {
+        using key_type = typename dod::slot_map<ResourceType>::key;
+        m_resources.erase(key_type { handle.getId() });
+    }
+
+    const CommandsPool& m_commands;
+    dod::slot_map<ResourceType> m_resources {};
+    std::vector<PendingRelease> m_pending;
+};
 
 }

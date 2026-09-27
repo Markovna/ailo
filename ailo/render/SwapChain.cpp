@@ -49,7 +49,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     auto samples = vk::SampleCountFlagBits::e1;
     samples = std::min(samples, device.getMSAASamples());
 
-    auto depth = resource_ptr<gpu::Texture>::make(textures,
+    Shared<gpu::Texture> depth = textures.make(
         *device, device.physicalDevice(), TextureType::TEXTURE_2D,
         depthFormat, 1, extent.width, extent.height, vk::Filter{},
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
@@ -59,17 +59,17 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
     m_renderTargets.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
-        auto& rt = m_renderTargets.emplace_back(resource_ptr<gpu::RenderTarget>::make(renderTargets));
+        auto& rt = m_renderTargets.emplace_back(renderTargets.make());
         rt->samples = samples;
         rt->width = extent.width;
         rt->height = extent.height;
 
-        rt->colors[0] = resource_ptr<gpu::Texture>::make(textures, *device, image,
+        rt->colors[0] = textures.make( *device, image,
             surfaceFormat.format, extent.width, extent.height, vk::ImageUsageFlagBits::eColorAttachment, vk::ImageAspectFlagBits::eColor);
 
         if (samples != vk::SampleCountFlagBits::e1) {
             auto color = rt->colors[0];
-            rt->colors[0] = resource_ptr<gpu::Texture>::make(textures,
+            rt->colors[0] = textures.make(
                 *device, device.physicalDevice(), TextureType::TEXTURE_2D,
                 surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,

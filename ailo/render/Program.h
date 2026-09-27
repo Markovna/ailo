@@ -1,7 +1,7 @@
 #pragma once
 
 #include "render/vulkan/Resources.h"
-#include "ResourcePtr.h"
+#include "Resource.h"
 #include <vulkan/vulkan.hpp>
 
 namespace ailo {
@@ -32,7 +32,7 @@ struct RasterParams {
     bool blendEnable;
 };
 
-class Program : public enable_resource_ptr<Program> {
+class Program : public Resource {
 public:
     Program(vk::Device device, const ShaderDescription& description);
     ~Program();

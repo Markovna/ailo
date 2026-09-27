@@ -3,11 +3,11 @@
 #include <vulkan/vulkan.hpp>
 
 #include "Resources.h"
-#include "render/ResourcePtr.h"
+#include "render/Resource.h"
 
 namespace ailo::gpu {
 
-class  Texture : public enable_resource_ptr<Texture> {
+class Texture : public Resource {
 public:
     Texture() = default;
 

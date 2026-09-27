@@ -3,28 +3,26 @@
 #include <vulkan/vulkan.hpp>
 #include <array>
 
-#include "render/ResourcePtr.h"
+#include "render/Resource.h"
 #include "render/Program.h"
 #include "utils/Utils.h"
 #include "common/LRUCache.h"
 
 namespace ailo {
 
-class Pipeline : public enable_resource_ptr<Pipeline> {
+class Pipeline : public Resource {
 public:
-    Pipeline(vk::Device device, const resource_ptr<gpu::Program>& program, vk::RenderPass renderPass, const gpu::VertexBufferLayout& vertexInput, const gpu::FrameBufferFormat& format);
+    Pipeline(vk::Device device, const Shared<gpu::Program>& program, vk::RenderPass renderPass, const gpu::VertexInputLayout& vertexInput, const gpu::FrameBufferFormat& format);
     ~Pipeline();
 
     vk::Pipeline operator*() const noexcept { return m_pipeline; }
     operator vk::Pipeline() const noexcept { return m_pipeline; }
 
 private:
-    // Do not allow the program to be destroyed until the pipeline has been destroyed.
-    // This is necessary to ensure that the PipelineCacheKey containing the program
-    // handle always corresponds to the correct program. Having program ptr here will
-    // prevent the program from being removed from the resource map and thus prevent
-    // its handle from being reused.
-    resource_ptr<gpu::Program> m_programPtr;
+    // Holding a reference here prevents the program from being destroyed until the pipeline
+    // has been destroyed. This is necessary to ensure that the PipelineCacheKey containing
+    // the program handle always corresponds to the correct program.
+    Shared<gpu::Program> m_programPtr;
     vk::Pipeline m_pipeline;
     vk::Device m_device;
 };
@@ -74,8 +72,8 @@ class PipelineCache {
     };
 
     struct PipelineState {
-        resource_ptr<gpu::Program> program {};
-        gpu::VertexBufferLayout vertexLayout {};
+        Shared<gpu::Program> program {};
+        gpu::VertexInputLayout vertexLayout {};
         vk::RenderPass renderPass {};
         gpu::FrameBufferFormat frameBufferFormat {};
     };
@@ -85,8 +83,8 @@ public:
 
     explicit PipelineCache(vk::Device device, ResourceContainer<Pipeline>& pipelines);
 
-    void bindProgram(const resource_ptr<gpu::Program>& program);
-    void bindVertexLayout(const gpu::VertexBufferLayout& vertexLayout) { m_pipelineState.vertexLayout = vertexLayout; }
+    void bindProgram(const Shared<gpu::Program>& program);
+    void bindVertexLayout(const gpu::VertexInputLayout& vertexLayout) { m_pipelineState.vertexLayout = vertexLayout; }
     void bindRenderPass(vk::RenderPass renderPass, const gpu::FrameBufferFormat& format) {
         m_pipelineState.renderPass = renderPass;
         m_pipelineState.frameBufferFormat = format;
@@ -94,7 +92,7 @@ public:
 
     vk::PipelineLayout pipelineLayout() const { return m_pipelineState.program->pipelineLayout(); }
 
-    resource_ptr<Pipeline> getOrCreate();
+    Shared<Pipeline> getOrCreate();
 
     void clear() {
         m_cache.clear();
@@ -104,7 +102,7 @@ public:
 
 private:
     ResourceContainer<Pipeline>* m_pipelines;
-    LRUCache<PipelineCacheQuery, resource_ptr<Pipeline>, PipelineCacheQueryHash> m_cache;
+    LRUCache<PipelineCacheQuery, Shared<Pipeline>, PipelineCacheQueryHash> m_cache;
     vk::Device m_device;
     PipelineState m_pipelineState;
 };

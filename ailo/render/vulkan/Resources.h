@@ -4,7 +4,7 @@
 
 #include "vulkan/vulkan.hpp"
 #include "vma/vk_mem_alloc.h"
-#include "render/ResourcePtr.h"
+#include "render/Resource.h"
 #include "render/Constants.h"
 
 namespace ailo {
@@ -105,7 +105,14 @@ class PerColorAttachment : public std::array<T, kMaxColorAttachments> {
 
 namespace gpu {
 
-struct Buffer {
+struct Buffer : Resource {
+    ~Buffer() {
+        if (buffer) {
+            vmaDestroyBuffer(allocator, buffer, vmaAllocation);
+        }
+    }
+
+    VmaAllocator allocator {};
     vk::Buffer buffer;
     uint64_t size;
     VmaAllocation vmaAllocation;
@@ -113,7 +120,7 @@ struct Buffer {
     BufferBinding binding;
 };
 
-struct VertexBufferLayout {
+struct VertexInputLayout {
     static constexpr uint32_t kMaxAttributes = 8;
 
     std::array<vk::VertexInputBindingDescription, kMaxAttributes> bindings;
@@ -122,6 +129,8 @@ struct VertexBufferLayout {
     size_t bindingsCount;
 };
 
+struct VertexBufferLayout : Resource, VertexInputLayout {};
+
 struct StageBuffer {
     vk::Buffer buffer;
     uint64_t size;
@@ -129,14 +138,29 @@ struct StageBuffer {
     void* mapping;
 };
 
-struct DescriptorSetLayout {
+struct DescriptorSetLayout : Resource {
     using bitmask_t = std::bitset<64>;
 
+    ~DescriptorSetLayout() {
+        if (layout) {
+            device.destroyDescriptorSetLayout(layout);
+        }
+    }
+
+    vk::Device device;
     vk::DescriptorSetLayout layout;
     bitmask_t dynamicBindings;
 };
 
-struct DescriptorSet {
+struct DescriptorSet : Resource {
+    ~DescriptorSet() {
+        if (descriptorSet) {
+            (void) device.freeDescriptorSets(pool, 1, &descriptorSet);
+        }
+    }
+
+    vk::Device device;
+    vk::DescriptorPool pool;
     vk::DescriptorSet descriptorSet;
     DescriptorSetLayout::bitmask_t boundBindings;
     DescriptorSetLayout::bitmask_t dynamicBindings;
@@ -144,10 +168,10 @@ struct DescriptorSet {
     uint64_t lastUsedSerial = 0;
 };
 
-struct RenderTarget : public enable_resource_ptr<RenderTarget> {
-    PerColorAttachment<resource_ptr<Texture>> colors {};
-    PerColorAttachment<resource_ptr<Texture>> resolve {};
-    resource_ptr<Texture> depth {};
+struct RenderTarget : Resource {
+    PerColorAttachment<Shared<Texture>> colors {};
+    PerColorAttachment<Shared<Texture>> resolve {};
+    Shared<Texture> depth {};
     uint32_t width {};
     uint32_t height {};
     vk::SampleCountFlagBits samples {};
@@ -224,7 +248,7 @@ struct PipelineState {
 };
 
 struct RenderPassState {
-    resource_ptr<gpu::RenderTarget> renderTarget {};
+    Shared<gpu::RenderTarget> renderTarget {};
 };
 
 }

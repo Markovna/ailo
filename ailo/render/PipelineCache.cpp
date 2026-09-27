@@ -1,15 +1,12 @@
 #include "PipelineCache.h"
 
-#include <iostream>
-#include <ostream>
-
 #include "vulkan/VulkanUtils.h"
 
 ailo::Pipeline::Pipeline(
     vk::Device device,
-    const resource_ptr<gpu::Program>& programPtr,
+    const Shared<gpu::Program>& programPtr,
     vk::RenderPass renderPass,
-    const gpu::VertexBufferLayout& vertexInput,
+    const gpu::VertexInputLayout& vertexInput,
     const gpu::FrameBufferFormat& format
     )
         : m_device(device),
@@ -125,11 +122,11 @@ ailo::PipelineCache::PipelineCache(vk::Device device, ResourceContainer<Pipeline
     m_pipelines(&pipelines), m_cache(kDefaultCacheSize), m_device(device), m_pipelineState() {
 }
 
-void ailo::PipelineCache::bindProgram(const resource_ptr<gpu::Program>& program) {
+void ailo::PipelineCache::bindProgram(const Shared<gpu::Program>& program) {
     m_pipelineState.program = program;
 }
 
-ailo::resource_ptr<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
+ailo::Shared<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
     auto& state = m_pipelineState;
 
     PipelineCacheQuery query;
@@ -148,7 +145,7 @@ ailo::resource_ptr<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
         return *ptr;
     }
 
-    resource_ptr<Pipeline> pipeline = resource_ptr<Pipeline>::make(*m_pipelines, m_device, m_pipelineState.program, m_pipelineState.renderPass, m_pipelineState.vertexLayout, m_pipelineState.frameBufferFormat);
+    Shared<Pipeline> pipeline = m_pipelines->make(m_device, m_pipelineState.program, m_pipelineState.renderPass, m_pipelineState.vertexLayout, m_pipelineState.frameBufferFormat);
     auto [it, result] = m_cache.tryEmplace(query, pipeline);
     assert(result);
     assert(it->second);
