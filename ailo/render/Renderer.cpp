@@ -364,7 +364,7 @@ asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(AssetManager*
   static const std::array<uint8_t, 4> metallicRoughness = { 0, 128, 0, 255 };
 
   auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/default_metallic_roughness",
-    m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+    m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
   texture->updateImage(m_renderAPI, metallicRoughness.data(), 4);
   return texture;
 }

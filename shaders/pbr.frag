@@ -45,12 +45,23 @@ struct Pixel {
     vec3 dfg;
 };
 
+#define MIN_PERCEPTUAL_ROUGHNESS 0.045
+
+vec3 sampleDFG(float NoV, float perceptualRoughness) {
+    // The LUT sampler repeats: keep the lookup inside the edge texel centers so
+    // bilinear filtering never blends in the opposite edge of the table.
+    vec2 halfTexel = 0.5 / vec2(textureSize(iblDFG, 0));
+    vec2 uv = clamp(vec2(NoV, perceptualRoughness), halfTexel, 1.0 - halfTexel);
+    return textureLod(iblDFG, uv, 0.0).rgb;
+}
+
 void getPixel(out Pixel pixel) {
     vec4 baseColor = texture(baseColorMap, fragUV);
 
     vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
     float metallic = metallicRoughness.b;
-    float roughness = metallicRoughness.g;
+    // At roughness 0, D_GGX is a delta and punctual lights would produce no highlight at all.
+    float roughness = clamp(metallicRoughness.g, MIN_PERCEPTUAL_ROUGHNESS, 1.0);
 
     pixel.baseColor = baseColor;
     pixel.perceptualRoughness = roughness;
@@ -63,7 +74,7 @@ void getPixel(out Pixel pixel) {
     pixel.reflectance = 0.16 * reflectance * reflectance;
 
     pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
-    pixel.dfg = textureLod(iblDFG, vec2(shading_NoV, pixel.perceptualRoughness), 0.0).rgb;
+    pixel.dfg = sampleDFG(shading_NoV, pixel.perceptualRoughness);
     //pixel.energyCompensation = 1.0 + pixel.f0 * (1.0 / pixel.dfg.y - 1.0);
 }
 
@@ -222,7 +233,7 @@ void main() {
         color += surfaceShading(pixel, light, 1.0);
     }
 
-    const float ambientLuminance = 0.2;
+    const float ambientLuminance = 0.3;
 
     vec3 E = mix(pixel.dfg.xxx, pixel.dfg.yyy, pixel.f0);
 

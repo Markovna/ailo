@@ -57,7 +57,7 @@ struct MeshData {
     uint32_t materialIndex;
 };
 
-static asset_ptr<Texture> loadTexture(AssetManager* assetManager, const std::string& texturePath, const std::string& modelDirectory, vk::Format format = vk::Format::eR8G8B8A8Srgb) {
+static asset_ptr<Texture> loadTexture(AssetManager* assetManager, const std::string& texturePath, const std::string& modelDirectory) {
     std::filesystem::path fullPath;
     if (std::filesystem::path(texturePath).is_absolute()) {
         fullPath = texturePath;
@@ -142,11 +142,12 @@ asset_ptr<Texture> load(AssetManager* assetManager, RenderAPI* renderApi, const 
         return Texture::fromEmbeddedCompressed(assetManager, renderApi, embedded->pcData, embedded->mWidth, format);
     }
 
+    // The loader picks the format from the key's tags: sRGB by default, UNORM with "@norm".
     std::string key { texturePath.C_Str() };
-    if (textureType == aiTextureType_NORMALS) {
+    if (format == vk::Format::eR8G8B8A8Unorm) {
         key.append("@norm");
     }
-    return loadTexture(assetManager, key, modelDirectory, format);
+    return loadTexture(assetManager, key, modelDirectory);
 }
 
 std::vector<Entity> MeshReader::instantiate(
@@ -279,7 +280,7 @@ std::vector<Entity> MeshReader::instantiate(
         auto normalMap = load(assetManager, renderApi, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
         if (!normalMap) normalMap = assetManager->load<Texture>("builtin://textures/normal@norm");
 
-        auto metallicRoughness = load(assetManager, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        auto metallicRoughness = load(assetManager, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
         if (!metallicRoughness) metallicRoughness = assetManager->load<Texture>("builtin://textures/default_metallic_roughness");
 
         auto createMat = [&](asset_ptr<Shader> sh) {
