@@ -119,6 +119,9 @@ struct Buffer : Resource {
     VmaAllocation vmaAllocation;
     VmaAllocationInfo allocationInfo;
     BufferBinding binding;
+    // Serial of the last command buffer that reads the buffer (vertex/index input or a bound descriptor set);
+    // 0 while nothing has read it. Lets an upload skip the barrier against reads that have already completed.
+    uint64_t lastReadSerial = 0;
 };
 
 struct VertexInputLayout {
@@ -131,13 +134,6 @@ struct VertexInputLayout {
 };
 
 struct VertexBufferLayout : Resource, VertexInputLayout {};
-
-struct StageBuffer {
-    vk::Buffer buffer;
-    uint64_t size;
-    VmaAllocation vmaAllocation;
-    void* mapping;
-};
 
 struct DescriptorSetLayout : Resource {
     using bitmask_t = std::bitset<64>;
@@ -163,7 +159,8 @@ struct DescriptorSet : Resource {
     vk::Device device;
     vk::DescriptorPool pool;
     vk::DescriptorSet descriptorSet;
-    DescriptorSetLayout::bitmask_t boundBindings;
+    DescriptorSetLayout::bitmask_t bufferBindings;
+    DescriptorSetLayout::bitmask_t textureBindings;
     DescriptorSetLayout::bitmask_t dynamicBindings;
     DescriptorSetLayoutHandle layoutHandle;
     uint64_t lastUsedSerial = 0;

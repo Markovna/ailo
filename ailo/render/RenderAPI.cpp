@@ -3,7 +3,10 @@
 #include "vulkan/VulkanUtils.h"
 #include "SwapChain.h"
 #include <iostream>
+#include <numeric>
 #include <stdexcept>
+
+#include <vulkan/vulkan_format_traits.hpp>
 
 #include "entt/entity/view.hpp"
 
@@ -18,6 +21,7 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_deletionQueue(m_commands),
     m_descriptorPool(createDescriptorPoolS(*m_device)),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
+    m_stagePool(m_Allocator, m_commands),
     m_framebufferCache(*m_device, m_deletionQueue),
     m_renderPassCache(*m_device, m_deletionQueue),
     m_pipelineCache(*m_device, m_graphicsPipelines) {
@@ -46,6 +50,7 @@ RenderAPI::~RenderAPI() {
     m_commands.destroy();
 
     m_deletionQueue.shutdown();
+    m_stagePool.destroy();
 
     collectGarbage();
 
@@ -112,6 +117,7 @@ void RenderAPI::waitIdle() {
 
 void RenderAPI::collectGarbage() {
     m_deletionQueue.collect();
+    m_stagePool.collect();
 
     // Holders before what they hold, so what they release is erased in the same pass:
     // render targets -> textures, pipelines -> programs, descriptor sets -> buffers and textures.
@@ -282,16 +288,16 @@ void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data
     commands.acquire(texturePtr);
     vk::CommandBuffer commandBuffer = *commands;
 
-    auto stageBuffer = allocateStageBuffer(commands, dataSize);
-    memcpy(stageBuffer.mapping, data, dataSize);
-    vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, dataSize);
+    // bufferOffset must be a multiple of the texel block size and of 4.
+    const vk::DeviceSize alignment = std::lcm<vk::DeviceSize>(4, vk::blockSize(texture.format));
+    auto staged = stage(commands, data, dataSize, alignment);
 
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eTransferDstOptimal);
 
     if(width == 0) width = texture.width;
     if(height == 0) height = texture.height;
 
-    copyBufferToImage(commandBuffer, stageBuffer.buffer, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount, level);
+    copyBufferToImage(commandBuffer, staged.buffer, staged.offset, texture.image, width, height, xOffset, yOffset, baseLayer, layerCount, level);
 
     texture.transitionLayout(commandBuffer, vk::ImageLayout::eShaderReadOnlyOptimal);
 }
@@ -424,7 +430,8 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorWrite.pBufferInfo = &bufferInfo;
 
     m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    descriptorSet.boundBindings[binding] = true;
+    descriptorSet.bufferBindings[binding] = true;
+    descriptorSet.textureBindings[binding] = false;
     setBoundResource(descriptorSet, binding, std::move(bufferPtr));
 }
 
@@ -442,8 +449,9 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
         vk::DescriptorSet newDescriptorSet = allocateDescriptorSet(descriptorSet.layoutHandle);
 
         std::vector<vk::CopyDescriptorSet> copyDescriptors;
-        for(size_t i = 0; i < descriptorSet.boundBindings.size(); i++) {
-            if (!descriptorSet.boundBindings[i]) {
+        const auto boundBindings = descriptorSet.bufferBindings | descriptorSet.textureBindings;
+        for(size_t i = 0; i < boundBindings.size(); i++) {
+            if (!boundBindings[i]) {
                 continue;
             }
             vk::CopyDescriptorSet copyDescriptorSet {};
@@ -479,7 +487,8 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     descriptorWrite.pImageInfo = &imageInfo;
 
     m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    descriptorSet.boundBindings[binding] = true;
+    descriptorSet.textureBindings[binding] = true;
+    descriptorSet.bufferBindings[binding] = false;
     setBoundResource(descriptorSet, binding, std::move(texturePtr));
 }
 
@@ -529,14 +538,19 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
         dynamicOffsetsArray.data()
     );
 
-    descriptorSet.lastUsedSerial = m_commands.currentSerial();
+    const uint64_t serial = m_commands.currentSerial();
+    descriptorSet.lastUsedSerial = serial;
 
     // The set only references what is written into it now; a later update can replace a binding while these
     // commands are in flight. Acquire the current contents so they outlive this command buffer regardless.
-    for (auto& resource : descriptorSet.boundResources) {
-        if (resource) {
-            commands.acquire(resource);
+    for (size_t binding = 0; binding < descriptorSet.boundResources.size(); binding++) {
+        auto& resource = descriptorSet.boundResources[binding];
+        if (!resource) continue;
+
+        if (descriptorSet.bufferBindings[binding]) {
+            static_cast<Buffer*>(resource.get())->lastReadSerial = serial;
         }
+        commands.acquire(resource);
     }
     commands.acquire(std::move(descriptorSetPtr));
 }
@@ -668,6 +682,7 @@ void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
     vk::DeviceSize offsets[] = {0};
     auto& commands = m_commands.get();
     commands->bindVertexBuffers(0, 1, vertexBuffers, offsets);
+    buffer->lastReadSerial = m_commands.currentSerial();
     commands.acquire(std::move(buffer));
 }
 
@@ -675,6 +690,7 @@ void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexT
     auto buffer = m_buffers.share(handle);
     auto& commands = m_commands.get();
     commands->bindIndexBuffer(buffer->buffer, 0, indexType);
+    buffer->lastReadSerial = m_commands.currentSerial();
     commands.acquire(std::move(buffer));
 }
 
@@ -751,12 +767,12 @@ bool RenderAPI::recreateSwapchain() {
     return true;
 }
 
-void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image,
+void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image,
     uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset,
     uint32_t baseLayer, uint32_t layerCount,
     uint32_t level) {
     vk::BufferImageCopy region{};
-    region.bufferOffset = 0;
+    region.bufferOffset = bufferOffset;
     region.bufferRowLength = 0;
     region.bufferImageHeight = 0;
     region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -769,35 +785,14 @@ void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer bu
     commandBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, 1, &region);
 }
 
-gpu::StageBuffer RenderAPI::allocateStageBuffer(CommandBuffer& commands, uint32_t capacity) {
-    VkBufferCreateInfo bufferInfo {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = capacity,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-    };
-    VmaAllocationCreateInfo allocInfo { .usage = VMA_MEMORY_USAGE_CPU_ONLY };
-    VkBuffer buffer;
-    VmaAllocation memory;
-    VkResult result = vmaCreateBuffer(m_Allocator, &bufferInfo, &allocInfo, &buffer, &memory, nullptr);
-
-    void* pMapping = nullptr;
-    if(result == VK_SUCCESS) {
-        result = vmaMapMemory(m_Allocator, memory, &pMapping);
-    }
-    StageBuffer stageBuffer {
-      .buffer = buffer,
-      .size = capacity,
-      .vmaAllocation = memory,
-      .mapping = pMapping
-    };
-
-    // defer() tags the buffer with the serial being recorded, which must be the one the copy goes into.
+StagePool::Allocation RenderAPI::stage(CommandBuffer& commands, const void* data, uint64_t size, vk::DeviceSize alignment) {
+    // The pool tags the memory with the serial being recorded, which must be the one the copy goes into.
     assert(commands.serial() == m_commands.currentSerial());
-    m_deletionQueue.defer([allocator = m_Allocator, buffer, memory] {
-        vmaUnmapMemory(allocator, memory);
-        vmaDestroyBuffer(allocator, buffer, memory);
-    });
-    return stageBuffer;
+
+    auto allocation = m_stagePool.allocate(size, alignment);
+    memcpy(allocation.mapping, data, size);
+    m_stagePool.flush(allocation, size);
+    return allocation;
 }
 
 void RenderAPI::freeDescriptorSet(vk::DescriptorSet descriptorSet) {
@@ -823,19 +818,16 @@ void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& ac
 void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
   vk::CommandBuffer commandBuffer = *commands;
 
-  // allocate stage buffer
-  auto stageBuffer = allocateStageBuffer(commands, numBytes);
-
-  // mem copy to stage buffer
-  memcpy(stageBuffer.mapping, data, numBytes);
-  vmaFlushAllocation(m_Allocator, stageBuffer.vmaAllocation, 0, numBytes);
+  auto staged = stage(commands, data, numBytes);
 
   VkAccessFlags srcAccess = 0;
   VkPipelineStageFlags srcStage = 0;
   getReadBarrierAccessAndStage(bufferHandle.binding, srcAccess, srcStage);
 
-  // TODO: we might want to skip this barrier in some cases, e.g if buffer is static
-  {
+  // The copy must not overwrite data that earlier commands may still read: reads recorded into this command buffer,
+  // or into a submitted one the GPU hasn't finished. A buffer that was never read, or whose readers have all
+  // completed, needs no barrier. Earlier writes are already ordered by the barrier that follows every copy.
+  if (bufferHandle.lastReadSerial > m_commands.completedSerial()) {
     VkBufferMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
         .srcAccessMask = srcAccess,
@@ -851,11 +843,11 @@ void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle,
   }
 
   VkBufferCopy region = {
-      .srcOffset = 0,
+      .srcOffset = staged.offset,
       .dstOffset = byteOffset,
       .size = numBytes,
   };
-  vkCmdCopyBuffer(commandBuffer, stageBuffer.buffer, bufferHandle.buffer, 1, &region);
+  vkCmdCopyBuffer(commandBuffer, staged.buffer, bufferHandle.buffer, 1, &region);
 
   VkAccessFlags dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | srcAccess;
   VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | srcStage;

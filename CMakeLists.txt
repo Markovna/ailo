@@ -57,6 +57,8 @@ add_executable(ailo
     ailo/render/CommandBuffer.cpp
     ailo/render/DeletionQueue.cpp
     ailo/render/DeletionQueue.h
+    ailo/render/StagePool.cpp
+    ailo/render/StagePool.h
     ailo/render/CommandBuffer.h
     ailo/render/SwapChain.cpp
     ailo/render/SwapChain.h

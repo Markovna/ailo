@@ -18,6 +18,7 @@
 #include "FrameBufferCache.h"
 #include "PipelineCache.h"
 #include "RenderPassCache.h"
+#include "StagePool.h"
 #include "platform/Platform.h"
 
 namespace ailo {
@@ -88,7 +89,6 @@ private:
     using Texture = gpu::Texture;
     using Program = gpu::Program;
     using DescriptorSetLayout = gpu::DescriptorSetLayout;
-    using StageBuffer = gpu::StageBuffer;
     using VertexBufferLayout = gpu::VertexBufferLayout;
 
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
@@ -103,10 +103,11 @@ private:
     static void setBoundResource(DescriptorSet&, uint32_t binding, Shared<Resource> resource);
     void freeDescriptorSet(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
-    // The staging buffer is freed once `commands` completes, so the copy reading from it must be recorded into `commands`.
-    StageBuffer allocateStageBuffer(CommandBuffer& commands, uint32_t capacity);
+    // Copies `data` into staging memory. The staging memory is recycled once `commands` completes, so the copy
+    // reading from it must be recorded into `commands`.
+    StagePool::Allocation stage(CommandBuffer& commands, const void* data, uint64_t size, vk::DeviceSize alignment = 16);
     void loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
-    void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
+    void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:
     bool m_framebufferResized = false;
@@ -125,6 +126,7 @@ private:
     vk::DescriptorPool m_descriptorPool;
 
     VmaAllocator m_Allocator = nullptr;
+    StagePool m_stagePool;
 
     // resources
     ResourceContainer<Buffer> m_buffers;
