@@ -19,7 +19,7 @@ public:
     // Runs `destroy` once every command buffer recorded so far (including the one being recorded) has completed.
     void defer(std::move_only_function<void()> destroy);
 
-    // Runs the pending destructions whose command buffers have completed. Call once per frame.
+    // Runs the pending destructions whose command buffers have completed. Call once per frame; no-op after shutdown().
     void collect();
 
     // Runs everything still pending and makes later defer() calls run immediately.

@@ -61,6 +61,12 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
             device.getFeatures(&supportedFeatures);
             if (!supportedFeatures.samplerAnisotropy) { continue; }
 
+            vk::PhysicalDeviceVulkan12Features supportedFeatures12{};
+            vk::PhysicalDeviceFeatures2 supportedFeatures2{};
+            supportedFeatures2.pNext = &supportedFeatures12;
+            device.getFeatures2(&supportedFeatures2);
+            if (!supportedFeatures12.timelineSemaphore) { continue; }
+
             int32_t graphicsQueueFamilyIndex = -1;
             int32_t presentQueueFamilyIndex = -1;
             auto queueFamilyProperties = device.getQueueFamilyProperties();
@@ -108,6 +114,9 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     vk::PhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = true;
 
+    vk::PhysicalDeviceVulkan12Features deviceFeatures12{};
+    deviceFeatures12.timelineSemaphore = true;
+
     std::vector<const char*> enabledExtensions;
     std::ranges::transform(requiredDeviceExtensions, std::back_inserter(enabledExtensions), [](const auto& extension) { return extension.data(); });
 
@@ -123,6 +132,7 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     }
 
     vk::DeviceCreateInfo createInfo{};
+    createInfo.pNext = &deviceFeatures12;
     createInfo.queueCreateInfoCount = queueCreateInfoCount;
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.pEnabledFeatures = &deviceFeatures;

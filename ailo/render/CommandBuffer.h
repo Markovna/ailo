@@ -3,16 +3,14 @@
 #include <vulkan/vulkan.hpp>
 
 #include "Resource.h"
-#include "UniqueVkHandle.h"
 
 namespace ailo {
 
 class CommandBuffer {
 public:
-    CommandBuffer(vk::CommandBuffer commandBuffer, vk::Device device) :
+    CommandBuffer(vk::CommandBuffer commandBuffer, vk::Semaphore timeline) :
         m_commandBuffer(commandBuffer),
-        m_device(device),
-        m_fence(m_device.createFence(vk::FenceCreateInfo{ vk::FenceCreateFlagBits::eSignaled })) {
+        m_timeline(timeline) {
 
     }
 
@@ -21,10 +19,6 @@ public:
 
     CommandBuffer(CommandBuffer&&) = default;
     CommandBuffer& operator=(CommandBuffer&&) = default;
-
-    ~CommandBuffer() {
-        m_device.destroyFence(m_fence);
-    }
 
     vk::CommandBuffer& operator*() { return m_commandBuffer; }
     vk::CommandBuffer* operator->() { return &m_commandBuffer; }
@@ -39,6 +33,7 @@ public:
 
     vk::CommandBuffer& buffer() { return m_commandBuffer; }
 
+    // Signals signalSemaphore and the pool's timeline semaphore with this buffer's serial.
     void submit(vk::Queue& queue, vk::Semaphore& signalSemaphore);
 
     void addWait(vk::Semaphore waitSemaphore, vk::PipelineStageFlags waitStageMask) {
@@ -46,34 +41,25 @@ public:
         m_waitStages.push_back(waitStageMask);
     }
 
-    void setSubmitSignal(UniqueVkHandle<vk::Semaphore> semaphore) {
+    void setSubmitSignal(vk::UniqueSemaphore semaphore) {
         m_submitSemaphore = std::move(semaphore);
 
         addWait(m_submitSemaphore.get(), vk::PipelineStageFlagBits::eColorAttachmentOutput);
     }
 
-    void wait();
-
-    // Waits are dropped and acquired resources released; call only once the GPU is done with the buffer.
     void reset();
 
-    // Keeps a resource alive until this buffer is reset, i.e. until the GPU is done with the recorded commands.
     void acquire(Shared<Resource> resource) { m_acquired.push_back(std::move(resource)); }
 
-    vk::Fence& getFence() { return m_fence; }
-
-    // Serial of the last recording started on this buffer (0 if never used).
     uint64_t serial() const { return m_serial; }
-    // True unless the buffer was submitted and the GPU has not finished executing it yet.
-    bool isComplete() const;
+    bool isSubmitted() const { return m_submitted; }
 
 private:
     vk::CommandBuffer m_commandBuffer;
-    vk::Device m_device;
-    vk::Fence m_fence;
+    vk::Semaphore m_timeline;
     uint64_t m_serial = 0;
     bool m_submitted = false;
-    UniqueVkHandle<vk::Semaphore> m_submitSemaphore;
+    vk::UniqueSemaphore m_submitSemaphore;
     std::vector<vk::Semaphore> m_waitSemaphores;
     std::vector<vk::PipelineStageFlags> m_waitStages;
     std::vector<Shared<Resource>> m_acquired;
@@ -91,14 +77,17 @@ public:
     uint64_t currentSerial() const { return m_recording ? m_nextSerial : m_nextSerial - 1; }
 
     // Highest serial whose command buffer, and all before it, finished executing on the GPU.
-    uint64_t completedSerial();
+    uint64_t completedSerial() const { return m_device.getSemaphoreCounterValue(m_timeline); }
 
 private:
+    void waitForSerial(uint64_t serial) const;
+
+    vk::Device m_device;
+    vk::Semaphore m_timeline;
     std::vector<CommandBuffer> m_commandBuffers;
     uint8_t m_currentBufferIndex = 0;
     bool m_recording = false;
     uint64_t m_nextSerial = 1;
-    uint64_t m_completedSerial = 0;
 };
 
 }

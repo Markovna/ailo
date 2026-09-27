@@ -14,6 +14,10 @@ void DeletionQueue::defer(std::move_only_function<void()> destroy) {
 }
 
 void DeletionQueue::collect() {
+    if (m_entries.empty()) {
+        return;
+    }
+
     const uint64_t completed = m_commands.completedSerial();
 
     while (!m_entries.empty() && m_entries.front().serial <= completed) {

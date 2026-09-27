@@ -72,7 +72,7 @@ bool RenderAPI::beginFrame() {
         return false;
     }
 
-    UniqueVkHandle acquireSemaphore { *m_device, m_device->createSemaphore(vk::SemaphoreCreateInfo{}) };
+    vk::UniqueSemaphore acquireSemaphore = m_device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
 
     auto result = m_swapChain->acquireNextImage(*m_device, acquireSemaphore.get(), UINT64_MAX);
 

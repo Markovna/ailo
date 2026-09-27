@@ -1,28 +1,41 @@
 #include "CommandBuffer.h"
 
+#include <array>
+#include <cassert>
+
 namespace ailo {
 
 void CommandBuffer::submit(vk::Queue& queue, vk::Semaphore& signalSemaphore) {
     m_commandBuffer.end();
 
+    std::array signalSemaphores{ signalSemaphore, m_timeline };
+    std::array<uint64_t, 2> signalValues{ 0, m_serial };
+
+    vk::TimelineSemaphoreSubmitInfo timelineInfo{};
+    timelineInfo.signalSemaphoreValueCount = signalValues.size();
+    timelineInfo.pSignalSemaphoreValues = signalValues.data();
+
     vk::SubmitInfo submitInfo{};
+    submitInfo.pNext = &timelineInfo;
     submitInfo.waitSemaphoreCount = m_waitSemaphores.size();
     submitInfo.pWaitSemaphores = m_waitSemaphores.data();
     submitInfo.pWaitDstStageMask = m_waitStages.data();
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &m_commandBuffer;
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &signalSemaphore;
+    submitInfo.signalSemaphoreCount = signalSemaphores.size();
+    submitInfo.pSignalSemaphores = signalSemaphores.data();
 
-    queue.submit(submitInfo, m_fence);
+    queue.submit(submitInfo);
     m_submitted = true;
 }
 
-bool CommandBuffer::isComplete() const {
-    return !m_submitted || m_device.getFenceStatus(m_fence) == vk::Result::eSuccess;
-}
+CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) :
+    m_device(device) {
+    vk::SemaphoreTypeCreateInfo timelineInfo{ vk::SemaphoreType::eTimeline, 0 };
+    vk::SemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.pNext = &timelineInfo;
+    m_timeline = device.createSemaphore(semaphoreInfo);
 
-CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) {
     const uint32_t numCommandBuffers = 10;
     vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.commandPool = commandPool;
@@ -32,7 +45,7 @@ CommandsPool::CommandsPool(vk::Device device, vk::CommandPool commandPool) {
     m_commandBuffers.reserve(numCommandBuffers);
     auto commandBuffers = device.allocateCommandBuffers(allocInfo);
     for (auto&& cb : commandBuffers) {
-        m_commandBuffers.emplace_back(std::move(cb), device);
+        m_commandBuffers.emplace_back(std::move(cb), m_timeline);
     }
 }
 
@@ -42,7 +55,7 @@ CommandBuffer& CommandsPool::get() {
     }
 
     auto& buffer = m_commandBuffers[m_currentBufferIndex];
-    buffer.wait();
+    waitForSerial(buffer.serial());
 
     buffer.reset();
     buffer.begin(m_nextSerial);
@@ -52,26 +65,20 @@ CommandBuffer& CommandsPool::get() {
 
 void CommandsPool::next() {
     if (m_recording) {
+        // An unsubmitted serial would never be signalled, stalling completedSerial() forever.
+        assert(m_commandBuffers[m_currentBufferIndex].isSubmitted());
         m_nextSerial++;
     }
     m_currentBufferIndex = (m_currentBufferIndex + 1) % m_commandBuffers.size();
     m_recording = false;
 }
 
-uint64_t CommandsPool::completedSerial() {
-    // TODO: replace with Timeline semaphores
-    // Fences may be observed signalled out of order, so the result is capped just below
-    // the oldest submitted buffer that is still pending.
-    uint64_t completed = m_nextSerial - 1;
-    for (const auto& cb : m_commandBuffers) {
-        const uint64_t serial = cb.serial();
-        if (serial > m_completedSerial && serial < m_nextSerial && !cb.isComplete()) {
-            completed = std::min(completed, serial - 1);
-        }
-    }
-
-    m_completedSerial = std::max(m_completedSerial, completed);
-    return m_completedSerial;
+void CommandsPool::waitForSerial(uint64_t serial) const {
+    vk::SemaphoreWaitInfo waitInfo{};
+    waitInfo.semaphoreCount = 1;
+    waitInfo.pSemaphores = &m_timeline;
+    waitInfo.pValues = &serial;
+    (void)m_device.waitSemaphores(waitInfo, UINT64_MAX);
 }
 
 void CommandsPool::destroy() {
@@ -79,18 +86,15 @@ void CommandsPool::destroy() {
         cb.reset();
     }
     m_commandBuffers.clear();
-}
 
-void CommandBuffer::wait() {
-    (void)m_device.waitForFences(1, &m_fence, VK_TRUE, UINT64_MAX);
+    m_device.destroySemaphore(m_timeline);
+    m_timeline = nullptr;
 }
 
 void CommandBuffer::reset() {
     m_waitSemaphores.clear();
     m_waitStages.clear();
     m_commandBuffer.reset();
-
-    (void)m_device.resetFences(1, &m_fence);
     m_submitted = false;
 
     m_submitSemaphore.reset();
