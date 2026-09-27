@@ -54,7 +54,11 @@ public:
 
     void wait();
 
+    // Waits are dropped and acquired resources released; call only once the GPU is done with the buffer.
     void reset();
+
+    // Keeps a resource alive until this buffer is reset, i.e. until the GPU is done with the recorded commands.
+    void acquire(Shared<Resource> resource) { m_acquired.push_back(std::move(resource)); }
 
     vk::Fence& getFence() { return m_fence; }
 
@@ -72,6 +76,7 @@ private:
     UniqueVkHandle<vk::Semaphore> m_submitSemaphore;
     std::vector<vk::Semaphore> m_waitSemaphores;
     std::vector<vk::PipelineStageFlags> m_waitStages;
+    std::vector<Shared<Resource>> m_acquired;
 };
 
 class CommandsPool {

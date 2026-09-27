@@ -5,12 +5,14 @@
 
 #include "common/slot_map.h"
 #include "Resource.h"
-#include "CommandBuffer.h"
 
 namespace ailo {
 
+// Stores resources of one type. When the last reference to a resource is dropped it is queued and erased by the next
+// collect(). References are held by everything that may still use the resource, including the command buffers that
+// recorded commands with it, so a resource with no references is no longer used by the GPU.
 template<typename ResourceType>
-class ResourceContainer {
+class ResourceContainer final : public ResourceContainerBase {
     static_assert(std::is_base_of_v<Resource, ResourceType>, "GPU resources must derive from Resource");
 
 public:
@@ -19,7 +21,7 @@ public:
     using reference = value_type&;
     using pointer = value_type*;
 
-    explicit ResourceContainer(const CommandsPool& commands) : m_commands(commands) {}
+    ResourceContainer() = default;
 
     ResourceContainer(const ResourceContainer&) = delete;
     ResourceContainer& operator=(const ResourceContainer&) = delete;
@@ -45,25 +47,17 @@ public:
         return *ptr;
     }
 
-    void release(Handle handle) {
-        m_pending.push_back({ m_commands.currentSerial(), handle });
+    void release(uint64_t handleId) override {
+        m_pending.emplace_back(handleId);
     }
 
-    // Erases released resources whose command buffers have completed. Call once per frame.
-    void collect(uint64_t completedSerial) {
-        // Index-based: destructors may release resources into other containers, never into this one,
-        // but don't rely on references into m_pending staying valid.
-        size_t count = 0;
-        while (count < m_pending.size() && m_pending[count].serial <= completedSerial) {
-            erase(m_pending[count].handle);
-            ++count;
+    // Erases every resource whose last reference was dropped. Call once per frame.
+    void collect() {
+        // Index-based: erasing may release more resources, and in principle into this container too.
+        for (size_t i = 0; i < m_pending.size(); i++) {
+            erase(m_pending[i]);
         }
-        m_pending.erase(m_pending.begin(), m_pending.begin() + static_cast<ptrdiff_t>(count));
-    }
-
-    // Erases every released resource regardless of GPU progress. Only valid once the device is idle.
-    void flush() {
-        collect(std::numeric_limits<uint64_t>::max());
+        m_pending.clear();
     }
 
     // Destroys every resource, referenced or not. Only valid on shutdown, once all owners are gone.
@@ -73,19 +67,13 @@ public:
     }
 
 private:
-    struct PendingRelease {
-        uint64_t serial;
-        Handle handle;
-    };
-
     void erase(Handle handle) {
         using key_type = typename dod::slot_map<ResourceType>::key;
         m_resources.erase(key_type { handle.getId() });
     }
 
-    const CommandsPool& m_commands;
     dod::slot_map<ResourceType> m_resources {};
-    std::vector<PendingRelease> m_pending;
+    std::vector<Handle> m_pending;
 };
 
 }

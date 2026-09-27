@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -63,6 +64,15 @@ private:
 
 template<typename T> class ResourceRef;
 
+// Type-erased part of ResourceContainer: what a reference needs to hand a resource back once it's the last one.
+class ResourceContainerBase {
+public:
+    virtual void release(uint64_t handleId) = 0;
+
+protected:
+    ~ResourceContainerBase() = default;
+};
+
 class Resource {
 public:
     Resource() noexcept = default;
@@ -76,10 +86,28 @@ public:
 private:
     template<typename T> friend class ResourceRef;
 
+    void addRef() noexcept {
+        assert(!m_destroyed);
+        ++m_refCount;
+    }
+
+    // Returns true when that was the last reference; the resource is then marked destroyed.
+    [[nodiscard]] bool removeRef() noexcept {
+        assert(m_refCount > 0);
+        if (--m_refCount == 0) {
+            m_destroyed = true;
+            return true;
+        }
+        return false;
+    }
+
     uint32_t m_refCount = 0;
     bool m_destroyed = false;
 };
 
+// Common part of Unique and Shared: one counted reference to a resource living in a ResourceContainer.
+// T may be a base of the stored type (e.g. Shared<Resource>), which lets references to different resource types
+// share one container.
 template<typename T>
 class ResourceRef {
 public:
@@ -92,13 +120,8 @@ public:
     T* operator->() const noexcept { assert(m_ptr); return m_ptr; }
 
     void reset() noexcept {
-        if (m_ptr) {
-            Resource& resource = *m_ptr;
-            assert(resource.m_refCount > 0);
-            if (--resource.m_refCount == 0) {
-                resource.m_destroyed = true;
-                m_container->release(m_handle);
-            }
+        if (m_ptr && static_cast<Resource&>(*m_ptr).removeRef()) {
+            m_container->release(m_handle.getId());
         }
         m_container = nullptr;
         m_ptr = nullptr;
@@ -106,27 +129,42 @@ public:
     }
 
 protected:
+    template<typename U> friend class ResourceRef;
+
     ResourceRef() noexcept = default;
 
-    ResourceRef(ResourceContainer<T>* container, Handle<T> handle, T* ptr) noexcept
+    ResourceRef(ResourceContainerBase* container, Handle<T> handle, T* ptr) noexcept
         : m_container(container), m_ptr(ptr), m_handle(handle) {
         if (m_ptr) {
-            Resource& resource = *m_ptr;
-            assert(!resource.m_destroyed);
-            ++resource.m_refCount;
+            static_cast<Resource&>(*m_ptr).addRef();
         }
     }
 
+    ResourceRef(const ResourceRef&) = delete;
+    ResourceRef& operator=(const ResourceRef&) = delete;
+
     ~ResourceRef() { reset(); }
 
-    // Takes over rhs's reference without touching the count.
-    void steal(ResourceRef& rhs) noexcept {
-        m_container = std::exchange(rhs.m_container, nullptr);
-        m_ptr = std::exchange(rhs.m_ptr, nullptr);
-        m_handle = std::exchange(rhs.m_handle, {});
+    // Adds a reference to what rhs refers to. Expects this to be empty.
+    template<typename D>
+    void share(const ResourceRef<D>& rhs) noexcept {
+        m_container = rhs.m_container;
+        m_ptr = rhs.m_ptr;
+        m_handle = Handle<T>(rhs.m_handle);
+        if (m_ptr) {
+            static_cast<Resource&>(*m_ptr).addRef();
+        }
     }
 
-    ResourceContainer<T>* m_container = nullptr;
+    // Takes over rhs's reference without touching the count. Expects this to be empty.
+    template<typename D>
+    void steal(ResourceRef<D>& rhs) noexcept {
+        m_container = std::exchange(rhs.m_container, nullptr);
+        m_ptr = std::exchange(rhs.m_ptr, nullptr);
+        m_handle = Handle<T>(std::exchange(rhs.m_handle, {}));
+    }
+
+    ResourceContainerBase* m_container = nullptr;
     T* m_ptr = nullptr;
     Handle<T> m_handle {};
 };
@@ -152,23 +190,30 @@ public:
     Unique& operator=(const Unique&) = delete;
 
 private:
-    Unique(ResourceContainer<T>* container, Handle<T> handle, T* ptr) noexcept
+    Unique(ResourceContainerBase* container, Handle<T> handle, T* ptr) noexcept
         : ResourceRef<T>(container, handle, ptr) {}
 
     friend class ResourceContainer<T>;
 };
 
-// Copyable ref-counted reference.
+// Copyable ref-counted reference. Converts from Unique/Shared of a derived type, like std::shared_ptr.
 template<typename T>
 class Shared : public ResourceRef<T> {
 public:
     Shared() noexcept = default;
 
-    Shared(Unique<T>&& unique) noexcept { this->steal(unique); }
-
-    Shared(const Shared& rhs) noexcept : ResourceRef<T>(rhs.m_container, rhs.m_handle, rhs.m_ptr) {}
+    Shared(const Shared& rhs) noexcept { this->share(rhs); }
 
     Shared(Shared&& rhs) noexcept { this->steal(rhs); }
+
+    template<typename D> requires std::derived_from<D, T>
+    Shared(const Shared<D>& rhs) noexcept { this->share(rhs); }
+
+    template<typename D> requires std::derived_from<D, T>
+    Shared(Shared<D>&& rhs) noexcept { this->steal(rhs); }
+
+    template<typename D> requires std::derived_from<D, T>
+    Shared(Unique<D>&& unique) noexcept { this->steal(unique); }
 
     Shared& operator=(const Shared& rhs) noexcept {
         if (this != &rhs) {
@@ -187,7 +232,7 @@ public:
     }
 
 private:
-    Shared(ResourceContainer<T>* container, Handle<T> handle, T* ptr) noexcept
+    Shared(ResourceContainerBase* container, Handle<T> handle, T* ptr) noexcept
         : ResourceRef<T>(container, handle, ptr) {}
 
     friend class ResourceContainer<T>;

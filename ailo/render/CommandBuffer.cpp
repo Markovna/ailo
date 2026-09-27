@@ -94,6 +94,7 @@ void CommandBuffer::reset() {
     m_submitted = false;
 
     m_submitSemaphore.reset();
+    m_acquired.clear();
 }
 
 }

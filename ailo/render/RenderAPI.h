@@ -100,6 +100,7 @@ private:
     void collectGarbage();
 
     vk::DescriptorSet allocateDescriptorSet(DescriptorSetLayoutHandle);
+    static void setBoundResource(DescriptorSet&, uint32_t binding, Shared<Resource> resource);
     void freeDescriptorSet(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
     // The staging buffer is freed once `commands` completes, so the copy reading from it must be recorded into `commands`.

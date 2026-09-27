@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <bitset>
+#include <vector>
 
 #include "vulkan/vulkan.hpp"
 #include "vma/vk_mem_alloc.h"
@@ -166,6 +167,8 @@ struct DescriptorSet : Resource {
     DescriptorSetLayout::bitmask_t dynamicBindings;
     DescriptorSetLayoutHandle layoutHandle;
     uint64_t lastUsedSerial = 0;
+    // What is written into each binding, so that binding the set can keep it alive too.
+    std::vector<Shared<Resource>> boundResources;
 };
 
 struct RenderTarget : Resource {
