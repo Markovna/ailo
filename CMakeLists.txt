@@ -193,8 +193,9 @@ function(add_shader TARGET SHADER)
     add_custom_command(
             OUTPUT ${SPIRV}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/"
-            COMMAND ${GLSLC} -I${CMAKE_SOURCE_DIR}/shaders ${DEFINE_FLAGS} ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
+            COMMAND ${GLSLC} -I${CMAKE_SOURCE_DIR}/shaders ${DEFINE_FLAGS} -MD -MF ${SPIRV}.d ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
             DEPENDS ${CMAKE_SOURCE_DIR}/${SHADER}
+            DEPFILE ${SPIRV}.d
             COMMENT "Compiling shader ${OUTPUT_NAME}.${FILE_EXT}.spv with defines: ${SHADER_ARG_DEFINES}"
     )
 
