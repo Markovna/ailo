@@ -120,7 +120,7 @@ void RenderAPI::collectGarbage() {
     m_stagePool.collect();
 
     // Holders before what they hold, so what they release is erased in the same pass:
-    // render targets -> textures, pipelines -> programs, descriptor sets -> buffers and textures.
+    // render targets -> textures, pipelines -> programs, descriptor sets -> buffers, textures and layouts.
     m_renderTargets.collect();
     m_graphicsPipelines.collect();
     m_descriptorSets.collect();
@@ -382,27 +382,7 @@ Unique<gpu::DescriptorSetLayout> RenderAPI::createDescriptorSetLayout(const std:
 }
 
 Unique<gpu::DescriptorSet> RenderAPI::createDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
-    auto handle = m_descriptorSets.make();
-    auto& descriptorSet = *handle;
-
-    descriptorSet.device = *m_device;
-    descriptorSet.pool = m_descriptorPool;
-    descriptorSet.descriptorSet = allocateDescriptorSet(layoutHandle);
-    descriptorSet.dynamicBindings = m_descriptorSetLayouts.get(layoutHandle).dynamicBindings;
-    descriptorSet.layoutHandle = layoutHandle;
-
-    return handle;
-}
-
-vk::DescriptorSet RenderAPI::allocateDescriptorSet(DescriptorSetLayoutHandle layoutHandle) {
-    auto& layout = m_descriptorSetLayouts.get(layoutHandle).layout;
-
-    vk::DescriptorSetAllocateInfo allocInfo{};
-    allocInfo.descriptorPool = m_descriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &layout;
-
-    return m_device->allocateDescriptorSets(allocInfo)[0];
+    return m_descriptorSets.make(*m_device, m_descriptorPool, m_descriptorSetLayouts.share(layoutHandle));
 }
 
 void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSetHandle, const BufferHandle& bufferHandle, uint32_t binding, uint64_t offset, uint64_t size) {
@@ -411,28 +391,10 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     }
 
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    auto bufferPtr = m_buffers.share(bufferHandle);
-    auto& buffer = *bufferPtr;
-
-    vk::DescriptorBufferInfo bufferInfo{};
-    bufferInfo.buffer = buffer.buffer;
-    bufferInfo.offset = offset;
-    bufferInfo.range = size == std::numeric_limits<decltype(size)>::max() ? buffer.size : size;
-
-    bool isDynamic = descriptorSet.dynamicBindings[binding];
-
-    vk::WriteDescriptorSet descriptorWrite{};
-    descriptorWrite.dstSet = descriptorSet.descriptorSet;
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = isDynamic ? vk::DescriptorType::eUniformBufferDynamic : vk::DescriptorType::eUniformBuffer;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pBufferInfo = &bufferInfo;
-
-    m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    descriptorSet.bufferBindings[binding] = true;
-    descriptorSet.textureBindings[binding] = false;
-    setBoundResource(descriptorSet, binding, std::move(bufferPtr));
+    if (descriptorSet.getLastUsedSerial() > m_commands.completedSerial()) {
+        freeDescriptorSet(descriptorSet.reallocate());
+    }
+    descriptorSet.updateBuffer(binding, m_buffers.share(bufferHandle), offset, size);
 }
 
 void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding) {
@@ -441,64 +403,12 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     }
 
     auto& descriptorSet = m_descriptorSets.get(descriptorSetHandle);
-    auto texturePtr = m_textures.share(textureHandle);
-    auto& texture = *texturePtr;
-
-    if (descriptorSet.lastUsedSerial > m_commands.completedSerial()) {
-        // The GPU may still read this set: write into a copy and retire the original
-        vk::DescriptorSet newDescriptorSet = allocateDescriptorSet(descriptorSet.layoutHandle);
-
-        std::vector<vk::CopyDescriptorSet> copyDescriptors;
-        const auto boundBindings = descriptorSet.bufferBindings | descriptorSet.textureBindings;
-        for(size_t i = 0; i < boundBindings.size(); i++) {
-            if (!boundBindings[i]) {
-                continue;
-            }
-            vk::CopyDescriptorSet copyDescriptorSet {};
-            copyDescriptorSet.srcSet = descriptorSet.descriptorSet;
-            copyDescriptorSet.srcBinding = i;
-            copyDescriptorSet.srcArrayElement = 0;
-            copyDescriptorSet.dstSet = newDescriptorSet;
-            copyDescriptorSet.dstBinding = i;
-            copyDescriptorSet.dstArrayElement = 0;
-            copyDescriptorSet.descriptorCount = 1;
-
-            copyDescriptors.push_back(copyDescriptorSet);
-        }
-
-        m_device->updateDescriptorSets(0, nullptr, copyDescriptors.size(), copyDescriptors.data());
-
-        freeDescriptorSet(descriptorSet.descriptorSet);
-        descriptorSet.descriptorSet = newDescriptorSet;
-        descriptorSet.lastUsedSerial = 0;
+    if (descriptorSet.getLastUsedSerial() > m_commands.completedSerial()) {
+        freeDescriptorSet(descriptorSet.reallocate());
     }
-
-    vk::DescriptorImageInfo imageInfo{};
-    imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-    imageInfo.imageView = texture.imageView;
-    imageInfo.sampler = texture.sampler;
-
-    vk::WriteDescriptorSet descriptorWrite{};
-    descriptorWrite.dstSet = descriptorSet.descriptorSet;
-    descriptorWrite.dstBinding = binding;
-    descriptorWrite.dstArrayElement = 0;
-    descriptorWrite.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pImageInfo = &imageInfo;
-
-    m_device->updateDescriptorSets(1, &descriptorWrite, 0, nullptr);
-    descriptorSet.textureBindings[binding] = true;
-    descriptorSet.bufferBindings[binding] = false;
-    setBoundResource(descriptorSet, binding, std::move(texturePtr));
+    descriptorSet.updateTexture(binding, m_textures.share(textureHandle));
 }
 
-void RenderAPI::setBoundResource(DescriptorSet& descriptorSet, uint32_t binding, Shared<Resource> resource) {
-    if (descriptorSet.boundResources.size() <= binding) {
-        descriptorSet.boundResources.resize(binding + 1);
-    }
-    // The previous resource may still be read by submitted commands, but those hold their own references.
-    descriptorSet.boundResources[binding] = std::move(resource);
-}
 
 Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples) {
     auto renderTarget = m_renderTargets.make();
@@ -527,27 +437,29 @@ void RenderAPI::bindDescriptorSet(const DescriptorSetHandle& descriptorSetHandle
   assert(dynamicOffsets.size() <= dynamicOffsetsArray.size());
   std::copy(dynamicOffsets.begin(), dynamicOffsets.end(), dynamicOffsetsArray.begin());
 
+  const vk::DescriptorSet vkDescriptorSet = descriptorSet.getHandle();
   auto& commands = m_commands.get();
   commands->bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipelineLayout,
         setIndex,
         1,
-        &descriptorSet.descriptorSet,
+        &vkDescriptorSet,
         static_cast<uint32_t>(dynamicOffsets.size()),
         dynamicOffsetsArray.data()
     );
 
     const uint64_t serial = m_commands.currentSerial();
-    descriptorSet.lastUsedSerial = serial;
+    descriptorSet.setLastUsedSerial(serial);
 
     // The set only references what is written into it now; a later update can replace a binding while these
     // commands are in flight. Acquire the current contents so they outlive this command buffer regardless.
-    for (size_t binding = 0; binding < descriptorSet.boundResources.size(); binding++) {
-        auto& resource = descriptorSet.boundResources[binding];
+    const auto& boundResources = descriptorSet.getBoundResources();
+    for (uint32_t binding = 0; binding < boundResources.size(); binding++) {
+        auto& resource = boundResources[binding];
         if (!resource) continue;
 
-        if (descriptorSet.bufferBindings[binding]) {
+        if (descriptorSet.isBufferBinding(binding)) {
             static_cast<Buffer*>(resource.get())->lastReadSerial = serial;
         }
         commands.acquire(resource);

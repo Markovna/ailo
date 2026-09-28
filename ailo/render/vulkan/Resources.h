@@ -16,7 +16,7 @@ struct VertexBufferLayout;
 
 class Program;
 struct Buffer;
-struct DescriptorSet;
+class DescriptorSet;
 class Texture;
 struct DescriptorSetLayout;
 
@@ -147,25 +147,6 @@ struct DescriptorSetLayout : Resource {
     vk::Device device;
     vk::DescriptorSetLayout layout;
     bitmask_t dynamicBindings;
-};
-
-struct DescriptorSet : Resource {
-    ~DescriptorSet() {
-        if (descriptorSet) {
-            (void) device.freeDescriptorSets(pool, 1, &descriptorSet);
-        }
-    }
-
-    vk::Device device;
-    vk::DescriptorPool pool;
-    vk::DescriptorSet descriptorSet;
-    DescriptorSetLayout::bitmask_t bufferBindings;
-    DescriptorSetLayout::bitmask_t textureBindings;
-    DescriptorSetLayout::bitmask_t dynamicBindings;
-    DescriptorSetLayoutHandle layoutHandle;
-    uint64_t lastUsedSerial = 0;
-    // What is written into each binding, so that binding the set can keep it alive too.
-    std::vector<Shared<Resource>> boundResources;
 };
 
 struct RenderTarget : Resource {

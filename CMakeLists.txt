@@ -71,6 +71,8 @@ add_executable(ailo
     ailo/render/ResourceContainer.h
     ailo/render/vulkan/Texture.cpp
     ailo/render/vulkan/Texture.h
+    ailo/render/vulkan/DescriptorSet.cpp
+    ailo/render/vulkan/DescriptorSet.h
     ailo/common/LRUCache.h
     ailo/render/RenderPassCache.cpp
     ailo/render/RenderPassCache.h

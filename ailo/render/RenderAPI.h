@@ -11,6 +11,7 @@
 #include "render/vulkan/Resources.h"
 #include "VulkanDevice.h"
 #include "vulkan/Texture.h"
+#include "vulkan/DescriptorSet.h"
 #include "Program.h"
 #include "ResourceContainer.h"
 #include "CommandBuffer.h"
@@ -61,7 +62,6 @@ public:
     Unique<gpu::DescriptorSet> createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
-
     Unique<gpu::RenderTarget> createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
 
     // Program management
@@ -96,15 +96,10 @@ private:
 
     bool recreateSwapchain();
 
-    // Erases resources whose last reference is gone and that the GPU no longer uses.
     void collectGarbage();
 
-    vk::DescriptorSet allocateDescriptorSet(DescriptorSetLayoutHandle);
-    static void setBoundResource(DescriptorSet&, uint32_t binding, Shared<Resource> resource);
     void freeDescriptorSet(vk::DescriptorSet);
     void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
-    // Copies `data` into staging memory. The staging memory is recycled once `commands` completes, so the copy
-    // reading from it must be recorded into `commands`.
     StagePool::Allocation stage(CommandBuffer& commands, const void* data, uint64_t size, vk::DeviceSize alignment = 16);
     void loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
