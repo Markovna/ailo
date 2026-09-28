@@ -12,7 +12,7 @@ public:
     Texture() = default;
 
     Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels,
-        uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags,
+        uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags,
         vk::SampleCountFlagBits = vk::SampleCountFlagBits::e1);
 
     Texture(vk::Device device, vk::Image, vk::Format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags);
@@ -49,7 +49,6 @@ public:
     vk::Image image {};
     vk::DeviceMemory memory {};
     vk::ImageView imageView {};
-    vk::Sampler sampler {};
     vk::Format format;
     vk::ImageAspectFlags aspect;
     uint32_t width;

@@ -36,11 +36,11 @@ void DescriptorSet::updateBuffer(uint32_t binding, Shared<Buffer> buffer, uint64
     write(descriptorWrite, true, std::move(buffer));
 }
 
-void DescriptorSet::updateTexture(uint32_t binding, Shared<Texture> texture) {
+void DescriptorSet::updateTexture(uint32_t binding, Shared<Texture> texture, vk::Sampler sampler) {
     vk::DescriptorImageInfo imageInfo{};
     imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
     imageInfo.imageView = texture->imageView;
-    imageInfo.sampler = texture->sampler;
+    imageInfo.sampler = sampler;
 
     vk::WriteDescriptorSet descriptorWrite{};
     descriptorWrite.dstBinding = binding;

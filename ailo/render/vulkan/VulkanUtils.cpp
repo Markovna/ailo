@@ -37,6 +37,32 @@ vk::CompareOp getCompareOperation(CompareOp compOp) {
   return static_cast<vk::CompareOp>(compOp);
 }
 
+vk::Filter getFilter(SamplerFilter filter) {
+  switch (filter) {
+    case SamplerFilter::NEAREST: return vk::Filter::eNearest;
+    case SamplerFilter::LINEAR: return vk::Filter::eLinear;
+  }
+  return vk::Filter::eLinear;
+}
+
+vk::SamplerMipmapMode getMipmapMode(SamplerMipmapMode mode) {
+  switch (mode) {
+    case SamplerMipmapMode::NEAREST: return vk::SamplerMipmapMode::eNearest;
+    case SamplerMipmapMode::LINEAR: return vk::SamplerMipmapMode::eLinear;
+  }
+  return vk::SamplerMipmapMode::eLinear;
+}
+
+vk::SamplerAddressMode getWrapMode(SamplerWrapMode mode) {
+  switch (mode) {
+    case SamplerWrapMode::REPEAT: return vk::SamplerAddressMode::eRepeat;
+    case SamplerWrapMode::MIRRORED_REPEAT: return vk::SamplerAddressMode::eMirroredRepeat;
+    case SamplerWrapMode::CLAMP_TO_EDGE: return vk::SamplerAddressMode::eClampToEdge;
+    case SamplerWrapMode::CLAMP_TO_BORDER: return vk::SamplerAddressMode::eClampToBorder;
+  }
+  return vk::SamplerAddressMode::eRepeat;
+}
+
 vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
   switch(binding) {
     case BufferBinding::INDEX: return vk::BufferUsageFlagBits::eIndexBuffer;

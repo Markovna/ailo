@@ -77,6 +77,41 @@ enum class CompareOp : uint8_t {
   ALWAYS
 };
 
+enum class SamplerFilter : uint8_t {
+  NEAREST,
+  LINEAR
+};
+
+enum class SamplerMipmapMode : uint8_t {
+  NEAREST,
+  LINEAR
+};
+
+enum class SamplerWrapMode : uint8_t {
+  REPEAT,
+  MIRRORED_REPEAT,
+  CLAMP_TO_EDGE,
+  CLAMP_TO_BORDER
+};
+
+enum class SamplerCompareMode : uint8_t {
+  NONE,
+  COMPARE_TO_TEXTURE
+};
+
+struct SamplerParams {
+  SamplerFilter filterMag = SamplerFilter::LINEAR;
+  SamplerFilter filterMin = SamplerFilter::LINEAR;
+  SamplerMipmapMode mipmapMode = SamplerMipmapMode::LINEAR;
+  SamplerWrapMode wrapS = SamplerWrapMode::REPEAT;
+  SamplerWrapMode wrapT = SamplerWrapMode::REPEAT;
+  SamplerWrapMode wrapR = SamplerWrapMode::REPEAT;
+  SamplerCompareMode compareMode = SamplerCompareMode::NONE;
+  CompareOp compareFunc = CompareOp::ALWAYS;
+
+  bool operator==(const SamplerParams& other) const = default;
+};
+
 enum class TextureType : uint8_t {
     TEXTURE_2D,
     TEXTURE_CUBEMAP

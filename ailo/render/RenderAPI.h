@@ -19,6 +19,7 @@
 #include "FrameBufferCache.h"
 #include "PipelineCache.h"
 #include "RenderPassCache.h"
+#include "SamplerCache.h"
 #include "StagePool.h"
 #include "platform/Platform.h"
 
@@ -61,7 +62,7 @@ public:
     Unique<gpu::DescriptorSetLayout> createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
     Unique<gpu::DescriptorSet> createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
-    void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0);
+    void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0, const SamplerParams& sampler = {});
     Unique<gpu::RenderTarget> createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples);
 
     // Program management
@@ -137,6 +138,7 @@ private:
     FrameBufferCache m_framebufferCache;
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
+    SamplerCache m_samplerCache;
     RenderPassState m_currentRenderPassState;
 };
 

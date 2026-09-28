@@ -9,6 +9,9 @@ vk::CullModeFlags getCullMode(CullingMode mode);
 vk::BlendOp getBlendOp(BlendOperation);
 vk::BlendFactor getBlendFunction(BlendFunction);
 vk::CompareOp getCompareOperation(CompareOp);
+vk::Filter getFilter(SamplerFilter);
+vk::SamplerMipmapMode getMipmapMode(SamplerMipmapMode);
+vk::SamplerAddressMode getWrapMode(SamplerWrapMode);
 vk::BufferUsageFlagBits getBufferUsage(BufferBinding);
 vk::ImageUsageFlags getTextureUsage(TextureUsage);
 

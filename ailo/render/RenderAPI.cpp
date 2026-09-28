@@ -24,7 +24,8 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_stagePool(m_Allocator, m_commands),
     m_framebufferCache(*m_device, m_deletionQueue),
     m_renderPassCache(*m_device, m_deletionQueue),
-    m_pipelineCache(*m_device, m_graphicsPipelines) {
+    m_pipelineCache(*m_device, m_graphicsPipelines),
+    m_samplerCache(*m_device, m_device.physicalDevice()) {
 
     m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
@@ -45,6 +46,7 @@ RenderAPI::~RenderAPI() {
     m_framebufferCache.clear();
     m_renderPassCache.clear();
     m_pipelineCache.clear();
+    m_samplerCache.clear();
 
     // Releases what the command buffers acquired.
     m_commands.destroy();
@@ -272,7 +274,7 @@ Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, vk::Format forma
     return m_textures.make(
         *m_device, m_device.physicalDevice(),
         type, format, levels, width, height,
-        vk::Filter::eLinear, vkutils::getTextureUsage(usage),
+        vkutils::getTextureUsage(usage),
         (usage & TextureUsage::DepthStencilAttachment) != TextureUsage::None ?
             vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor);
 }
@@ -397,7 +399,7 @@ void RenderAPI::updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorS
     descriptorSet.updateBuffer(binding, m_buffers.share(bufferHandle), offset, size);
 }
 
-void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding) {
+void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSetHandle, const TextureHandle& textureHandle, uint32_t binding, const SamplerParams& samplerParams) {
     if(!descriptorSetHandle) {
         return;
     }
@@ -406,7 +408,7 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
     if (descriptorSet.getLastUsedSerial() > m_commands.completedSerial()) {
         freeDescriptorSet(descriptorSet.reallocate());
     }
-    descriptorSet.updateTexture(binding, m_textures.share(textureHandle));
+    descriptorSet.updateTexture(binding, m_textures.share(textureHandle), m_samplerCache.getOrCreate(samplerParams));
 }
 
 

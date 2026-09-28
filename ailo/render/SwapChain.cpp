@@ -51,7 +51,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
 
     Shared<gpu::Texture> depth = textures.make(
         *device, device.physicalDevice(), TextureType::TEXTURE_2D,
-        depthFormat, 1, extent.width, extent.height, vk::Filter{},
+        depthFormat, 1, extent.width, extent.height,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth,
         samples);
@@ -71,7 +71,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
             auto color = rt->colors[0];
             rt->colors[0] = textures.make(
                 *device, device.physicalDevice(), TextureType::TEXTURE_2D,
-                surfaceFormat.format, 1, extent.width, extent.height, vk::Filter::eLinear,
+                surfaceFormat.format, 1, extent.width, extent.height,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                 vk::ImageAspectFlagBits::eColor,
                 samples);

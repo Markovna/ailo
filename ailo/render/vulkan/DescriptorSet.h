@@ -21,7 +21,7 @@ public:
     ~DescriptorSet();
 
     void updateBuffer(uint32_t binding, Shared<Buffer> buffer, uint64_t offset = 0, uint64_t size = kWholeSize);
-    void updateTexture(uint32_t binding, Shared<Texture> texture);
+    void updateTexture(uint32_t binding, Shared<Texture> texture, vk::Sampler sampler);
 
     [[nodiscard]] vk::DescriptorSet reallocate();
 

@@ -4,7 +4,7 @@
 
 namespace ailo::gpu {
 
-Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::Filter filter, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
+Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
     : format(format), aspect(aspect), width(width), height(height), m_device(device), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples), m_usage(usage) {
 
     if (m_levels > 1) {
@@ -43,29 +43,6 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
     device.bindImageMemory(image, memory, 0);
 
     imageView = createImageView(device, image, format, m_levels, aspect);
-
-    if (usage & vk::ImageUsageFlagBits::eSampled) {
-        vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.magFilter = filter;
-        samplerInfo.minFilter = filter;
-        samplerInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        samplerInfo.anisotropyEnable = VK_TRUE;
-
-        vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
-        samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-        samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = vk::CompareOp::eAlways;
-        samplerInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-
-        sampler = device.createSampler(samplerInfo);
-    }
 }
 
 Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags)
@@ -101,7 +78,6 @@ uint32_t Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typ
 }
 
 Texture::~Texture() {
-    m_device.destroySampler(sampler);
     m_device.destroyImageView(imageView);
 
     if (memory) {
