@@ -159,13 +159,9 @@ Light getDirectionalLight() {
     return light;
 }
 
-float sampleShadow(vec2 uv, float depth) {
-    const float bias = 0.005;
-    float closestDepth = texture(shadowMap, uv).r;
-    return (depth - bias > closestDepth) ? 0.0 : 1.0;
-}
-
 float calculateShadow(vec3 worldPos) {
+    const float bias = 0.005;
+
     vec4 lightSpacePos = view.lightViewProjection * vec4(worldPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz * (1.0 / lightSpacePos.w);
 
@@ -176,22 +172,9 @@ float calculateShadow(vec3 worldPos) {
         return 1.0;
     }
 
-
-    float shadow = 0.0;
-//    shadow += sampleShadow(uv, depth);
-    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
-    shadow += sampleShadow(uv + vec2(-1, -1) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2(-1,  0) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2(-1,  1) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 0, -1) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 0,  0) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 0,  1) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 1, -1) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 1,  0) * texelSize, depth);
-    shadow += sampleShadow(uv + vec2( 1,  1) * texelSize, depth);
-    shadow /= 9.0;
-
-    return shadow;
+    // The comparison sampler returns 1.0 where depth - bias <= stored depth, i.e. the fragment is lit,
+    // filtered across the 2x2 texel footprint.
+    return texture(shadowMap, vec3(uv, depth - bias));
 }
 
 vec3 shadingNormal() {

@@ -17,6 +17,21 @@
 
 namespace ailo {
 
+static constexpr SamplerParams kClampToEdgeSampler {
+  .wrapS = SamplerWrapMode::CLAMP_TO_EDGE,
+  .wrapT = SamplerWrapMode::CLAMP_TO_EDGE,
+  .wrapR = SamplerWrapMode::CLAMP_TO_EDGE,
+};
+
+// Hardware depth comparison; linear filtering blends the four nearest comparison results (2x2 PCF).
+static constexpr SamplerParams kShadowSampler {
+  .wrapS = SamplerWrapMode::CLAMP_TO_EDGE,
+  .wrapT = SamplerWrapMode::CLAMP_TO_EDGE,
+  .wrapR = SamplerWrapMode::CLAMP_TO_EDGE,
+  .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
+  .compareFunc = CompareOp::LESS_OR_EQUAL,
+};
+
 static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   float const outerClamped = std::clamp(std::abs(outer), glm::radians(0.5f), glm::half_pi<float>());
   float innerClamped = std::clamp(std::abs(inner), glm::radians(0.5f), glm::half_pi<float>());
@@ -50,7 +65,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_viewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
-  backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT));
+  backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT), kClampToEdgeSampler);
 
   m_shadowViewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_shadowViewUniformBufferData));
   m_shadowViewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
@@ -98,7 +113,7 @@ void Renderer::shadowPass() {
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
         m_settings.shadowMapSize, m_settings.shadowMapSize);
 
-    backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture, std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP));
+    backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture, std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP), kShadowSampler);
   }
 
   if (!m_shadowMapRenderTarget) {

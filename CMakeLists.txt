@@ -142,6 +142,9 @@ target_compile_definitions(ailo PRIVATE GLFW_INCLUDE_VULKAN)
 
 target_compile_definitions(ailo PRIVATE VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
 
+# VK_KHR_portability_subset (MoltenVK) is declared in vulkan_beta.h
+target_compile_definitions(ailo PRIVATE VK_ENABLE_BETA_EXTENSIONS)
+
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
 # Find glslc shader compiler

@@ -67,6 +67,18 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
             device.getFeatures2(&supportedFeatures2);
             if (!supportedFeatures12.timelineSemaphore) { continue; }
 
+            // Shadow maps are sampled through a comparison sampler written into a descriptor set.
+            const bool hasPortabilitySubset = std::ranges::any_of(deviceExtensionProperties, [](const auto& prop) {
+                return std::string_view(prop.extensionName) == VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME;
+            });
+            if (hasPortabilitySubset) {
+                vk::PhysicalDevicePortabilitySubsetFeaturesKHR portabilityFeatures{};
+                vk::PhysicalDeviceFeatures2 features2{};
+                features2.pNext = &portabilityFeatures;
+                device.getFeatures2(&features2);
+                if (!portabilityFeatures.mutableComparisonSamplers) { continue; }
+            }
+
             int32_t graphicsQueueFamilyIndex = -1;
             int32_t presentQueueFamilyIndex = -1;
             auto queueFamilyProperties = device.getQueueFamilyProperties();
@@ -121,14 +133,17 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     std::ranges::transform(requiredDeviceExtensions, std::back_inserter(enabledExtensions), [](const auto& extension) { return extension.data(); });
 
     auto availableExtensions = m_physicalDevice.enumerateDeviceExtensionProperties();
-    std::vector<const char*> desiredExtension = { "VK_KHR_portability_subset" };
-    for (const auto& desiredExt : desiredExtension) {
-        bool supportExt = std::ranges::any_of(availableExtensions, [&](auto& extension) {
-            return strcmp(extension.extensionName, desiredExt) == 0;
-        });
-        if (supportExt) {
-            enabledExtensions.emplace_back(desiredExt);
-        }
+    const bool hasPortabilitySubset = std::ranges::any_of(availableExtensions, [](const auto& extension) {
+        return strcmp(extension.extensionName, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) == 0;
+    });
+
+    // Must be enabled when present (VUID-VkDeviceCreateInfo-pProperties-04451). Support for the chained features
+    // was checked when picking the physical device.
+    vk::PhysicalDevicePortabilitySubsetFeaturesKHR portabilityFeatures{};
+    if (hasPortabilitySubset) {
+        enabledExtensions.emplace_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+        portabilityFeatures.mutableComparisonSamplers = VK_TRUE;
+        deviceFeatures12.pNext = &portabilityFeatures;
     }
 
     vk::DeviceCreateInfo createInfo{};

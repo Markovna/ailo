@@ -52,7 +52,7 @@ layout (set = 0, binding = 3)
 uniform sampler2D iblDFG;
 
 layout (set = 0, binding = 4)
-uniform sampler2D shadowMap;
+uniform sampler2DShadow shadowMap;
 
 layout (set = 1, binding = 0, std140)
 uniform perObject {
