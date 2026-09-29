@@ -7,7 +7,9 @@
 #include "assets/Assets.h"
 #include "ecs/SceneLighting.h"
 #include "render/Material.h"
+#include "ecs/Spawn.h"
 #include "render/Mesh.h"
+#include "render/Model.h"
 #include "render/RenderAPI.h"
 #include "render/Renderable.h"
 #include "render/Shader.h"
@@ -44,8 +46,8 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     auto characterTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    MeshReader::instantiate(&assets, &api, scene, "assets/models/sponza/sponza.gltf");
-    MeshReader::instantiate(&assets, &api, scene, "assets/models/Roundhouse Kick.fbx", characterTransform);
+    scene::spawn(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));
+    scene::spawn(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 }
 
 void drawConsole() {

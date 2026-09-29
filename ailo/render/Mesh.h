@@ -3,10 +3,8 @@
 #include "RenderPrimitive.h"
 
 #include "assets/Assets.h"
-#include "ecs/Scene.h"
 
 namespace ailo {
-
 
 struct Mesh : public Asset {
     struct Face {
@@ -19,11 +17,6 @@ struct Mesh : public Asset {
     std::vector<Face> faces;
 
     static asset_ptr<Mesh> cube(AssetManager* assetManager, RenderAPI* renderApi);
-};
-
-class MeshReader {
-public:
-    static std::vector<Entity> instantiate(AssetManager* assetManager, RenderAPI* renderApi, Scene&, const std::string& path, const glm::mat4& transform = glm::mat4(1.0f));
 };
 
 }

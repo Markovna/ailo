@@ -282,6 +282,8 @@ public:
     template<typename U>
     asset_ptr<U> load(const std::string& path);
 
+    AssetManager* assetManager() const { return m_assetManager; }
+
 private:
     AssetManager* m_assetManager;
     std::string m_path;

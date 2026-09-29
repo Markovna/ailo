@@ -295,7 +295,8 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
       if (skin) {
         BufferHandle bones = m_dummyBonesBuffer;
         if (scene.isValid(skin->animator)) {
-          if (auto animator = scene.tryGet<AnimatorComponent>(skin->animator)) {
+          auto animator = scene.tryGet<AnimatorComponent>(skin->animator);
+          if (animator && animator->boneBuffer.getHandle()) {
             bones = animator->boneBuffer.getHandle();
           }
         }

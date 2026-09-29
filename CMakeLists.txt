@@ -52,6 +52,8 @@ add_executable(ailo
     ailo/render/Texture.h
     ailo/render/Mesh.cpp
     ailo/render/Mesh.h
+    ailo/render/Model.cpp
+    ailo/render/Model.h
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
     ailo/render/CommandBuffer.cpp
@@ -94,6 +96,8 @@ add_executable(ailo
         ailo/ecs/AnimatorComponent.h
         ailo/ecs/AnimationPlugin.cpp
         ailo/ecs/AnimationPlugin.h
+        ailo/ecs/Spawn.cpp
+        ailo/ecs/Spawn.h
         ailo/platform/Platform.cpp
         ailo/platform/Platform.h
         ailo/di/di.h
