@@ -205,9 +205,9 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
   glm::vec3 center = glm::vec3(0.0f);
   glm::vec3 lightPos = center + lightDir * 18.0f;
 
-  // glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
-      // ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-  glm::vec3 up = glm::vec3(0, 1, 0);
+  // lookAt degenerates when the light direction is parallel to up.
+  glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
+      ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
   glm::mat4 lightView = glm::lookAt(lightPos, center, up);
   glm::mat4 lightProjection = glm::ortho(-extent, extent, -extent, extent, nearPlane, farPlane);
   // Flip Y for Vulkan

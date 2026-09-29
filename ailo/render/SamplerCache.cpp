@@ -23,9 +23,10 @@ vk::Sampler SamplerCache::getOrCreate(const SamplerParams& params) {
     samplerInfo.addressModeU = vkutils::getWrapMode(params.wrapS);
     samplerInfo.addressModeV = vkutils::getWrapMode(params.wrapT);
     samplerInfo.addressModeW = vkutils::getWrapMode(params.wrapR);
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = m_maxAnisotropy;
     samplerInfo.compareEnable = params.compareMode == SamplerCompareMode::COMPARE_TO_TEXTURE;
+    // Depth comparison samplers (shadow maps) have no mips and are sampled explicitly, anisotropy only costs.
+    samplerInfo.anisotropyEnable = !samplerInfo.compareEnable;
+    samplerInfo.maxAnisotropy = m_maxAnisotropy;
     samplerInfo.compareOp = vkutils::getCompareOperation(params.compareFunc);
     samplerInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
     samplerInfo.unnormalizedCoordinates = VK_FALSE;

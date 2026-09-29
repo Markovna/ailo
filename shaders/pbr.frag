@@ -159,22 +159,53 @@ Light getDirectionalLight() {
     return light;
 }
 
-float calculateShadow(vec3 worldPos) {
-    const float bias = 0.005;
+float sampleShadow(vec2 uv, float depth) {
+    // Explicit LOD: the shadow map has no mips, and this avoids implicit derivatives in non-uniform control flow.
+    return textureLod(shadowMap, vec3(uv, depth), 0.0);
+}
 
-    vec4 lightSpacePos = view.lightViewProjection * vec4(worldPos, 1.0);
-    vec3 projCoords = lightSpacePos.xyz * (1.0 / lightSpacePos.w);
+// Normal offset (in shadow map texels) along the geometric normal, scaled up at grazing angles.
+#define SHADOW_NORMAL_OFFSET 1.5
+// Small constant bias in light NDC depth; the normal offset handles the slope-dependent part.
+#define SHADOW_DEPTH_BIAS 0.0005
 
-    vec2 uv = projCoords.xy * 0.5 + 0.5;
-    float depth = projCoords.z;
+float calculateShadow(vec3 worldPos, vec3 geometricNormal, float NoL) {
+    vec2 size = vec2(textureSize(shadowMap, 0));
+    vec2 texelSize = 1.0 / size;
 
-    if (uv != clamp01(uv) || depth > 1.0) {
+    // Orthographic light projection: NDC x scale is 1 / half-extent, so one texel spans 2 / (size * scale) world units.
+    mat4 lvp = view.lightViewProjection;
+    float ndcScale = length(vec3(lvp[0][0], lvp[1][0], lvp[2][0]));
+    float texelWorldSize = 2.0 / (size.x * ndcScale);
+    worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * (1.0 - NoL));
+
+    vec4 lightSpacePos = lvp * vec4(worldPos, 1.0);
+    vec3 projCoords = lightSpacePos.xyz;
+
+    vec2 shadowUV = projCoords.xy * 0.5 + 0.5;
+    // Outside the light frustum: treat as lit instead of smearing edge texels.
+    if (shadowUV != clamp01(shadowUV) || projCoords.z > 1.0) {
         return 1.0;
     }
 
-    // The comparison sampler returns 1.0 where depth - bias <= stored depth, i.e. the fragment is lit,
-    // filtered across the 2x2 texel footprint.
-    return texture(shadowMap, vec3(uv, depth - bias));
+    float depth = projCoords.z - SHADOW_DEPTH_BIAS;
+
+    vec2 uv = shadowUV * size + 0.5;
+    vec2 base = (floor(uv) - 0.5) * texelSize;
+    vec2 st = fract(uv);
+
+    vec2 uw = vec2(3.0 - 2.0 * st.x, 1.0 + 2.0 * st.x);
+    vec2 vw = vec2(3.0 - 2.0 * st.y, 1.0 + 2.0 * st.y);
+
+    vec2 u = vec2((2.0 - st.x) / uw.x - 1.0, st.x / uw.y + 1.0) * texelSize.x;
+    vec2 v = vec2((2.0 - st.y) / vw.x - 1.0, st.y / vw.y + 1.0) * texelSize.y;
+
+    float shadow = 0.0;
+    shadow += uw.x * vw.x * sampleShadow(base + vec2(u.x, v.x), depth);
+    shadow += uw.y * vw.x * sampleShadow(base + vec2(u.y, v.x), depth);
+    shadow += uw.x * vw.y * sampleShadow(base + vec2(u.x, v.y), depth);
+    shadow += uw.y * vw.y * sampleShadow(base + vec2(u.y, v.y), depth);
+    return shadow * (1.0 / 16.0);
 }
 
 vec3 shadingNormal() {
@@ -208,8 +239,13 @@ void main() {
     vec3 color = vec3(0.0);
 
     Light directionalLight = getDirectionalLight();
-    float shadow = calculateShadow(fragPosWorld);
-    color += surfaceShading(pixel, directionalLight, shadow);
+    // Use the geometric normal for shadowing: normal-mapped NoL can be positive on faces turned away from the light.
+    vec3 geometricNormal = normalize(fragNormalWorld);
+    float geometricNoL = dot(geometricNormal, directionalLight.l);
+    if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
+        float shadow = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
+        color += surfaceShading(pixel, directionalLight, shadow);
+    }
 
     for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
         Light light = getLight(i);
