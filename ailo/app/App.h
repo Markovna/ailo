@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <concepts>
 #include <cstdint>
@@ -21,6 +22,7 @@ enum class Stage : uint8_t {
     First,       // platform events, time
     PreUpdate,   // input processing
     Update,      // game / user logic
+    FixedUpdate,
     PostUpdate,  // animation, transforms
     Render,
     Last,        // asset gc, cleanup
@@ -32,6 +34,18 @@ enum class Stage : uint8_t {
 struct AppControl {
     bool exitRequested = false;
     void requestExit() { exitRequested = true; }
+};
+
+struct FixedTime {
+    float step = 1.0f / 60.0f;
+    float maxDelta = 0.25f;
+
+    float accumulator = 0.0f;
+    float alpha = 0.0f;
+    float elapsed = 0.0f;
+    uint64_t tick = 0;
+
+    void accumulate(float delta) { accumulator += std::min(delta, maxDelta); }
 };
 
 class App;
@@ -112,6 +126,7 @@ private:
 
     // Runs a single frame (First..Last).
     void update();
+    void runFixedStages();
     void runStage(Stage stage);
     void validate(std::span<const Stage> stages) const;
 

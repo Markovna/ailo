@@ -9,7 +9,7 @@
 namespace ailo {
 
 static constexpr std::array kFrameStages = {
-    Stage::First, Stage::PreUpdate, Stage::Update, Stage::PostUpdate, Stage::Render, Stage::Last
+    Stage::First, Stage::PreUpdate, Stage::Update, Stage::FixedUpdate, Stage::PostUpdate, Stage::Render, Stage::Last
 };
 
 void throwMissingSystemParam(std::string_view systemName, std::string_view typeName) {
@@ -19,6 +19,7 @@ void throwMissingSystemParam(std::string_view systemName, std::string_view typeN
 
 App::App() {
     m_world.insertResource<AppControl>();
+    m_world.insertResource<FixedTime>();
 }
 
 void App::run() {
@@ -41,8 +42,27 @@ void App::run() {
 
 void App::update() {
     for (auto stage : kFrameStages) {
-        runStage(stage);
+        if (stage == Stage::FixedUpdate) {
+            runFixedStages();
+        } else {
+            runStage(stage);
+        }
     }
+}
+
+void App::runFixedStages() {
+    auto& fixed = m_world.resource<FixedTime>();
+    if (fixed.step <= 0.0f) {
+        throw std::logic_error("FixedTime::step must be positive");
+    }
+
+    while (fixed.accumulator >= fixed.step) {
+        runStage(Stage::FixedUpdate);
+        fixed.accumulator -= fixed.step;
+        fixed.elapsed += fixed.step;
+        fixed.tick++;
+    }
+    fixed.alpha = fixed.accumulator / fixed.step;
 }
 
 void App::runStage(Stage stage) {

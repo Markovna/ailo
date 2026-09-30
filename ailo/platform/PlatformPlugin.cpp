@@ -37,7 +37,7 @@ float Window::aspect() const {
 
 namespace {
 
-void pumpEvents(Platform& platform, Window& window, InputSystem& input, Time& time, AppControl& control) {
+void pumpEvents(Platform& platform, Window& window, InputSystem& input, Time& time, FixedTime& fixed, AppControl& control) {
     platform.pumpEvents(window.handle(), &input);
 
     while (window.aspect() == 0.0f && !window.shouldClose()) {
@@ -47,6 +47,7 @@ void pumpEvents(Platform& platform, Window& window, InputSystem& input, Time& ti
     const float now = platform.getTime();
     time.delta = now - time.elapsed;
     time.elapsed = now;
+    fixed.accumulate(time.delta);
 
     if (window.shouldClose()) {
         control.requestExit();

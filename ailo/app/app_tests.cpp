@@ -214,6 +214,61 @@ void testShutdownRunsInReverseOrder() {
     assert(order == expected);
 }
 
+void testFixedUpdate() {
+    App app;
+    auto& fixed = app.resource<FixedTime>();
+    fixed.step = 0.25f;
+    fixed.maxDelta = 1.0f;
+
+    const std::array deltas { 0.625f, 0.125f, 0.25f, 10.0f };
+    std::vector<std::string> order;
+    std::vector<int> stepsPerFrame;
+    std::vector<float> alphas;
+    int frame = 0;
+
+    app.addSystem(Stage::First, [&](FixedTime& f) {
+           f.accumulate(deltas[frame]);
+           stepsPerFrame.push_back(0);
+       })
+       .addSystem(Stage::Update, [&order] { order.push_back("Update"); })
+       .addSystem(Stage::FixedUpdate, [&](const FixedTime& f) {
+           order.push_back("Fixed");
+           stepsPerFrame.back()++;
+           assert(f.alpha >= 0.0f && f.alpha < 1.0f);
+       })
+       .addSystem(Stage::PostUpdate, [&order] { order.push_back("PostUpdate"); })
+       .addSystem(Stage::Last, [&](const FixedTime& f, AppControl& control) {
+           alphas.push_back(f.alpha);
+           if (++frame == static_cast<int>(deltas.size())) control.requestExit();
+       });
+    app.run();
+
+    // 0.625 → 2 steps (0.125 left); +0.125 → 1 step; +0.25 → 1 step; 10 clamped to 1 → 4 steps.
+    assert((stepsPerFrame == std::vector { 2, 1, 1, 4 }));
+    assert((alphas == std::vector { 0.5f, 0.0f, 0.0f, 0.0f }));
+    assert(fixed.tick == 8);
+    assert(fixed.elapsed == 2.0f);
+
+    const std::vector<std::string> firstFrames {
+        "Update", "Fixed", "Fixed", "PostUpdate",
+        "Update", "Fixed", "PostUpdate",
+    };
+    assert(std::equal(firstFrames.begin(), firstFrames.end(), order.begin()));
+}
+
+void testFixedUpdateCanRunZeroTimes() {
+    App app;
+    auto& fixed = app.resource<FixedTime>();
+    fixed.step = 0.5f;
+    int steps = 0;
+    app.addSystem(Stage::First, [](FixedTime& f) { f.accumulate(0.25f); })
+       .addSystem(Stage::FixedUpdate, [&steps] { steps++; })
+       .addSystem(Stage::Last, [](AppControl& control) { control.requestExit(); });
+    app.run();
+    assert(steps == 0);
+    assert(fixed.alpha == 0.5f);
+}
+
 }
 
 int main() {
@@ -226,6 +281,8 @@ int main() {
     testCannotAddSystemsWhileRunning();
     testAppTeardownOrder();
     testShutdownRunsInReverseOrder();
+    testFixedUpdate();
+    testFixedUpdateCanRunZeroTimes();
 
     std::cout << "All app tests passed" << std::endl;
     return 0;
