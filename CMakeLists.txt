@@ -318,3 +318,11 @@ target_include_directories(apptest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 add_executable(assettest ailo/assets/asset_tests.cpp)
 target_link_libraries(assettest EnTT::EnTT)
 target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
+
+add_executable(transformtest
+        ailo/ecs/transform_tests.cpp
+        ailo/ecs/Transform.cpp
+)
+target_link_libraries(transformtest EnTT::EnTT glm::glm)
+target_include_directories(transformtest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
+target_compile_definitions(transformtest PRIVATE GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)

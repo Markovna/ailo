@@ -31,8 +31,7 @@ std::vector<Entity> spawn(Scene& scene, const asset_ptr<Model>& prefab, const gl
         renderable.mesh = instance.mesh;
         renderable.materials.push_back(instance.material);
 
-        Transform& tr = scene.addComponent<Transform>(entity);
-        tr.transform = transform * instance.transform;
+        scene.addComponent<Transform>(entity, Transform::fromMatrix(transform * instance.transform));
 
         if (instance.skinned)
             scene.addComponent<Skin>(entity, animatorEntity);

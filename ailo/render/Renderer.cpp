@@ -278,7 +278,7 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
     auto skin = scene.tryGet<Skin>(entity);
 
     auto& uniformBufferData = m_perObjectUniformBufferData[objectIndex];
-    uniformBufferData.model = tr ? tr->transform : glm::mat4(1.0f);
+    uniformBufferData.model = tr ? tr->toMatrix() : glm::mat4(1.0f);
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
     uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
