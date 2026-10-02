@@ -17,8 +17,11 @@ add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)
 add_subdirectory(third_party/entt)
-add_subdirectory(third_party/assimp)
 add_subdirectory(third_party/imgui)
+
+set(BUILD_SHARED_LIBS ON)
+add_subdirectory(third_party/assimp)
+unset(BUILD_SHARED_LIBS)
 
 add_subdirectory(tools/resgen)
 
@@ -148,6 +151,14 @@ target_compile_definitions(ailo PRIVATE VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_S
 
 # VK_KHR_portability_subset (MoltenVK) is declared in vulkan_beta.h
 target_compile_definitions(ailo PRIVATE VK_ENABLE_BETA_EXTENSIONS)
+
+# Copy linked DLLs next to the executable
+if(WIN32)
+    add_custom_command(TARGET ailo POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:ailo> $<TARGET_FILE_DIR:ailo>
+        COMMAND_EXPAND_LISTS
+    )
+endif()
 
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 

@@ -115,12 +115,12 @@ public:
     operator Handle<T>() const noexcept { return m_handle; }
     explicit operator bool() const noexcept { return m_ptr != nullptr; }
 
-    T* get() const noexcept { return m_ptr; }
-    T& operator*() const noexcept { assert(m_ptr); return *m_ptr; }
-    T* operator->() const noexcept { assert(m_ptr); return m_ptr; }
+    T* get() const noexcept { return static_cast<T*>(m_ptr); }
+    T& operator*() const noexcept { assert(m_ptr); return *get(); }
+    T* operator->() const noexcept { assert(m_ptr); return get(); }
 
     void reset() noexcept {
-        if (m_ptr && static_cast<Resource&>(*m_ptr).removeRef()) {
+        if (m_ptr && m_ptr->removeRef()) {
             m_container->release(m_handle.getId());
         }
         m_container = nullptr;
@@ -128,22 +128,23 @@ public:
         m_handle = {};
     }
 
-protected:
-    template<typename U> friend class ResourceRef;
-
     ResourceRef() noexcept = default;
-
-    ResourceRef(ResourceContainerBase* container, Handle<T> handle, T* ptr) noexcept
-        : m_container(container), m_ptr(ptr), m_handle(handle) {
-        if (m_ptr) {
-            static_cast<Resource&>(*m_ptr).addRef();
-        }
-    }
 
     ResourceRef(const ResourceRef&) = delete;
     ResourceRef& operator=(const ResourceRef&) = delete;
 
     ~ResourceRef() { reset(); }
+
+protected:
+    template<typename U> friend class ResourceRef;
+
+
+    ResourceRef(ResourceContainerBase* container, Handle<T> handle, T* ptr) noexcept
+        : m_container(container), m_ptr(ptr), m_handle(handle) {
+        if (m_ptr) {
+            m_ptr->addRef();
+        }
+    }
 
     // Adds a reference to what rhs refers to. Expects this to be empty.
     template<typename D>
@@ -152,7 +153,7 @@ protected:
         m_ptr = rhs.m_ptr;
         m_handle = Handle<T>(rhs.m_handle);
         if (m_ptr) {
-            static_cast<Resource&>(*m_ptr).addRef();
+            m_ptr->addRef();
         }
     }
 
@@ -165,7 +166,7 @@ protected:
     }
 
     ResourceContainerBase* m_container = nullptr;
-    T* m_ptr = nullptr;
+    Resource* m_ptr = nullptr;
     Handle<T> m_handle {};
 };
 

@@ -3,7 +3,6 @@
 #include "OS.h"
 #include "Renderer.h"
 #include "assets/Assets.h"
-#include "assimp/Vertex.h"
 
 namespace ailo {
 

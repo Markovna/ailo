@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "vulkan/vulkan.hpp"
-#include "vma/vk_mem_alloc.h"
+#include <vk_mem_alloc.h>
 #include "render/Resource.h"
 #include "render/Constants.h"
 
