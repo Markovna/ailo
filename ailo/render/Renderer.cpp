@@ -3,6 +3,8 @@
 #include <iostream>
 #include <ecs/Scene.h>
 
+#include "app/System.h"
+
 #include "Mesh.h"
 #include "Shader.h"
 #include "Material.h"
@@ -80,12 +82,12 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
 
 Renderer::~Renderer() = default;
 
-void Renderer::render(Scene& scene, const Camera& camera) {
+void Renderer::render(Scene& scene, Query<Renderable> renderables, const Camera& camera) {
   if (!beginFrame()) {
     return;
   }
 
-  prepare(scene, camera);
+  prepare(scene, renderables, camera);
   shadowPass();
   colorPass();
 
@@ -192,7 +194,7 @@ void Renderer::endFrame() {
   m_renderAPI->endFrame();
 }
 
-void Renderer::prepare(Scene& scene, const Camera& camera) {
+void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camera& camera) {
   auto& backend = *m_renderAPI;
 
   auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
@@ -244,8 +246,7 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
-  auto renderableView = scene.view<Renderable>();
-  size_t meshCount = renderableView.size();
+  size_t meshCount = renderables.view().size();
 
   if(meshCount > m_perObjectUniformBufferData.size() || !m_objectsUniformBufferHandle) {
     m_perObjectUniformBufferData.resize(std::max(meshCount, m_perObjectUniformBufferData.size()));
@@ -262,7 +263,7 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
     backend.updateDescriptorSetBuffer(m_objectDescriptorSet, m_dummyBonesBuffer,
       std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS), 0, sizeof(BonesUniform));
 
-    for (auto&& [entity, renderable] : renderableView.each()) {
+    for (auto&& [entity, renderable] : renderables.each()) {
       renderable.descriptorSet.reset();
     }
 
@@ -273,7 +274,7 @@ void Renderer::prepare(Scene& scene, const Camera& camera) {
   m_renderData.reserve(meshCount * 2);
 
   uint32_t objectIndex = 0;
-  for(const auto& [entity, renderable] : renderableView.each()) {
+  for(const auto& [entity, renderable] : renderables.each()) {
     const auto tr = scene.tryGet<Transform>(entity);
     auto skin = scene.tryGet<Skin>(entity);
 

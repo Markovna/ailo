@@ -137,6 +137,9 @@ public:
 
 class Scene;
 
+template<typename... Cs>
+class Query;
+
 struct RenderData {
   ProgramHandle program;
   VertexBufferLayoutHandle vertexBufferLayout;
@@ -160,13 +163,13 @@ public:
 
   // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
   // Skips the frame if the swapchain image could not be acquired (e.g. during resize).
-  void render(Scene& scene, const Camera& camera);
+  void render(Scene& scene, Query<Renderable> renderables, const Camera& camera);
 
   // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
   void addOverlayPass(OverlayPass pass);
 
   bool beginFrame();
-  void prepare(Scene& scene, const Camera& camera);
+  void prepare(Scene& scene, Query<Renderable>& renderables, const Camera& camera);
   void shadowPass();
   void colorPass();
   void endFrame();

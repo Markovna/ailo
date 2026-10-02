@@ -53,6 +53,8 @@ class Scene {
    return m_registry.try_get<Type>(entity);
   }
 
+  entt::registry& registry() { return m_registry; }
+
  private:
   entt::registry m_registry;
   entt::entity m_singleEntity;

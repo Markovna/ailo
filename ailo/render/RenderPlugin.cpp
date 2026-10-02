@@ -11,8 +11,8 @@ namespace ailo {
 
 namespace {
 
-void render(Renderer& renderer, World& world, const Camera& camera) {
-    renderer.render(world.scene(), camera);
+void render(Renderer& renderer, World& world, Query<Renderable> renderables, const Camera& camera) {
+    renderer.render(world.scene(), renderables, camera);
 }
 
 void shutdown(World& world, RenderAPI& api, Renderer& renderer, AssetManager& assets) {
