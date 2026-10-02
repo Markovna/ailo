@@ -36,6 +36,10 @@ struct AppControl {
     void requestExit() { exitRequested = true; }
 };
 
+struct Tick {
+    uint64_t current;
+};
+
 struct FixedTime {
     float step = 1.0f / 60.0f;
     float maxDelta = 0.25f;
@@ -101,6 +105,11 @@ public:
     template<typename T, typename... Args>
     T& insertResource(Args&&... args) {
         return m_world.insertResource<T>(std::forward<Args>(args)...);
+    }
+
+    template<typename T>
+    std::remove_cvref_t<T>& insertResource(T&& value) {
+        return m_world.insertResource(std::forward<T>(value));
     }
 
     template<typename T>

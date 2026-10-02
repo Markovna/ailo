@@ -20,6 +20,7 @@ void throwMissingSystemParam(std::string_view systemName, std::string_view typeN
 App::App() {
     m_world.insertResource<AppControl>();
     m_world.insertResource<FixedTime>();
+    m_world.insertResource(Tick { .current = 0 });
 }
 
 void App::run() {
@@ -32,8 +33,10 @@ void App::run() {
 
     validate(kFrameStages);
     auto& control = m_world.resource<AppControl>();
+    auto& tick = m_world.resource<Tick>();
     while (!control.exitRequested) {
         update();
+        tick.current++;
     }
 
     validate(std::array { Stage::Shutdown });

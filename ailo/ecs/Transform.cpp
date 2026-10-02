@@ -7,12 +7,12 @@ namespace ailo {
 
 glm::mat4 Transform::toMatrix() const {
     const glm::mat3 r = glm::mat3_cast(rotation);
-    glm::mat4 m;
-    m[0] = glm::vec4(r[0] * scale.x, 0.0f);
-    m[1] = glm::vec4(r[1] * scale.y, 0.0f);
-    m[2] = glm::vec4(r[2] * scale.z, 0.0f);
-    m[3] = glm::vec4(position, 1.0f);
-    return m;
+    return {
+        glm::vec4(r[0] * scale.x, 0.0f),
+        glm::vec4(r[1] * scale.y, 0.0f),
+        glm::vec4(r[2] * scale.z, 0.0f),
+        glm::vec4(position, 1.0f)
+    };
 }
 
 Transform Transform::fromMatrix(const glm::mat4& m) {

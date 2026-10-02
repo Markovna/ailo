@@ -3,6 +3,7 @@
 #include <format>
 #include <memory>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 #include <entt/entt.hpp>
@@ -37,6 +38,13 @@ public:
         m_index[id] = m_resources.size();
         m_resources.push_back(std::move(holder));
         return ref;
+    }
+
+    // Deduces the resource type from the value: insertResource(Tick { .current = 0 }).
+    // Both template arguments are spelled out so this can only call the overload above.
+    template<typename T>
+    std::remove_cvref_t<T>& insertResource(T&& value) {
+        return insertResource<std::remove_cvref_t<T>, T>(std::forward<T>(value));
     }
 
     template<typename T>
