@@ -17,4 +17,7 @@ target_link_libraries(resgen stb_image glm)
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)
     target_link_libraries(resgen OpenMP::OpenMP_CXX)
+    # FindOpenMP can fail to detect the runtime library (e.g. toolchain path with spaces),
+    # so also pass the flag at link time to pull in libgomp
+    target_link_options(resgen PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
