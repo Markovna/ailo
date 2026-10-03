@@ -23,6 +23,23 @@ set(BUILD_SHARED_LIBS ON)
 add_subdirectory(third_party/assimp)
 unset(BUILD_SHARED_LIBS)
 
+# Jolt Physics. Its config defines (JPH_DEBUG_RENDERER, JPH_PROFILE_ENABLED, JPH_FLOATING_POINT_EXCEPTIONS_ENABLED, ...)
+# are PUBLIC on the Jolt target and must match between the library and our code: never define them by hand.
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF CACHE BOOL "" FORCE)   # Jolt defaults to /MT; everything else uses /MD
+set(OVERRIDE_CXX_FLAGS OFF CACHE BOOL "" FORCE)                # keep CMake's per-config flags, same as our code
+set(INTERPROCEDURAL_OPTIMIZATION OFF CACHE BOOL "" FORCE)
+set(ENABLE_ALL_WARNINGS OFF CACHE BOOL "" FORCE)               # /Wall /WX breaks on newer compilers
+set(ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(ENABLE_OBJECT_STREAM OFF CACHE BOOL "" FORCE)
+set(DEBUG_RENDERER_IN_DEBUG_AND_RELEASE ON CACHE BOOL "" FORCE)
+set(PROFILER_IN_DEBUG_AND_RELEASE OFF CACHE BOOL "" FORCE)
+# GPU compute backends (only used by hair simulation)
+set(JPH_USE_DX12 OFF CACHE BOOL "" FORCE)
+set(JPH_USE_VK OFF CACHE BOOL "" FORCE)
+set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
+set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/JoltPhysics/Build)
+
 add_subdirectory(tools/resgen)
 
 # Add executable
@@ -133,6 +150,7 @@ target_link_libraries(ailo
         EnTT::EnTT
         imgui
         assimp::assimp
+        Jolt
 )
 
 # Include directories
@@ -340,3 +358,6 @@ add_executable(transformtest
 target_link_libraries(transformtest EnTT::EnTT glm::glm)
 target_include_directories(transformtest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 target_compile_definitions(transformtest PRIVATE GLM_FORCE_RADIANS GLM_FORCE_DEPTH_ZERO_TO_ONE)
+
+add_executable(physicstest ailo/physics/physics_tests.cpp)
+target_link_libraries(physicstest Jolt)
