@@ -48,6 +48,31 @@ Transform Transform::fromMatrix(const glm::mat4& m) {
     return t;
 }
 
+Transform compose(const Transform& parent, const Transform& local) {
+    return {
+        .position = parent.position + parent.rotation * (parent.scale * local.position),
+        .rotation = glm::normalize(parent.rotation * local.rotation),
+        .scale = parent.scale * local.scale,
+    };
+}
+
+Transform relativeTo(const Transform& parent, const Transform& world, const Transform& fallback) {
+    const glm::quat inverseRotation = glm::inverse(parent.rotation);
+    const glm::vec3 position = inverseRotation * (world.position - parent.position);
+
+    Transform t { .rotation = glm::normalize(inverseRotation * world.rotation) };
+    for (int i = 0; i < 3; i++) {
+        if (parent.scale[i] != 0.0f) {
+            t.position[i] = position[i] / parent.scale[i];
+            t.scale[i] = world.scale[i] / parent.scale[i];
+        } else {
+            t.position[i] = fallback.position[i];
+            t.scale[i] = fallback.scale[i];
+        }
+    }
+    return t;
+}
+
 bool isAffine(const glm::mat4& m) {
     return m[0][3] == 0.0f && m[1][3] == 0.0f && m[2][3] == 0.0f && m[3][3] == 1.0f;
 }

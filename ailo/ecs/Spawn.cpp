@@ -1,6 +1,7 @@
 #include "Spawn.h"
 
 #include "AnimatorComponent.h"
+#include "Hierarchy.h"
 #include "Transform.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
@@ -8,39 +9,34 @@
 
 namespace ailo::scene {
 
-std::vector<Entity> spawn(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
-    std::vector<Entity> entities;
-    if (!prefab) return entities;
+Entity spawn(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
+    if (!prefab) return entt::null;
 
-    entities.reserve(prefab->instances.size() + 1);
+    const Entity root = scene.addEntity();
+    scene.addComponent<TransformComponent>(root, Transform::fromMatrix(transform));
 
     // The animator owns the bone buffer that every skinned mesh of this instance reads.
-    Entity animatorEntity = entt::null;
     if (prefab->skeleton && !prefab->clips.empty()) {
-        animatorEntity = scene.addEntity();
-        auto& animator = scene.addComponent<AnimatorComponent>(animatorEntity);
+        auto& animator = scene.addComponent<AnimatorComponent>(root);
         animator.skeleton = prefab->skeleton;
         animator.clips = prefab->clips;
     }
 
     for (const auto& instance : prefab->instances) {
         auto entity = scene.addEntity();
-        entities.push_back(entity);
 
         Renderable& renderable = scene.addComponent<Renderable>(entity);
         renderable.mesh = instance.mesh;
         renderable.materials.push_back(instance.material);
 
-        scene.addComponent<Transform>(entity, Transform::fromMatrix(transform * instance.transform));
+        scene.addComponent<TransformComponent>(entity, Transform::fromMatrix(instance.transform));
+        hierarchy::setParent(scene.registry(), entity, root, hierarchy::Keep::Local);
 
         if (instance.skinned)
-            scene.addComponent<Skin>(entity, animatorEntity);
+            scene.addComponent<Skin>(entity, root);
     }
 
-    if (animatorEntity != entt::null)
-        entities.push_back(animatorEntity);
-
-    return entities;
+    return root;
 }
 
 }

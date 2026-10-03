@@ -275,11 +275,11 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
 
   uint32_t objectIndex = 0;
   for(const auto& [entity, renderable] : renderables.each()) {
-    const auto tr = scene.tryGet<Transform>(entity);
+    const auto tr = scene.tryGet<TransformComponent>(entity);
     auto skin = scene.tryGet<Skin>(entity);
 
     auto& uniformBufferData = m_perObjectUniformBufferData[objectIndex];
-    uniformBufferData.model = tr ? tr->toMatrix() : glm::mat4(1.0f);
+    uniformBufferData.model = tr ? tr->world().toMatrix() : glm::mat4(1.0f);
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
     uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;

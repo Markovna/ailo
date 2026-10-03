@@ -59,6 +59,8 @@ add_executable(ailo
     ailo/render/Model.h
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
+    ailo/ecs/Hierarchy.h
+    ailo/ecs/Hierarchy.cpp
     ailo/render/CommandBuffer.cpp
     ailo/render/DeletionQueue.cpp
     ailo/render/DeletionQueue.h
@@ -333,6 +335,7 @@ target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 add_executable(transformtest
         ailo/ecs/transform_tests.cpp
         ailo/ecs/Transform.cpp
+        ailo/ecs/Hierarchy.cpp
 )
 target_link_libraries(transformtest EnTT::EnTT glm::glm)
 target_include_directories(transformtest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
