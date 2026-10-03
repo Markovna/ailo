@@ -138,6 +138,9 @@ add_executable(ailo
         ailo/ui/ImGuiPlugin.h
         ailo/ui/OrbitCameraPlugin.cpp
         ailo/ui/OrbitCameraPlugin.h
+        ailo/physics/PhysicsBodies.cpp
+        ailo/physics/PhysicsBodies.h
+        ailo/physics/PhysicsComponents.h
         ailo/physics/PhysicsLayers.h
         ailo/physics/PhysicsMath.h
         ailo/physics/PhysicsPlugin.cpp
@@ -367,10 +370,13 @@ target_compile_definitions(transformtest PRIVATE GLM_FORCE_RADIANS GLM_FORCE_DEP
 
 add_executable(physicstest
         ailo/physics/physics_tests.cpp
+        ailo/physics/PhysicsBodies.cpp
         ailo/physics/PhysicsPlugin.cpp
         ailo/physics/PhysicsWorld.cpp
         ailo/app/App.cpp
         ailo/ecs/Scene.cpp
+        ailo/ecs/Transform.cpp
+        ailo/ecs/Hierarchy.cpp
 )
 target_link_libraries(physicstest Jolt EnTT::EnTT glm::glm)
 target_include_directories(physicstest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)

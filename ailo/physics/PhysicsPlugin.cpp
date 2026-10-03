@@ -1,21 +1,28 @@
 #include "PhysicsPlugin.h"
 
+#include "PhysicsBodies.h"
 #include "app/App.h"
 
 namespace ailo {
 
 namespace {
 
-void stepPhysics(PhysicsWorld& physics, const FixedTime& fixed) {
-    physics.step(fixed.step);
+void fixedUpdate(World& world, PhysicsWorld& physics, const FixedTime& fixed) {
+    physics::fixedUpdate(world.scene().registry(), physics, fixed.step);
+}
+
+void interpolate(World& world, const FixedTime& fixed) {
+    physics::interpolate(world.scene().registry(), fixed.alpha);
 }
 
 }
 
 void PhysicsPlugin::build(App& app) {
-    app.insertResource<PhysicsWorld>(settings);
+    auto& physics = app.insertResource<PhysicsWorld>(settings);
+    app.insertResource<PhysicsBodyHooks>(app.world().scene().registry(), physics);
 
-    app.addSystem(Stage::FixedUpdate, stepPhysics, "PhysicsPlugin::step");
+    app.addSystem(Stage::FixedUpdate, fixedUpdate, "PhysicsPlugin::fixedUpdate");
+    app.addSystem(Stage::PostUpdate, interpolate, "PhysicsPlugin::interpolate");
 }
 
 }
