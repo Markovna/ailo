@@ -8,6 +8,7 @@
 #include "ecs/SceneLighting.h"
 #include "render/Material.h"
 #include "ecs/Spawn.h"
+#include "physics/PhysicsWorld.h"
 #include "render/Mesh.h"
 #include "render/Model.h"
 #include "render/RenderAPI.h"
@@ -50,9 +51,13 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     scene::spawn(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 }
 
-void drawConsole() {
+void drawConsole(const PhysicsWorld* physics) {
     ImGui::Begin("Console");
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
+    if (physics) {
+        const PhysicsStats& stats = physics->stats();
+        ImGui::Text("Physics: %u bodies (%u active), step %.3f ms", stats.numBodies, stats.numActiveBodies, stats.stepMs);
+    }
     ImGui::End();
 }
 

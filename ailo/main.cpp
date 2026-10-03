@@ -1,6 +1,7 @@
 #include "app/App.h"
 #include "assets/AssetPlugin.h"
 #include "ecs/AnimationPlugin.h"
+#include "physics/PhysicsPlugin.h"
 #include "platform/PlatformPlugin.h"
 #include "render/RenderPlugin.h"
 #include "sandbox/SandboxPlugin.h"
@@ -20,6 +21,7 @@ int main() {
             .addPlugin(RenderPlugin { .settings = { .shadowMapSize = 1024 } })
             .addPlugin(ImGuiPlugin {})
             .addPlugin(AnimationPlugin {})
+            .addPlugin(PhysicsPlugin {})
             .addPlugin(OrbitCameraPlugin { .camera = { .distance = 10.0f } })
             .addPlugin(SandboxPlugin {})
             .run();
