@@ -1,18 +1,7 @@
-// Vertex stage declarations shared by all surface materials: attributes, skinning
-// and the MaterialVertexInputs passed to the material's materialVertex() function.
-//
-// Expects from the material prolog:
-//   HAS_ATTRIBUTE_COLOR, HAS_ATTRIBUTE_UV0, HAS_ATTRIBUTE_TANGENTS (position and normal are always present)
-// Variant defines:
-//   VARIANT_HAS_SKINNING, VARIANT_DEPTH
-
 #include "common_math.glsl"
 #include "common_uniforms.glsl"
 
-//------------------------------------------------------------------------------
-// Attributes (locations match VertexLocation in render/RenderPrimitive.h)
-//------------------------------------------------------------------------------
-
+// Locations match VertexLocation in render/RenderPrimitive.h.
 layout(location = 0) in vec3 inPosition;
 
 #if !defined(VARIANT_DEPTH)
@@ -35,12 +24,8 @@ layout(location = 6) in vec4 inBoneWeights;
 
 #if !defined(VARIANT_DEPTH)
 #define VARYING out
-#include "common_varyings.glsl"
+#include "surface/surface_varyings.glsl"
 #endif
-
-//------------------------------------------------------------------------------
-// Skinning
-//------------------------------------------------------------------------------
 
 #define OBJECT_SKINNING_ENABLED_BIT 1
 
@@ -72,11 +57,7 @@ vec3 skinVector(vec3 v) {
 }
 #endif
 
-//------------------------------------------------------------------------------
-// Getters
-//------------------------------------------------------------------------------
-
-// Object space position, after skinning.
+// Object space, after skinning.
 vec4 getPosition() {
     vec4 position = vec4(inPosition, 1.0);
 #if defined(VARIANT_HAS_SKINNING)
@@ -95,10 +76,6 @@ mat4 getClipFromWorldMatrix() {
     return view.projection * view.view;
 }
 
-//------------------------------------------------------------------------------
-// Material vertex inputs
-//------------------------------------------------------------------------------
-
 #if !defined(VARIANT_DEPTH)
 struct MaterialVertexInputs {
 #if defined(HAS_ATTRIBUTE_COLOR)
@@ -109,9 +86,21 @@ struct MaterialVertexInputs {
 #endif
     vec3 worldNormal;
     vec4 worldPosition;
+#if defined(VARIABLE_CUSTOM0)
+    vec4 VARIABLE_CUSTOM0;
+#endif
+#if defined(VARIABLE_CUSTOM1)
+    vec4 VARIABLE_CUSTOM1;
+#endif
+#if defined(VARIABLE_CUSTOM2)
+    vec4 VARIABLE_CUSTOM2;
+#endif
+#if defined(VARIABLE_CUSTOM3)
+    vec4 VARIABLE_CUSTOM3;
+#endif
 };
 
-// World space tangent frame, computed alongside the material inputs. Not exposed to materials.
+// Not part of MaterialVertexInputs: materials can't change the tangent frame.
 vec4 vertex_worldTangent;
 
 void initMaterialVertex(out MaterialVertexInputs material) {
@@ -145,6 +134,19 @@ void initMaterialVertex(out MaterialVertexInputs material) {
 #endif
 #if defined(HAS_ATTRIBUTE_UV0)
     material.uv0 = inUV;
+#endif
+
+#if defined(VARIABLE_CUSTOM0)
+    material.VARIABLE_CUSTOM0 = vec4(0.0);
+#endif
+#if defined(VARIABLE_CUSTOM1)
+    material.VARIABLE_CUSTOM1 = vec4(0.0);
+#endif
+#if defined(VARIABLE_CUSTOM2)
+    material.VARIABLE_CUSTOM2 = vec4(0.0);
+#endif
+#if defined(VARIABLE_CUSTOM3)
+    material.VARIABLE_CUSTOM3 = vec4(0.0);
 #endif
 }
 #endif

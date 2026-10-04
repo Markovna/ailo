@@ -42,6 +42,17 @@ add_subdirectory(third_party/JoltPhysics/Build)
 
 add_subdirectory(tools/resgen)
 
+add_library(ailo_material STATIC
+    ailo/render/material/MaterialEnums.cpp
+    ailo/render/material/MaterialEnums.h
+    ailo/render/material/MaterialPackage.cpp
+    ailo/render/material/MaterialPackage.h
+    ailo/render/material/Variant.h
+)
+target_include_directories(ailo_material PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
+
+add_subdirectory(tools/matcomp)
+
 # Add executable
 add_executable(ailo
     ailo/main.cpp
@@ -160,6 +171,7 @@ target_link_libraries(ailo
         imgui
         assimp::assimp
         Jolt
+        ailo_material
 )
 
 # Include directories
@@ -245,6 +257,22 @@ function(add_shader TARGET SHADER)
 
     set_source_files_properties(${SPIRV} PROPERTIES GENERATED TRUE)
     target_sources(${TARGET} PRIVATE ${SPIRV})
+endfunction()
+
+function(add_material TARGET MATERIAL)
+    get_filename_component(MATERIAL_NAME ${MATERIAL} NAME_WE)
+    set(OUTPUT ${CMAKE_BINARY_DIR}/materials/${MATERIAL_NAME}.matpack)
+
+    add_custom_command(
+            OUTPUT ${OUTPUT}
+            COMMAND $<TARGET_FILE:matcomp> -I ${CMAKE_SOURCE_DIR}/shaders --depfile ${OUTPUT}.d -o ${OUTPUT} ${CMAKE_SOURCE_DIR}/${MATERIAL}
+            DEPENDS matcomp ${CMAKE_SOURCE_DIR}/${MATERIAL}
+            DEPFILE ${OUTPUT}.d
+            COMMENT "Compiling material ${MATERIAL_NAME}.matpack"
+    )
+
+    set_source_files_properties(${OUTPUT} PROPERTIES GENERATED TRUE)
+    target_sources(${TARGET} PRIVATE ${OUTPUT})
 endfunction()
 
 # Generate DFG LUT texture using resgen tool
@@ -337,14 +365,7 @@ add_shader(ailo shaders/hdr.frag)
 add_shader(ailo shaders/skybox.vert)
 add_shader(ailo shaders/skybox.frag)
 
-# Lit surface material: hand-written stand-in for matcomp output (shaders/lit.vert/frag + shaders/surface/).
-# Color variants receive shadows; depth variants are used by the shadow pass.
-add_shader(ailo shaders/lit.vert)
-add_shader(ailo shaders/lit.vert DEFINES VARIANT_HAS_SKINNING NAME lit_skinned)
-add_shader(ailo shaders/lit.frag DEFINES VARIANT_HAS_SHADOWING)
-add_shader(ailo shaders/lit.vert DEFINES VARIANT_DEPTH NAME lit_depth)
-add_shader(ailo shaders/lit.vert DEFINES VARIANT_DEPTH VARIANT_HAS_SKINNING NAME lit_depth_skinned)
-add_shader(ailo shaders/lit.frag DEFINES VARIANT_DEPTH NAME lit_depth)
+add_material(ailo materials/lit.mat)
 
 
 # Add executable

@@ -1,9 +1,3 @@
-// Lit (metallic/roughness) shading model: turns MaterialInputs into a lit color.
-// Uses the shading_* parameters set up by prepareMaterial().
-//
-// Variant defines:
-//   VARIANT_HAS_SHADOWING  the directional light is shadowed by the shadow map
-
 struct Light {
     vec4 colorIntensity;
     vec3 l;

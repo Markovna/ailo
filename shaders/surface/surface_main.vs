@@ -1,6 +1,3 @@
-// Vertex shader entry point for surface materials. Included after the material's
-// materialVertex() function (not called by depth variants).
-
 void main() {
 #if defined(VARIANT_DEPTH)
     gl_Position = getClipFromWorldMatrix() * getWorldFromModelMatrix() * getPosition();
@@ -22,6 +19,19 @@ void main() {
     fragUV = material.uv0;
 #else
     fragUV = vec2(0.0);
+#endif
+
+#if defined(VARIABLE_CUSTOM0)
+    VARIABLE_CUSTOM_AT0 = material.VARIABLE_CUSTOM0;
+#endif
+#if defined(VARIABLE_CUSTOM1)
+    VARIABLE_CUSTOM_AT1 = material.VARIABLE_CUSTOM1;
+#endif
+#if defined(VARIABLE_CUSTOM2)
+    VARIABLE_CUSTOM_AT2 = material.VARIABLE_CUSTOM2;
+#endif
+#if defined(VARIABLE_CUSTOM3)
+    VARIABLE_CUSTOM_AT3 = material.VARIABLE_CUSTOM3;
 #endif
 
     gl_Position = view.projection * view.view * material.worldPosition;

@@ -1,0 +1,25 @@
+material {
+    "name": "Lit",
+    "shadingModel": "lit",
+    // color: the meshes provide it, and declaring it keeps the vertex inputs matching the pipeline layout
+    "requires": ["color", "uv0", "tangents"],
+    "parameters": [
+        { "type": "sampler2d", "name": "baseColorMap", "default": "white" },
+        { "type": "sampler2d", "name": "normalMap", "default": "normal" },
+        { "type": "sampler2d", "name": "metallicRoughnessMap", "default": "white" }
+    ],
+    "blending": "opaque",
+    "culling": "back"
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        material.normal = texture(materialParams_normalMap, getUV0()).rgb * 2.0 - 1.0;
+        prepareMaterial(material);
+
+        material.baseColor = texture(materialParams_baseColorMap, getUV0());
+        vec3 metallicRoughness = texture(materialParams_metallicRoughnessMap, getUV0()).rgb;
+        material.metallic = metallicRoughness.b;
+        material.roughness = metallicRoughness.g;
+    }
+}

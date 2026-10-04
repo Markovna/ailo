@@ -19,9 +19,9 @@ asset_ptr<Material> whiteMaterial(AssetManager& assets, RenderAPI& api) {
 
     auto shader = Shader::load(&assets, &api, Shader::getDefaultShaderDescription());
     auto material = assets.emplaceWithPath<Material>(kPath, &api, shader);
-    material->setTexture(0, assets.load<Texture>("builtin://textures/white"));
-    material->setTexture(1, assets.load<Texture>("builtin://textures/normal@norm"));
-    material->setTexture(2, assets.load<Texture>("builtin://textures/default_metallic_roughness"));
+    material->setTexture(1, assets.load<Texture>("builtin://textures/white"));
+    material->setTexture(2, assets.load<Texture>("builtin://textures/normal@norm"));
+    material->setTexture(3, assets.load<Texture>("builtin://textures/default_metallic_roughness"));
     return material;
 }
 

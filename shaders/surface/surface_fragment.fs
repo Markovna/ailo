@@ -1,21 +1,13 @@
-// Fragment stage declarations shared by all surface materials (color variants only):
-// varyings, getters, the MaterialInputs structure and prepareMaterial().
-//
-// Expects from the material prolog:
-//   SHADING_MODEL_LIT, MATERIAL_HAS_NORMAL (the material writes material.normal)
+// MATERIAL_HAS_NORMAL: defined by matcomp when the material writes material.normal.
 
 #include "common_math.glsl"
 #include "common_brdf.glsl"
 #include "common_uniforms.glsl"
 
 #define VARYING in
-#include "common_varyings.glsl"
+#include "surface/surface_varyings.glsl"
 
 layout(location = 0) out vec4 outColor;
-
-//------------------------------------------------------------------------------
-// Getters
-//------------------------------------------------------------------------------
 
 vec2 getUV0() {
     return fragUV;
@@ -33,19 +25,12 @@ vec3 getWorldGeometricNormal() {
     return normalize(fragNormalWorld);
 }
 
-//------------------------------------------------------------------------------
-// Shading parameters, valid after prepareMaterial()
-//------------------------------------------------------------------------------
-
+// Valid after prepareMaterial().
 mat3 shading_tangentToWorld;
 vec3 shading_view;
 vec3 shading_normal;
 vec3 shading_reflected;
 float shading_NoV;
-
-//------------------------------------------------------------------------------
-// Material inputs
-//------------------------------------------------------------------------------
 
 struct MaterialInputs {
     vec4 baseColor;
@@ -73,7 +58,6 @@ void initMaterial(out MaterialInputs material) {
 #endif
 }
 
-// Called before material(): sets up the parts of the shading state that don't depend on the material.
 void computeShadingParams() {
     vec3 n = fragNormalWorld;
     vec3 t = fragTangentWorld.xyz;
@@ -87,7 +71,7 @@ void computeShadingParams() {
     shading_view = normalize(sv);
 }
 
-// Must be called by material(). material.normal only has an effect when written before this call.
+// material.normal only has an effect when written before this call.
 void prepareMaterial(const MaterialInputs material) {
 #if defined(MATERIAL_HAS_NORMAL)
     shading_normal = normalize(shading_tangentToWorld * material.normal);

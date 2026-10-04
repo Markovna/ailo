@@ -241,9 +241,9 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
 
         auto createMat = [&](asset_ptr<Shader> sh, const std::string& materialPath) {
             auto m2 = assetManager->emplaceWithPath<Material>(materialPath, renderApi, sh);
-            if (diffuse) m2->setTexture(0, diffuse);
-            if (normalMap) m2->setTexture(1, normalMap);
-            if (metallicRoughness) m2->setTexture(2, metallicRoughness);
+            if (diffuse) m2->setTexture(1, diffuse);
+            if (normalMap) m2->setTexture(2, normalMap);
+            if (metallicRoughness) m2->setTexture(3, metallicRoughness);
             return m2;
         };
 
