@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 
 #include "Animation.h"
-#include "Material.h"
+#include "MaterialInstance.h"
 #include "Mesh.h"
 #include "Skeleton.h"
 #include "assets/Assets.h"
@@ -13,7 +13,7 @@ namespace ailo {
 struct Model : public Asset {
     struct MeshInstance {
         asset_ptr<Mesh> mesh;
-        asset_ptr<Material> material;
+        asset_ptr<MaterialInstance> material;
         glm::mat4 transform;
         bool skinned = false;
     };

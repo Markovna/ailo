@@ -29,6 +29,7 @@ struct RasterParams {
     BlendFactor srcBlendFactor;
     BlendFactor dstBlendFactor;
     bool depthWriteEnable;
+    bool colorWriteEnable;
     bool blendEnable;
 };
 

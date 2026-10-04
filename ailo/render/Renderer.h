@@ -136,22 +136,22 @@ public:
 };
 
 class Scene;
+class Shader;
 
 template<typename... Cs>
 class Query;
 
 struct RenderData {
-  ProgramHandle program;
+  ProgramHandle colorProgram;
+  ProgramHandle depthProgram;
   VertexBufferLayoutHandle vertexBufferLayout;
   DescriptorSetHandle objectDescriptorSet;
   uint32_t objectBufferOffset;
-  Material* material;
+  const MaterialInstance* materialInstance;
   BufferHandle indexBuffer;
   BufferHandle vertexBuffer;
   uint32_t indexCount;
   uint32_t indexOffset;
-  bool hasTransform;
-  bool isSkinned;
 };
 
 class Renderer {
@@ -186,6 +186,9 @@ private:
   asset_ptr<Texture> createBlackTexture(AssetManager*);
   asset_ptr<Texture> createDefaultNormalTexture(AssetManager*);
   asset_ptr<Texture> createDefaultMetallicRoughnessTexture(AssetManager*);
+  asset_ptr<Texture> createBlackCubemapTexture(AssetManager*);
+
+  void drawSkybox();
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
@@ -210,8 +213,12 @@ private:
   // Shadow mapping
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
-  asset_ptr<Shader> m_shadowShader;
-  asset_ptr<Shader> m_skinnedShadowShader;
+
+  // Skybox (still a hand-written shader rather than a material)
+  asset_ptr<Shader> m_skyboxShader;
+  asset_ptr<Mesh> m_skyboxMesh;
+  Unique<gpu::DescriptorSet> m_skyboxDescriptorSet;
+  TextureHandle m_skyboxTexture;
 
   RendererSettings m_settings;
   std::vector<OverlayPass> m_overlayPasses;

@@ -8,14 +8,11 @@
 #include "app/App.h"
 #include "assets/Assets.h"
 #include "ecs/SceneLighting.h"
-#include "render/Material.h"
 #include "ecs/Spawn.h"
 #include "physics/PhysicsWorld.h"
-#include "render/Mesh.h"
 #include "render/Model.h"
 #include "render/RenderAPI.h"
-#include "render/Renderable.h"
-#include "render/Shader.h"
+#include "render/Skybox.h"
 #include "render/Texture.h"
 #include "ui/ImGuiPlugin.h"
 
@@ -26,15 +23,9 @@ namespace {
 void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     Scene& scene = world.scene();
 
-    auto skyboxShader = Shader::load(&assets, &api, Shader::getSkyboxShaderDescription());
-    auto skyboxMaterial = Material::create(&assets, &api, skyboxShader);
-    auto cubemapTex = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb);
-    skyboxMaterial->setTexture(0, cubemapTex);
-
-    auto skyboxEntity = scene.addEntity();
-    Renderable& skybox = scene.addComponent<Renderable>(skyboxEntity);
-    skybox.mesh = Mesh::skyboxCube(&assets, &api);
-    skybox.materials.push_back(skyboxMaterial);
+    scene.addComponent<Skybox>(scene.single(), Skybox {
+        .cubemap = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
+    });
 
     auto iblPrefilter = Texture::loadCubemap(
         &assets, &api,

@@ -5,7 +5,6 @@
 #include "Transform.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
-#include "render/Shader.h"
 #include "render/Skin.h"
 #include "render/Texture.h"
 
@@ -13,16 +12,13 @@ namespace ailo::scene {
 
 namespace {
 
-asset_ptr<Material> whiteMaterial(AssetManager& assets, RenderAPI& api) {
+asset_ptr<MaterialInstance> whiteMaterial(AssetManager& assets, RenderAPI& api) {
     constexpr auto kPath = "builtin://materials/white";
-    if (auto material = assets.get<Material>(kPath)) return material;
+    if (auto instance = assets.get<MaterialInstance>(kPath)) return instance;
 
-    auto shader = Shader::load(&assets, &api, Shader::getDefaultShaderDescription());
-    auto material = assets.emplaceWithPath<Material>(kPath, &api, shader);
-    material->setTexture(1, assets.load<Texture>("builtin://textures/white"));
-    material->setTexture(2, assets.load<Texture>("builtin://textures/normal@norm"));
-    material->setTexture(3, assets.load<Texture>("builtin://textures/default_metallic_roughness"));
-    return material;
+    auto instance = assets.emplaceWithPath<MaterialInstance>(kPath, &api, assets, assets.load<Material>(materials::kLit));
+    instance->setParameter("metallicRoughnessMap", assets.load<Texture>("builtin://textures/default_metallic_roughness"));
+    return instance;
 }
 
 }

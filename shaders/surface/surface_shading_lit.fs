@@ -206,7 +206,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
         color += surfaceShading(pixel, light, 1.0);
     }
 
-    const float ambientLuminance = 0.3;
+    const float ambientLuminance = 0.7;
 
     vec3 E = mix(pixel.dfg.xxx, pixel.dfg.yyy, pixel.f0);
 

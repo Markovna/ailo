@@ -14,12 +14,8 @@ class Shader : public Asset {
 
     DescriptorSetLayoutHandle getDescriptorSetLayout(uint32_t setIndex) const;
 
-    static ShaderDescription& getDefaultShaderDescription();
     static ShaderDescription& getSkyboxShaderDescription();
     static ShaderDescription& getHdrShader();
-    static ShaderDescription& getShadowShaderDescription();
-    static ShaderDescription& getSkinnedShaderDescription();
-    static ShaderDescription& getSkinnedShadowShaderDescription();
 
     static asset_ptr<Shader> load(AssetManager* assetManager, RenderAPI*, const ShaderDescription&);
 

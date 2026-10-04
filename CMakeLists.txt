@@ -79,6 +79,9 @@ add_executable(ailo
     ailo/OS.h
     ailo/render/Material.cpp
     ailo/render/Material.h
+    ailo/render/MaterialInstance.cpp
+    ailo/render/MaterialInstance.h
+    ailo/render/Skybox.h
     ailo/render/Texture.cpp
     ailo/render/Texture.h
     ailo/render/Mesh.cpp

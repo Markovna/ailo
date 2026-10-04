@@ -6,7 +6,10 @@ material {
     "parameters": [
         { "type": "sampler2d", "name": "baseColorMap", "default": "white" },
         { "type": "sampler2d", "name": "normalMap", "default": "normal" },
-        { "type": "sampler2d", "name": "metallicRoughnessMap", "default": "white" }
+        { "type": "sampler2d", "name": "metallicRoughnessMap", "default": "white" },
+        { "type": "float4", "name": "baseColorFactor", "default": [1, 1, 1, 1] },
+        { "type": "float", "name": "metallicFactor", "default": 1 },
+        { "type": "float", "name": "roughnessFactor", "default": 1 }
     ],
     "blending": "opaque",
     "culling": "back"
@@ -17,9 +20,9 @@ fragment {
         material.normal = texture(materialParams_normalMap, getUV0()).rgb * 2.0 - 1.0;
         prepareMaterial(material);
 
-        material.baseColor = texture(materialParams_baseColorMap, getUV0());
+        material.baseColor = texture(materialParams_baseColorMap, getUV0()) * materialParams.baseColorFactor;
         vec3 metallicRoughness = texture(materialParams_metallicRoughnessMap, getUV0()).rgb;
-        material.metallic = metallicRoughness.b;
-        material.roughness = metallicRoughness.g;
+        material.metallic = metallicRoughness.b * materialParams.metallicFactor;
+        material.roughness = metallicRoughness.g * materialParams.roughnessFactor;
     }
 }

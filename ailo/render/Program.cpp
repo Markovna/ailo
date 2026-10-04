@@ -17,6 +17,7 @@ Program::Program(vk::Device device, const ShaderDescription& description) : m_de
     m_rasterParams.blendOp = { vkutils::getBlendOp(raster.rgbBlendOp), vkutils::getBlendOp(raster.alphaBlendOp) };
     m_rasterParams.depthCompareOp = vkutils::getCompareOperation(raster.depthCompareOp);
     m_rasterParams.depthWriteEnable = raster.depthWriteEnable;
+    m_rasterParams.colorWriteEnable = raster.colorWriteEnable;
     m_rasterParams.srcBlendFactor = { vkutils::getBlendFunction(raster.srcRgbBlendFunc), vkutils::getBlendFunction(raster.srcAlphaBlendFunc) };
     m_rasterParams.dstBlendFactor = { vkutils::getBlendFunction(raster.dstRgbBlendFunc), vkutils::getBlendFunction(raster.dstAlphaBlendFunc) };
 }

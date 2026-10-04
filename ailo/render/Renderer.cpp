@@ -7,7 +7,8 @@
 
 #include "Mesh.h"
 #include "Shader.h"
-#include "Material.h"
+#include "MaterialInstance.h"
+#include "Skybox.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
@@ -53,6 +54,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultMetallicRoughnessTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultNormalTexture(assetManager)));
+  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackCubemapTexture(assetManager)));
 
   // vk::Format::eR32G32B32A32Sfloat
   m_iblDfgLut = assetManager->load<Texture>(m_settings.dfgLutPath);
@@ -74,8 +76,8 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_shadowViewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
-  m_shadowShader = Shader::load(assetManager, m_renderAPI, Shader::getShadowShaderDescription());
-  m_skinnedShadowShader = Shader::load(assetManager, m_renderAPI, Shader::getSkinnedShadowShaderDescription());
+  m_skyboxShader = Shader::load(assetManager, m_renderAPI, Shader::getSkyboxShaderDescription());
+  m_skyboxMesh = Mesh::skyboxCube(assetManager, m_renderAPI);
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
 }
@@ -131,14 +133,11 @@ void Renderer::shadowPass() {
   PipelineState pipelineState {};
 
   for(const RenderData& renderData : m_renderData) {
-    // Skip entities without Transform (e.g. skybox) — they shouldn't cast shadows
-    if (!renderData.hasTransform) {
+    if (!renderData.depthProgram) {
       continue;
     }
 
-    pipelineState.program = renderData.isSkinned
-        ? m_skinnedShadowShader->program()
-        : m_shadowShader->program();
+    pipelineState.program = renderData.depthProgram;
     pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
     backend->bindPipeline(pipelineState);
 
@@ -169,7 +168,11 @@ void Renderer::colorPass() {
   PipelineState pipelineState {};
 
   for(const RenderData& renderData : m_renderData) {
-      pipelineState.program = renderData.program;
+      if (!renderData.colorProgram) {
+        continue;
+      }
+
+      pipelineState.program = renderData.colorProgram;
       pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
 
       backend->bindPipeline(pipelineState);
@@ -180,14 +183,34 @@ void Renderer::colorPass() {
         std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
         { renderData.objectBufferOffset, 0 });
 
-      renderData.material->bindDescriptorSet(*backend);
+      renderData.materialInstance->bind(*backend);
 
       backend->bindIndexBuffer(renderData.indexBuffer);
       backend->bindVertexBuffer(renderData.vertexBuffer);
       backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
   }
 
+  drawSkybox();
+
   backend->endRenderPass();
+}
+
+void Renderer::drawSkybox() {
+  if (!m_skyboxDescriptorSet) {
+    return;
+  }
+
+  RenderAPI* backend = m_renderAPI;
+  backend->bindPipeline(PipelineState {
+    .program = m_skyboxShader->program(),
+    .vertexBufferLayout = m_skyboxMesh->vertexBuffer.getLayout(),
+  });
+  backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+  backend->bindDescriptorSet(m_skyboxDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL));
+  backend->bindIndexBuffer(m_skyboxMesh->indexBuffer.getHandle());
+  backend->bindVertexBuffer(m_skyboxMesh->vertexBuffer.getBuffer());
+  const auto& face = m_skyboxMesh->faces.front();
+  backend->drawIndexed(face.indexCount, 1, face.indexOffset);
 }
 
 void Renderer::endFrame() {
@@ -284,12 +307,17 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
     uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
 
+    material::Variant variant {};
+    if (skin) variant.key |= material::Variant::SKINNING;
+    if (renderable.receiveShadows) variant.key |= material::Variant::SHADOWS;
+
     auto mesh = renderable.mesh;
     for(size_t i = 0; i < mesh->faces.size(); i++) {
       auto& [indexOffset, indexCount] = mesh->faces[i];
-      auto& material = renderable.materials[i];
-      material->updateTextures(backend);
-      material->updateBuffers(backend);
+      auto& instance = renderable.materials[i];
+      instance->commit(backend);
+
+      const Material& material = instance->getMaterial();
 
       auto& entry = m_renderData.emplace_back();
 
@@ -325,15 +353,14 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
       }
 
       entry.objectBufferOffset = objectIndex * sizeof(PerObjectUniforms);
-      entry.program = material->getShader()->program();
+      entry.colorProgram = material.getProgram(variant);
+      entry.depthProgram = renderable.castShadows ? material.getProgram(material::Variant::depth(variant)) : ProgramHandle {};
       entry.vertexBufferLayout = mesh->vertexBuffer.getLayout();
-      entry.material = material.get();
+      entry.materialInstance = instance.get();
       entry.indexBuffer = mesh->indexBuffer.getHandle();
       entry.vertexBuffer = mesh->vertexBuffer.getBuffer();
       entry.indexCount = indexCount;
       entry.indexOffset = indexOffset;
-      entry.hasTransform = tr != nullptr;
-      entry.isSkinned = (skin != nullptr);
     }
 
     objectIndex++;
@@ -344,6 +371,17 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   if (objectIndex > 0) {
     backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), objectIndex * sizeof(PerObjectUniforms));
+  }
+
+  auto skybox = scene.tryGet<Skybox>(scene.single());
+  auto skyboxTexture = skybox && skybox->cubemap ? skybox->cubemap->getHandle() : TextureHandle {};
+  if (skyboxTexture != m_skyboxTexture) {
+    m_skyboxTexture = skyboxTexture;
+    m_skyboxDescriptorSet.reset();
+    if (skyboxTexture) {
+      m_skyboxDescriptorSet = backend.createDescriptorSet(m_skyboxShader->getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL)));
+      backend.updateDescriptorSetTexture(m_skyboxDescriptorSet, skyboxTexture, 0);
+    }
   }
 
   auto iblTexHandle = sceneLighting ? sceneLighting->prefilteredEnvMap->getHandle() : TextureHandle{};
@@ -386,11 +424,21 @@ asset_ptr<Texture> Renderer::createDefaultMetallicRoughnessTexture(AssetManager*
   return texture;
 }
 
+asset_ptr<Texture> Renderer::createBlackCubemapTexture(AssetManager* assetManager) {
+  static const std::array<uint8_t, 4> black = { 0, 0, 0, 255 };
+
+  auto texture = assetManager->emplaceWithPath<Texture>("builtin://textures/black_cube", m_renderAPI, TextureType::TEXTURE_CUBEMAP, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
+  for (uint32_t face = 0; face < 6; face++) {
+    texture->updateImage(m_renderAPI, black.data(), black.size(), 1, 1, 0, 0, face, 1);
+  }
+  return texture;
+}
+
 void Renderer::releaseAssets() {
   m_persistentAssets.clear();
   m_iblDfgLut.reset();
-  m_shadowShader.reset();
-  m_skinnedShadowShader.reset();
+  m_skyboxShader.reset();
+  m_skyboxMesh.reset();
 
   m_renderData.clear();
   m_overlayPasses.clear();

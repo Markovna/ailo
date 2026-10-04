@@ -228,6 +228,7 @@ struct RasterDescription {
     bool inverseFrontFace = false;
     bool blendEnable = false;
     bool depthWriteEnable = true;
+    bool colorWriteEnable = true;
     BlendOperation rgbBlendOp;
     BlendOperation alphaBlendOp;
     BlendFunction srcRgbBlendFunc;

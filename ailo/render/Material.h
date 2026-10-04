@@ -1,32 +1,52 @@
 #pragma once
 
-#include "Shader.h"
-#include "Texture.h"
+#include <array>
+#include <bitset>
+
+#include "RenderAPI.h"
+#include "assets/Assets.h"
+#include "material/MaterialPackage.h"
 
 namespace ailo {
 
+namespace materials {
+constexpr auto kLit = "materials/lit.matpack";
+}
+
 class Material : public Asset {
 public:
-    Material(RenderAPI*, asset_ptr<Shader>& shader);
-    void setTexture(uint32_t binding, asset_ptr<Texture> texture);
-    void setBuffer(uint32_t binding, Shared<gpu::Buffer> buffer);
+    Material(RenderAPI*, material::MaterialPackage);
 
-    void updateTextures(RenderAPI&);
-    void updateBuffers(RenderAPI&);
-    void bindDescriptorSet(RenderAPI&) const;
+    const std::string& getName() const { return m_package.name; }
+    const material::MaterialPackage& getPackage() const { return m_package; }
+    const material::MaterialParameter* findParameter(std::string_view name) const { return m_package.findParameter(name); }
 
-    DescriptorSetHandle getDescriptorSet() const { return m_descriptorSet; }
+    DescriptorSetLayoutHandle getDescriptorSetLayout() const { return m_descriptorSetLayout; }
 
-    [[nodiscard]] const Shader* getShader() const { return m_shader.get(); }
-
-    static asset_ptr<Material> create(AssetManager*, RenderAPI*, asset_ptr<Shader>);
+    // Variant bits in the material's variantFilter are dropped. Returns an invalid handle if the
+    // package has no shaders for the variant.
+    ProgramHandle getProgram(material::Variant variant) const;
 
 private:
-    Unique<gpu::DescriptorSet> m_descriptorSet;
-    std::unordered_map<uint32_t, asset_ptr<Texture>> m_textures;
-    std::unordered_map<uint32_t, Shared<gpu::Buffer>> m_buffers;
-    std::bitset<64> m_pendingBindings;
-    asset_ptr<Shader> m_shader;
+    RenderAPI* m_renderApi;
+    material::MaterialPackage m_package;
+    RasterDescription m_raster {};
+    std::vector<DescriptorSetLayoutBinding> m_descriptorSetLayoutBindings;
+    Unique<gpu::DescriptorSetLayout> m_descriptorSetLayout;
+
+    mutable std::array<Unique<gpu::Program>, material::Variant::COUNT> m_programs;
+    mutable std::bitset<material::Variant::COUNT> m_missingVariants;
+};
+
+class MaterialLoader : public AssetLoader<Material> {
+public:
+    explicit MaterialLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
+
+protected:
+    void load(LoadContext<Material>& ctx, const std::string& path) override;
+
+private:
+    RenderAPI* m_renderApi;
 };
 
 }

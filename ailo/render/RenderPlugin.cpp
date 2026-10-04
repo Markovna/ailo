@@ -1,5 +1,6 @@
 #include "RenderPlugin.h"
 
+#include "Material.h"
 #include "Model.h"
 #include "RenderAPI.h"
 #include "Texture.h"
@@ -33,6 +34,7 @@ void RenderPlugin::build(App& app) {
 
     auto& api = app.insertResource<RenderAPI>(window.handle());
     assets.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
+    assets.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
     assets.registerLoader<Model>(std::make_unique<ModelImporter>(&api));
 
     app.insertResource<Renderer>(&api, &assets, settings);

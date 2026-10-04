@@ -1,12 +1,16 @@
 #pragma once
-#include "Material.h"
+#include "MaterialInstance.h"
 #include "Mesh.h"
 
 namespace ailo {
 
 struct Renderable {
     asset_ptr<Mesh> mesh;
-    std::vector<asset_ptr<Material>> materials;
+    // One per mesh face.
+    std::vector<asset_ptr<MaterialInstance>> materials;
+
+    bool castShadows = true;
+    bool receiveShadows = true;
 
     // Per-object set for skinned meshes (their bone buffer differs per entity); created lazily by the Renderer.
     Unique<gpu::DescriptorSet> descriptorSet;

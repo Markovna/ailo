@@ -12,7 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "Shader.h"
+#include "MaterialInstance.h"
 #include "Texture.h"
 
 namespace ailo {
@@ -205,51 +205,44 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
         }
     }
 
-    // Which material indices are used by skinned meshes?
-    std::unordered_set<uint32_t> skinnedMaterialIndices;
-    for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
-        if (aiscene->mMeshes[i]->mNumBones > 0)
-            skinnedMaterialIndices.insert(aiscene->mMeshes[i]->mMaterialIndex);
-    }
-
-    // -------------------------------------------------------------------------
-    // Shaders
-    // -------------------------------------------------------------------------
-    auto shader = Shader::load(assetManager, renderApi, Shader::getDefaultShaderDescription());
-    asset_ptr<Shader> skinnedShader;
-    if (hasAnySkinning)
-        skinnedShader = Shader::load(assetManager, renderApi, Shader::getSkinnedShaderDescription());
-
     // -------------------------------------------------------------------------
     // Materials
     // -------------------------------------------------------------------------
-    std::vector<asset_ptr<Material>> materials(aiscene->mNumMaterials);
-    std::vector<asset_ptr<Material>> skinnedMaterials(aiscene->mNumMaterials);
+    auto litMaterial = assetManager->load<Material>(materials::kLit);
+    std::vector<asset_ptr<MaterialInstance>> materials(aiscene->mNumMaterials);
 
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* mat = aiscene->mMaterials[i];
 
         auto diffuse = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
         if (!diffuse) diffuse = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!diffuse) diffuse = assetManager->load<Texture>("builtin://textures/white");
 
         auto normalMap = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
-        if (!normalMap) normalMap = assetManager->load<Texture>("builtin://textures/normal@norm");
 
         auto metallicRoughness = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
-        if (!metallicRoughness) metallicRoughness = assetManager->load<Texture>("builtin://textures/default_metallic_roughness");
 
-        auto createMat = [&](asset_ptr<Shader> sh, const std::string& materialPath) {
-            auto m2 = assetManager->emplaceWithPath<Material>(materialPath, renderApi, sh);
-            if (diffuse) m2->setTexture(1, diffuse);
-            if (normalMap) m2->setTexture(2, normalMap);
-            if (metallicRoughness) m2->setTexture(3, metallicRoughness);
-            return m2;
-        };
+        auto instance = assetManager->emplaceWithPath<MaterialInstance>(subPath("material", i), renderApi, *assetManager, litMaterial);
+        instance->setParameter("baseColorMap", diffuse);
+        instance->setParameter("normalMap", normalMap);
+        instance->setParameter("metallicRoughnessMap", metallicRoughness);
 
-        materials[i] = createMat(shader, subPath("material", i));
-        if (hasAnySkinning && skinnedMaterialIndices.count(i))
-            skinnedMaterials[i] = createMat(skinnedShader, subPath("material", i) + "/skinned");
+        aiColor4D baseColor;
+        if (mat->Get(AI_MATKEY_BASE_COLOR, baseColor) == AI_SUCCESS)
+            instance->setParameter("baseColorFactor", glm::vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a));
+
+        // Assimp reports a metallic factor only for metallic/roughness materials (glTF). For other formats it may
+        // still derive a roughness factor (FBX: from shininess), which is ignored along with the glTF defaults
+        // (fully metallic and rough) in favor of the engine's default metallic/roughness texture.
+        float metallic = 1.0f, roughness = 1.0f;
+        if (mat->Get(AI_MATKEY_METALLIC_FACTOR, metallic) == AI_SUCCESS) {
+            instance->setParameter("metallicFactor", metallic);
+            if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS)
+                instance->setParameter("roughnessFactor", roughness);
+        } else if (!metallicRoughness) {
+            instance->setParameter("metallicRoughnessMap", assetManager->load<Texture>("builtin://textures/default_metallic_roughness"));
+        }
+
+        materials[i] = instance;
     }
 
     // -------------------------------------------------------------------------
@@ -432,9 +425,7 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
         auto& instance = model.instances.emplace_back();
         instance.mesh = meshes[node.meshIndex];
         instance.skinned = meshHasBones[node.meshIndex];
-        instance.material = instance.skinned && skinnedMaterials[node.materialIndex]
-            ? skinnedMaterials[node.materialIndex]
-            : materials[node.materialIndex];
+        instance.material = materials[node.materialIndex];
         instance.transform = node.transform;
     }
     model.skeleton = std::move(skeleton);

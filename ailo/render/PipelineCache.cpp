@@ -67,8 +67,10 @@ ailo::Pipeline::Pipeline(
     // Color blending
     PerColorAttachment<vk::PipelineColorBlendAttachmentState> colorBlendAttachments{};
     for (auto& colorBlendAttachment : colorBlendAttachments) {
-        colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                                              vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        if (raster.colorWriteEnable) {
+            colorBlendAttachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                                                  vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        }
         colorBlendAttachment.blendEnable = raster.blendEnable;
         colorBlendAttachment.colorBlendOp = raster.blendOp.rgb;
         colorBlendAttachment.alphaBlendOp = raster.blendOp.a;
