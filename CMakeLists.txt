@@ -332,16 +332,19 @@ add_shader(ailo shaders/shader.vert)
 add_shader(ailo shaders/shader.frag)
 add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
-add_shader(ailo shaders/pbr.vert)
-add_shader(ailo shaders/pbr.frag DEFINES USE_NORMAL_MAP)
 add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
 add_shader(ailo shaders/skybox.vert)
 add_shader(ailo shaders/skybox.frag)
-add_shader(ailo shaders/shadow.vert)
-add_shader(ailo shaders/shadow.frag)
-add_shader(ailo shaders/pbr.vert    DEFINES VARIANT_SKINNING NAME pbr_skinned)
-add_shader(ailo shaders/shadow.vert DEFINES VARIANT_SKINNING NAME shadow_skinned)
+
+# Lit surface material: hand-written stand-in for matcomp output (shaders/lit.vert/frag + shaders/surface/).
+# Color variants receive shadows; depth variants are used by the shadow pass.
+add_shader(ailo shaders/lit.vert)
+add_shader(ailo shaders/lit.vert DEFINES VARIANT_HAS_SKINNING NAME lit_skinned)
+add_shader(ailo shaders/lit.frag DEFINES VARIANT_HAS_SHADOWING)
+add_shader(ailo shaders/lit.vert DEFINES VARIANT_DEPTH NAME lit_depth)
+add_shader(ailo shaders/lit.vert DEFINES VARIANT_DEPTH VARIANT_HAS_SKINNING NAME lit_depth_skinned)
+add_shader(ailo shaders/lit.frag DEFINES VARIANT_DEPTH NAME lit_depth)
 
 
 # Add executable

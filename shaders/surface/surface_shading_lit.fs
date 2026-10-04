@@ -1,28 +1,8 @@
-#version 450
-#include "common_math.glsl"
-#include "common_brdf.glsl"
-#include "common_uniforms.glsl"
-
-#define VARYING in
-#include "common_varyings.glsl"
-
-#define MATERIAL_UNIFORM(x) layout(set = 2, binding = x)
-
-MATERIAL_UNIFORM(0) uniform sampler2D baseColorMap;
-
-#if defined(USE_NORMAL_MAP)
-MATERIAL_UNIFORM(1) uniform sampler2D normalMap;
-#endif
-
-MATERIAL_UNIFORM(2) uniform sampler2D metallicRoughnessMap;
-
-layout(location = 0) out vec4 outColor;
-
-mat3 shading_tangentToWorld;
-vec3 shading_view;
-vec3 shading_normal;
-vec3 shading_reflected;
-float shading_NoV;
+// Lit (metallic/roughness) shading model: turns MaterialInputs into a lit color.
+// Uses the shading_* parameters set up by prepareMaterial().
+//
+// Variant defines:
+//   VARIANT_HAS_SHADOWING  the directional light is shadowed by the shadow map
 
 struct Light {
     vec4 colorIntensity;
@@ -55,13 +35,11 @@ vec3 sampleDFG(float NoV, float perceptualRoughness) {
     return textureLod(iblDFG, uv, 0.0).rgb;
 }
 
-void getPixel(out Pixel pixel) {
-    vec4 baseColor = texture(baseColorMap, fragUV);
-
-    vec3 metallicRoughness = texture(metallicRoughnessMap, fragUV).rgb;
-    float metallic = metallicRoughness.b;
+void getPixel(const MaterialInputs material, out Pixel pixel) {
+    vec4 baseColor = material.baseColor;
+    float metallic = material.metallic;
     // At roughness 0, D_GGX is a delta and punctual lights would produce no highlight at all.
-    float roughness = clamp(metallicRoughness.g, MIN_PERCEPTUAL_ROUGHNESS, 1.0);
+    float roughness = clamp(material.roughness, MIN_PERCEPTUAL_ROUGHNESS, 1.0);
 
     pixel.baseColor = baseColor;
     pixel.perceptualRoughness = roughness;
@@ -70,7 +48,7 @@ void getPixel(out Pixel pixel) {
 
     pixel.diffuseColor = baseColor.rgb * (1.0 - metallic);
 
-    const float reflectance = 0.5;
+    float reflectance = material.reflectance;
     pixel.reflectance = 0.16 * reflectance * reflectance;
 
     pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
@@ -159,6 +137,7 @@ Light getDirectionalLight() {
     return light;
 }
 
+#if defined(VARIANT_HAS_SHADOWING)
 float sampleShadow(vec2 uv, float depth) {
     // Explicit LOD: the shadow map has no mips, and this avoids implicit derivatives in non-uniform control flow.
     return textureLod(shadowMap, vec3(uv, depth), 0.0);
@@ -207,45 +186,26 @@ float calculateShadow(vec3 worldPos, vec3 geometricNormal, float NoL) {
     shadow += uw.y * vw.y * sampleShadow(base + vec2(u.y, v.y), depth);
     return shadow * (1.0 / 16.0);
 }
-
-vec3 shadingNormal() {
-#if defined(USE_NORMAL_MAP)
-    vec3 normal = texture(normalMap, fragUV).rgb;
-    normal = normal * 2.0 - 1.0;
-    return normalize(shading_tangentToWorld * normal);
-#else
-    return normalize(fragNormalWorld);
 #endif
-}
 
-void main() {
-    vec3 n = fragNormalWorld;
-    vec3 t = fragTangentWorld.xyz;
-    vec3 b = cross(n, t) * sign(fragTangentWorld.w);
-
-    shading_tangentToWorld = mat3(t, b, n);
-
-    vec3 sv = view.projection[2].w != 0.0 ? // is perspective projection?
-            (view.viewInverse[3].xyz - fragPosWorld) : view.viewInverse[2].xyz;
-
-    shading_view = normalize(sv);
-    shading_normal = shadingNormal();
-    shading_NoV = clampNoV(dot(shading_normal, shading_view));
-    shading_reflected = reflect(-shading_view, shading_normal);
-
+vec4 evaluateMaterial(const MaterialInputs material) {
     Pixel pixel;
-    getPixel(pixel);
+    getPixel(material, pixel);
 
     vec3 color = vec3(0.0);
 
     Light directionalLight = getDirectionalLight();
+#if defined(VARIANT_HAS_SHADOWING)
     // Use the geometric normal for shadowing: normal-mapped NoL can be positive on faces turned away from the light.
-    vec3 geometricNormal = normalize(fragNormalWorld);
+    vec3 geometricNormal = getWorldGeometricNormal();
     float geometricNoL = dot(geometricNormal, directionalLight.l);
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
         float shadow = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
         color += surfaceShading(pixel, directionalLight, shadow);
     }
+#else
+    color += surfaceShading(pixel, directionalLight, 1.0);
+#endif
 
     for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
         Light light = getLight(i);
@@ -262,12 +222,12 @@ void main() {
     vec3 Fr = E * prefilteredRadiance;
 
     vec3 diffuseIrradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
-    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E);
+    vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
 
     color.rgb += ambientLuminance * (Fd + Fr);
 
     // HDR tonemapping
     color = color / (color + vec3(1.0));
 
-    outColor = vec4(color, pixel.baseColor.a);
+    return vec4(color, pixel.baseColor.a);
 }

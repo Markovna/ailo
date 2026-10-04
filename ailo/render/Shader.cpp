@@ -16,8 +16,8 @@ DescriptorSetLayoutHandle Shader::getDescriptorSetLayout(uint32_t setIndex) cons
 
 ShaderDescription& Shader::getDefaultShaderDescription() {
     static ShaderDescription shaderDescription {
-        .vertexShader = os::readFile("shaders/pbr.vert.spv"),
-        .fragmentShader = os::readFile("shaders/pbr.frag.spv"),
+        .vertexShader = os::readFile("shaders/lit.vert.spv"),
+        .fragmentShader = os::readFile("shaders/lit.frag.spv"),
         .raster = RasterDescription {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
@@ -101,8 +101,8 @@ ShaderDescription& Shader::getHdrShader() {
 
 ShaderDescription& Shader::getShadowShaderDescription() {
     static ShaderDescription description {
-        .vertexShader = os::readFile("shaders/shadow.vert.spv"),
-        .fragmentShader = os::readFile("shaders/shadow.frag.spv"),
+        .vertexShader = os::readFile("shaders/lit_depth.vert.spv"),
+        .fragmentShader = os::readFile("shaders/lit_depth.frag.spv"),
         .raster = RasterDescription {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
@@ -119,8 +119,8 @@ ShaderDescription& Shader::getShadowShaderDescription() {
 
 ShaderDescription& Shader::getSkinnedShaderDescription() {
     static ShaderDescription shaderDescription {
-        .vertexShader = os::readFile("shaders/pbr_skinned.vert.spv"),
-        .fragmentShader = os::readFile("shaders/pbr.frag.spv"),
+        .vertexShader = os::readFile("shaders/lit_skinned.vert.spv"),
+        .fragmentShader = os::readFile("shaders/lit.frag.spv"),
         .raster = RasterDescription {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
@@ -154,8 +154,8 @@ ShaderDescription& Shader::getSkinnedShaderDescription() {
 
 ShaderDescription& Shader::getSkinnedShadowShaderDescription() {
     static ShaderDescription description {
-        .vertexShader = os::readFile("shaders/shadow_skinned.vert.spv"),
-        .fragmentShader = os::readFile("shaders/shadow.frag.spv"),
+        .vertexShader = os::readFile("shaders/lit_depth_skinned.vert.spv"),
+        .fragmentShader = os::readFile("shaders/lit_depth.frag.spv"),
         .raster = RasterDescription {
             .cullingMode = CullingMode::FRONT,
             .inverseFrontFace = true,
