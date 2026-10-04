@@ -79,7 +79,7 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
         }, MotionType::Dynamic);
     }
 
-    useMaterial(scene, assets, api, assets.load<Material>(kToonMatpack));
+    // useMaterial(scene, assets, api, assets.load<Material>(kToonMatpack));
 }
 
 void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const PhysicsWorld* physics) {

@@ -11,6 +11,7 @@ namespace ailo {
 
 namespace materials {
 constexpr auto kLit = "materials/lit.matpack";
+constexpr auto kSkybox = "materials/skybox.matpack";
 }
 
 class Material : public Asset {

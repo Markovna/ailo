@@ -27,6 +27,8 @@ struct MaterialDefinition {
     CodeBlock fragment;
 
     bool hasNormal = false;
+    // The vertex code writes material.clipPosition, replacing the projected world position.
+    bool hasClipPosition = false;
     // The fragment code provides surfaceShading(), called per light instead of the lit BRDF.
     bool customSurfaceShading = false;
     int customSurfaceShadingLine = 0;

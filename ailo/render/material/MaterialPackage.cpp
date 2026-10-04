@@ -132,6 +132,7 @@ std::vector<uint8_t> MaterialPackage::serialize() const {
     w.boolean(raster.depthWrite);
     w.boolean(raster.depthCulling);
     w.boolean(raster.doubleSided);
+    w.u8(uint8_t(raster.depthFunc));
     w.u8(requiredAttributes);
     w.u8(variantFilter);
     w.endChunk();
@@ -210,6 +211,7 @@ std::optional<MaterialPackage> MaterialPackage::deserialize(std::span<const uint
                 pkg.raster.depthWrite = c.boolean();
                 pkg.raster.depthCulling = c.boolean();
                 pkg.raster.doubleSided = c.boolean();
+                pkg.raster.depthFunc = c.enumeration(DepthFunc::Always);
                 pkg.requiredAttributes = c.u8();
                 pkg.variantFilter = c.u8();
                 break;

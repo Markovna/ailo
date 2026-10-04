@@ -34,6 +34,20 @@ std::string_view toString(CullingMode v) {
     return "?";
 }
 
+std::string_view toString(DepthFunc v) {
+    switch (v) {
+        case DepthFunc::Never:        return "never";
+        case DepthFunc::Less:         return "less";
+        case DepthFunc::Equal:        return "equal";
+        case DepthFunc::LessEqual:    return "lessEqual";
+        case DepthFunc::Greater:      return "greater";
+        case DepthFunc::NotEqual:     return "notEqual";
+        case DepthFunc::GreaterEqual: return "greaterEqual";
+        case DepthFunc::Always:       return "always";
+    }
+    return "?";
+}
+
 std::string_view toString(ShaderStage v) {
     switch (v) {
         case ShaderStage::Vertex:   return "vertex";

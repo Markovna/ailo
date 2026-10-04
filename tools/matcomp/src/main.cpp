@@ -106,12 +106,14 @@ int dump(const fs::path& path) {
               << "colorWrite:    " << pkg->raster.colorWrite << "\n"
               << "depthWrite:    " << pkg->raster.depthWrite << "\n"
               << "depthCulling:  " << pkg->raster.depthCulling << "\n"
+              << "depthFunc:     " << toString(pkg->raster.depthFunc) << "\n"
               << "doubleSided:   " << pkg->raster.doubleSided << "\n";
 
     std::cout << "requires:     ";
     if (pkg->requiredAttributes & uint8_t(VertexAttribute::Color)) std::cout << " color";
     if (pkg->requiredAttributes & uint8_t(VertexAttribute::UV0)) std::cout << " uv0";
     if (pkg->requiredAttributes & uint8_t(VertexAttribute::Tangents)) std::cout << " tangents";
+    if (pkg->requiredAttributes & uint8_t(VertexAttribute::Normal)) std::cout << " normal";
     std::cout << "\nvariables:    ";
     for (const auto& v : pkg->variables) std::cout << " " << v;
     std::cout << "\nvariantFilter: 0x" << std::hex << uint32_t(pkg->variantFilter) << std::dec << "\n";

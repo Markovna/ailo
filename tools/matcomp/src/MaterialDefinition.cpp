@@ -350,6 +350,18 @@ constexpr std::pair<std::string_view, VertexAttribute> kAttributes[] = {
     { "color", VertexAttribute::Color },
     { "uv0", VertexAttribute::UV0 },
     { "tangents", VertexAttribute::Tangents },
+    { "normal", VertexAttribute::Normal },
+};
+
+constexpr std::pair<std::string_view, DepthFunc> kDepthFuncs[] = {
+    { "never", DepthFunc::Never },
+    { "less", DepthFunc::Less },
+    { "equal", DepthFunc::Equal },
+    { "lessEqual", DepthFunc::LessEqual },
+    { "greater", DepthFunc::Greater },
+    { "notEqual", DepthFunc::NotEqual },
+    { "greaterEqual", DepthFunc::GreaterEqual },
+    { "always", DepthFunc::Always },
 };
 
 constexpr std::pair<std::string_view, Variant::type_t> kVariantFilters[] = {
@@ -393,6 +405,7 @@ void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
         else if (key == "colorWrite") pkg.raster.colorWrite = getBool(v, "colorWrite");
         else if (key == "depthWrite") pkg.raster.depthWrite = getBool(v, "depthWrite");
         else if (key == "depthCulling") pkg.raster.depthCulling = getBool(v, "depthCulling");
+        else if (key == "depthFunc") pkg.raster.depthFunc = getEnum(v, "depthFunc", kDepthFuncs);
         else if (key == "doubleSided") pkg.raster.doubleSided = getBool(v, "doubleSided");
         else if (key == "customSurfaceShading") {
             def.customSurfaceShading = getBool(v, "customSurfaceShading");
@@ -413,6 +426,10 @@ void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
     // Lighting variants make no sense for unlit materials.
     if (pkg.shadingModel == ShadingModel::Unlit) {
         pkg.variantFilter |= Variant::SHADOWS;
+    }
+
+    if (pkg.shadingModel == ShadingModel::Lit || (pkg.requiredAttributes & uint8_t(VertexAttribute::Tangents))) {
+        pkg.requiredAttributes |= uint8_t(VertexAttribute::Normal);
     }
 }
 
@@ -445,6 +462,7 @@ MaterialDefinition parseMaterialDefinition(std::string_view source) {
     static const std::regex prepareCall(R"(prepareMaterial\s*\()");
     static const std::regex materialVertexFunction(R"(void\s+materialVertex\s*\()");
     static const std::regex normalWrite(R"(material\s*\.\s*normal\b)");
+    static const std::regex clipPositionWrite(R"(material\s*\.\s*clipPosition\b)");
 
     if (!std::regex_search(def.fragment.code, materialFunction)) {
         fail(def.fragment.line, "fragment block must define void material(inout MaterialInputs material)");
@@ -466,6 +484,8 @@ MaterialDefinition parseMaterialDefinition(std::string_view source) {
                                     "const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData)");
         }
     }
+
+    def.hasClipPosition = def.vertex.present && std::regex_search(def.vertex.code, clipPositionWrite);
 
     def.hasNormal = std::regex_search(def.fragment.code, normalWrite);
     if (def.hasNormal && !(def.package.requiredAttributes & uint8_t(VertexAttribute::Tangents))) {

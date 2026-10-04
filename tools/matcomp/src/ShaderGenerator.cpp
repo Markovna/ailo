@@ -88,12 +88,17 @@ std::string generateShader(const MaterialDefinition& def, ShaderStage stage, Var
     define(out, "VARIANT_HAS_SKINNING", vertex && variant.hasSkinning());
     define(out, "VARIANT_HAS_SHADOWING", !vertex && variant.isShadowReceiver());
     define(out, "VARIANT_DEPTH", variant.isDepth());
+    // Depth variants skip materialVertex() unless the material moves its vertices.
+    const bool optimizedDepth = vertex && variant.isDepth() && !def.hasClipPosition;
+    define(out, "USE_OPTIMIZED_DEPTH_VERTEX_SHADER", optimizedDepth);
 
     define(out, "SHADING_MODEL_LIT", pkg.shadingModel == ShadingModel::Lit);
     define(out, "SHADING_MODEL_UNLIT", pkg.shadingModel == ShadingModel::Unlit);
     define(out, "HAS_ATTRIBUTE_COLOR", pkg.requiredAttributes & uint8_t(VertexAttribute::Color));
     define(out, "HAS_ATTRIBUTE_UV0", pkg.requiredAttributes & uint8_t(VertexAttribute::UV0));
     define(out, "HAS_ATTRIBUTE_TANGENTS", pkg.requiredAttributes & uint8_t(VertexAttribute::Tangents));
+    define(out, "HAS_ATTRIBUTE_NORMAL", pkg.requiredAttributes & uint8_t(VertexAttribute::Normal));
+    define(out, "MATERIAL_HAS_CLIP_POSITION", def.hasClipPosition);
     define(out, "MATERIAL_HAS_NORMAL", def.hasNormal);
     define(out, "MATERIAL_HAS_CUSTOM_SURFACE_SHADING", def.customSurfaceShading);
     for (size_t i = 0; i < pkg.variables.size(); i++) {
@@ -107,7 +112,7 @@ std::string generateShader(const MaterialDefinition& def, ShaderStage stage, Var
 
     if (vertex) {
         out << "#include \"surface/surface_vertex.vs\"\n";
-        if (!variant.isDepth()) {
+        if (!optimizedDepth) {
             if (def.vertex.present) {
                 lineDirective(out, def.vertex.line, sourceName);
                 out << def.vertex.code << "\n";

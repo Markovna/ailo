@@ -1,11 +1,12 @@
 void main() {
-#if defined(VARIANT_DEPTH)
+#if defined(USE_OPTIMIZED_DEPTH_VERTEX_SHADER)
     gl_Position = getClipFromWorldMatrix() * getWorldFromModelMatrix() * getPosition();
 #else
     MaterialVertexInputs material;
     initMaterialVertex(material);
     materialVertex(material);
 
+#if !defined(VARIANT_DEPTH)
     fragPosWorld = material.worldPosition.xyz;
     fragNormalWorld = material.worldNormal;
     fragTangentWorld = vertex_worldTangent;
@@ -33,7 +34,12 @@ void main() {
 #if defined(VARIABLE_CUSTOM3)
     VARIABLE_CUSTOM_AT3 = material.VARIABLE_CUSTOM3;
 #endif
+#endif
 
+#if defined(MATERIAL_HAS_CLIP_POSITION)
+    gl_Position = material.clipPosition;
+#else
     gl_Position = view.projection * view.view * material.worldPosition;
+#endif
 #endif
 }

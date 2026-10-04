@@ -25,11 +25,23 @@ enum class CullingMode : uint8_t {
     FrontAndBack,
 };
 
-// Position and normal are always present.
+enum class DepthFunc : uint8_t {
+    Never,
+    Less,
+    Equal,
+    LessEqual,
+    Greater,
+    NotEqual,
+    GreaterEqual,
+    Always,
+};
+
+// Position is always present. Lit materials always get Normal, Tangents implies Normal.
 enum class VertexAttribute : uint8_t {
     Color    = 1 << 0,
     UV0      = 1 << 1,
     Tangents = 1 << 2,
+    Normal   = 1 << 3,
 };
 
 enum class ShaderStage : uint8_t {
@@ -73,6 +85,7 @@ std::string_view toString(ShadingModel);
 std::string_view toString(BlendingMode);
 std::string_view toString(VertexDomain);
 std::string_view toString(CullingMode);
+std::string_view toString(DepthFunc);
 std::string_view toString(ShaderStage);
 std::string_view toString(ParameterType);
 std::string_view toString(SamplerDefault);

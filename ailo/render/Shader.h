@@ -14,7 +14,6 @@ class Shader : public Asset {
 
     DescriptorSetLayoutHandle getDescriptorSetLayout(uint32_t setIndex) const;
 
-    static ShaderDescription& getSkyboxShaderDescription();
     static ShaderDescription& getHdrShader();
 
     static asset_ptr<Shader> load(AssetManager* assetManager, RenderAPI*, const ShaderDescription&);

@@ -136,7 +136,6 @@ public:
 };
 
 class Scene;
-class Shader;
 
 template<typename... Cs>
 class Query;
@@ -214,11 +213,11 @@ private:
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
 
-  // Skybox (still a hand-written shader rather than a material)
-  asset_ptr<Shader> m_skyboxShader;
+  asset_ptr<MaterialInstance> m_skyboxMaterial;
   asset_ptr<Mesh> m_skyboxMesh;
-  Unique<gpu::DescriptorSet> m_skyboxDescriptorSet;
   TextureHandle m_skyboxTexture;
+  bool m_drawSkybox = false;
+  uint32_t m_skyboxObjectBufferOffset = 0;
 
   RendererSettings m_settings;
   std::vector<OverlayPass> m_overlayPasses;

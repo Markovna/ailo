@@ -6,7 +6,6 @@
 #include "app/System.h"
 
 #include "Mesh.h"
-#include "Shader.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
 #include "ecs/SceneLighting.h"
@@ -76,7 +75,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_shadowViewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
-  m_skyboxShader = Shader::load(assetManager, m_renderAPI, Shader::getSkyboxShaderDescription());
+  m_skyboxMaterial = MaterialInstance::create(*assetManager, *m_renderAPI, assetManager->load<Material>(materials::kSkybox));
   m_skyboxMesh = Mesh::skyboxCube(assetManager, m_renderAPI);
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
@@ -196,17 +195,24 @@ void Renderer::colorPass() {
 }
 
 void Renderer::drawSkybox() {
-  if (!m_skyboxDescriptorSet) {
+  if (!m_drawSkybox) {
+    return;
+  }
+
+  auto program = m_skyboxMaterial->getMaterial().getProgram(material::Variant {});
+  if (!program) {
     return;
   }
 
   RenderAPI* backend = m_renderAPI;
   backend->bindPipeline(PipelineState {
-    .program = m_skyboxShader->program(),
+    .program = program,
     .vertexBufferLayout = m_skyboxMesh->vertexBuffer.getLayout(),
   });
   backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-  backend->bindDescriptorSet(m_skyboxDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL));
+  backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
+    { m_skyboxObjectBufferOffset, 0 });
+  m_skyboxMaterial->bind(*backend);
   backend->bindIndexBuffer(m_skyboxMesh->indexBuffer.getHandle());
   backend->bindVertexBuffer(m_skyboxMesh->vertexBuffer.getBuffer());
   const auto& face = m_skyboxMesh->faces.front();
@@ -269,7 +275,11 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
   light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
   light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
 
-  size_t meshCount = renderables.view().size();
+  auto skybox = scene.tryGet<Skybox>(scene.single());
+  m_drawSkybox = skybox && skybox->cubemap;
+
+  // One extra slot for the skybox's (identity) object uniforms.
+  size_t meshCount = renderables.view().size() + 1;
 
   if(meshCount > m_perObjectUniformBufferData.size() || !m_objectsUniformBufferHandle) {
     m_perObjectUniformBufferData.resize(std::max(meshCount, m_perObjectUniformBufferData.size()));
@@ -366,22 +376,25 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
     objectIndex++;
   }
 
+  if (m_drawSkybox) {
+    auto& uniformBufferData = m_perObjectUniformBufferData[objectIndex];
+    uniformBufferData = PerObjectUniforms {};
+    uniformBufferData.flags = 0;
+    m_skyboxObjectBufferOffset = objectIndex * sizeof(PerObjectUniforms);
+    objectIndex++;
+
+    if (skybox->cubemap->getHandle() != m_skyboxTexture) {
+      m_skyboxTexture = skybox->cubemap->getHandle();
+      m_skyboxMaterial->setParameter("skybox", skybox->cubemap);
+    }
+    m_skyboxMaterial->commit(backend);
+  }
+
   backend.updateBuffer(m_shadowViewUniformBufferHandle, &m_shadowViewUniformBufferData, sizeof(m_shadowViewUniformBufferData));
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   if (objectIndex > 0) {
     backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), objectIndex * sizeof(PerObjectUniforms));
-  }
-
-  auto skybox = scene.tryGet<Skybox>(scene.single());
-  auto skyboxTexture = skybox && skybox->cubemap ? skybox->cubemap->getHandle() : TextureHandle {};
-  if (skyboxTexture != m_skyboxTexture) {
-    m_skyboxTexture = skyboxTexture;
-    m_skyboxDescriptorSet.reset();
-    if (skyboxTexture) {
-      m_skyboxDescriptorSet = backend.createDescriptorSet(m_skyboxShader->getDescriptorSetLayout(std::to_underlying(DescriptorSetBindingPoints::PER_MATERIAL)));
-      backend.updateDescriptorSetTexture(m_skyboxDescriptorSet, skyboxTexture, 0);
-    }
   }
 
   auto iblTexHandle = sceneLighting ? sceneLighting->prefilteredEnvMap->getHandle() : TextureHandle{};
@@ -437,7 +450,7 @@ asset_ptr<Texture> Renderer::createBlackCubemapTexture(AssetManager* assetManage
 void Renderer::releaseAssets() {
   m_persistentAssets.clear();
   m_iblDfgLut.reset();
-  m_skyboxShader.reset();
+  m_skyboxMaterial.reset();
   m_skyboxMesh.reset();
 
   m_renderData.clear();

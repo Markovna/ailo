@@ -1,0 +1,32 @@
+material {
+    "name": "Skybox",
+    "shadingModel": "unlit",
+    "parameters": [
+        { "type": "samplerCubemap", "name": "skybox", "default": "black" }
+    ],
+    "variables": ["eyeDirection"],
+    // The sky is placed exactly on the far plane, which the default "less" would reject.
+    "depthFunc": "lessEqual",
+    "depthWrite": false,
+    "culling": "back",
+    "variantFilter": ["skinning"]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        // The cube's corners double as view directions.
+        vec3 direction = getPosition().xyz;
+        material.eyeDirection = vec4(direction, 0.0);
+
+        // Rotation-only view keeps the cube centered on the camera; xyww puts it on the far plane.
+        vec4 clip = getClipFromViewMatrix() * mat4(mat3(getViewFromWorldMatrix())) * vec4(direction, 1.0);
+        material.clipPosition = clip.xyww;
+    }
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(texture(materialParams_skybox, variable_eyeDirection.xyz).rgb, 1.0);
+    }
+}

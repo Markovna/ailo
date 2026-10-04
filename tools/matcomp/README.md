@@ -54,12 +54,13 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 | `name` | string | file name |
 | `shadingModel` | `lit`, `unlit` | `lit` |
 | `parameters` | array, see below | none |
-| `requires` | `color`, `uv0`, `tangents` (position and normal are always available) | none |
+| `requires` | `color`, `uv0`, `tangents`, `normal` (position is always available; `lit` and `tangents` imply `normal`) | none |
 | `variables` | up to 4 names of custom `vec4` interpolants | none |
 | `blending` | `opaque` | `opaque` |
 | `vertexDomain` | `object` | `object` |
 | `culling` | `none`, `front`, `back`, `frontAndBack` | `back` |
-| `colorWrite`, `depthWrite`, `depthCulling` | bool | `true` |
+| `colorWrite`, `depthWrite`, `depthCulling` | bool (`depthCulling: false` disables the depth test) | `true` |
+| `depthFunc` | `never`, `less`, `equal`, `lessEqual`, `greater`, `notEqual`, `greaterEqual`, `always` | `less` |
 | `doubleSided` | bool | `false` |
 | `variantFilter` | `skinning`, `shadowReceiver`: variants the material never needs | none |
 | `customSurfaceShading` | bool, `lit` only: the fragment block provides `surfaceShading()` (see below) | `false` |
@@ -86,9 +87,14 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 - `vertex` (optional) defines `void materialVertex(inout MaterialVertexInputs material)`. It can change
   `worldPosition`, `worldNormal`, `color`/`uv0` (if required), and must write the custom `variables`,
   which the fragment code reads as `variable_<name>`.
+- Writing `material.clipPosition` in the vertex block replaces the output position (normally
+  `getClipFromWorldMatrix() * worldPosition`, which is also its initial value). The depth variant then runs
+  `materialVertex()` too, so shadows follow the moved vertices. `materials/skybox.mat` uses it to put the sky
+  on the far plane.
 - Getters: `getUV0()`, `getColor()`, `getWorldPosition()`, `getWorldGeometricNormal()` (fragment),
-  `getPosition()`, `getWorldFromModelMatrix()`, `getClipFromWorldMatrix()` (vertex). The per-view and
-  per-object uniforms in `shaders/common_uniforms.glsl` are available too.
+  `getPosition()`, `getWorldFromModelMatrix()`, `getClipFromWorldMatrix()`, `getClipFromViewMatrix()`,
+  `getViewFromWorldMatrix()`, `getWorldFromViewMatrix()` (vertex). The per-view and per-object uniforms in
+  `shaders/common_uniforms.glsl` are available too.
 
 Errors in the material's code are reported against the `.mat` file and line.
 
@@ -119,7 +125,7 @@ Variants are chosen by the engine per draw, never by the material (see `ailo/ren
 |---|---|---|
 | `SKINNING` | GPU skinning | vertex |
 | `SHADOWS` | receives shadows (`lit` only) | fragment |
-| `DEPTH_ONLY` | depth only, used by the shadow pass; doesn't run `materialVertex()`/`material()` | both |
+| `DEPTH_ONLY` | depth only, used by the shadow pass; doesn't run `material()`, nor `materialVertex()` unless it writes `clipPosition` | both |
 
 Identical SPIR-V is stored once in the package.
 

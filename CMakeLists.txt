@@ -365,11 +365,10 @@ add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
 add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
-add_shader(ailo shaders/skybox.vert)
-add_shader(ailo shaders/skybox.frag)
 
 add_material(ailo materials/lit.mat)
 add_material(ailo materials/toon.mat)
+add_material(ailo materials/skybox.mat)
 
 
 # Add executable

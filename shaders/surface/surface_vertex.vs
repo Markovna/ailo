@@ -4,14 +4,16 @@
 // Locations match VertexLocation in render/RenderPrimitive.h.
 layout(location = 0) in vec3 inPosition;
 
-#if !defined(VARIANT_DEPTH)
+#if !defined(USE_OPTIMIZED_DEPTH_VERTEX_SHADER)
 #if defined(HAS_ATTRIBUTE_COLOR)
 layout(location = 1) in vec3 inColor;
 #endif
 #if defined(HAS_ATTRIBUTE_UV0)
 layout(location = 2) in vec2 inUV;
 #endif
+#if defined(HAS_ATTRIBUTE_NORMAL)
 layout(location = 3) in vec3 inNormal;
+#endif
 #if defined(HAS_ATTRIBUTE_TANGENTS)
 layout(location = 4) in vec4 inTangent;
 #endif
@@ -76,7 +78,19 @@ mat4 getClipFromWorldMatrix() {
     return view.projection * view.view;
 }
 
-#if !defined(VARIANT_DEPTH)
+mat4 getClipFromViewMatrix() {
+    return view.projection;
+}
+
+mat4 getViewFromWorldMatrix() {
+    return view.view;
+}
+
+mat4 getWorldFromViewMatrix() {
+    return view.viewInverse;
+}
+
+#if !defined(USE_OPTIMIZED_DEPTH_VERTEX_SHADER)
 struct MaterialVertexInputs {
 #if defined(HAS_ATTRIBUTE_COLOR)
     vec3 color;
@@ -86,6 +100,10 @@ struct MaterialVertexInputs {
 #endif
     vec3 worldNormal;
     vec4 worldPosition;
+#if defined(MATERIAL_HAS_CLIP_POSITION)
+    // Replaces getClipFromWorldMatrix() * worldPosition as the vertex output position.
+    vec4 clipPosition;
+#endif
 #if defined(VARIABLE_CUSTOM0)
     vec4 VARIABLE_CUSTOM0;
 #endif
@@ -104,7 +122,11 @@ struct MaterialVertexInputs {
 vec4 vertex_worldTangent;
 
 void initMaterialVertex(out MaterialVertexInputs material) {
+#if defined(HAS_ATTRIBUTE_NORMAL)
     vec3 localNormal = inNormal;
+#else
+    vec3 localNormal = vec3(0.0, 0.0, 1.0);
+#endif
 #if defined(HAS_ATTRIBUTE_TANGENTS)
     vec3 localTangent = inTangent.xyz;
 #else
@@ -128,6 +150,9 @@ void initMaterialVertex(out MaterialVertexInputs material) {
 #endif
 
     material.worldPosition = getWorldFromModelMatrix() * getPosition();
+#if defined(MATERIAL_HAS_CLIP_POSITION)
+    material.clipPosition = getClipFromWorldMatrix() * material.worldPosition;
+#endif
 
 #if defined(HAS_ATTRIBUTE_COLOR)
     material.color = inColor;

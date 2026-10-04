@@ -12,7 +12,7 @@
 namespace ailo::material {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
-static constexpr uint32_t kMaterialPackageVersion = 1;
+static constexpr uint32_t kMaterialPackageVersion = 2;
 
 // Descriptor set 2 (PER_MATERIAL) layout: binding 0 is the MaterialParams uniform block (if the material
 // has uniform parameters), samplers follow from binding 1 in declaration order.
@@ -25,7 +25,8 @@ struct RasterState {
     CullingMode culling = CullingMode::Back;
     bool colorWrite = true;
     bool depthWrite = true;
-    bool depthCulling = true;
+    bool depthCulling = true;          // false: no depth test, depthFunc is ignored
+    DepthFunc depthFunc = DepthFunc::Less;
     bool doubleSided = false;
 };
 
