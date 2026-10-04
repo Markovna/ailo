@@ -1,5 +1,6 @@
 #include "MaterialInstance.h"
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 
@@ -101,6 +102,27 @@ void MaterialInstance::setUniform(std::string_view name, material::ParameterType
         }
     }
     m_uniformsDirty = true;
+}
+
+void MaterialInstance::copyParametersFrom(const MaterialInstance& other) {
+    for (const auto& p : m_material->getPackage().parameters) {
+        const auto* source = other.m_material->findParameter(p.name);
+        if (!source || source->type != p.type || source->arraySize != p.arraySize) {
+            continue;
+        }
+
+        if (!material::isSampler(p.type)) {
+            std::memcpy(m_uniforms.data() + p.offset, other.m_uniforms.data() + source->offset, p.size);
+            m_uniformsDirty = true;
+            continue;
+        }
+
+        auto from = std::ranges::find(other.m_samplers, source->binding, &Sampler::binding);
+        auto to = std::ranges::find(m_samplers, p.binding, &Sampler::binding);
+        to->texture = from->texture;
+        to->params = from->params;
+        to->dirty = true;
+    }
 }
 
 void MaterialInstance::commit(RenderAPI& renderApi) {

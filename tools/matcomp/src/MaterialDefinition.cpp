@@ -357,7 +357,8 @@ constexpr std::pair<std::string_view, Variant::type_t> kVariantFilters[] = {
     { "shadowReceiver", Variant::SHADOWS },
 };
 
-void parseMaterialBlock(const Block& block, MaterialPackage& pkg) {
+void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
+    MaterialPackage& pkg = def.package;
     json::Value root;
     try {
         root = json::parse(std::string("{") + std::string(block.body) + "}", block.bodyLine);
@@ -393,6 +394,10 @@ void parseMaterialBlock(const Block& block, MaterialPackage& pkg) {
         else if (key == "depthWrite") pkg.raster.depthWrite = getBool(v, "depthWrite");
         else if (key == "depthCulling") pkg.raster.depthCulling = getBool(v, "depthCulling");
         else if (key == "doubleSided") pkg.raster.doubleSided = getBool(v, "doubleSided");
+        else if (key == "customSurfaceShading") {
+            def.customSurfaceShading = getBool(v, "customSurfaceShading");
+            def.customSurfaceShadingLine = v.line;
+        }
         else if (key == "variantFilter") {
             for (const auto& f : getArray(v, "variantFilter")) {
                 pkg.variantFilter |= getEnum(f, "variantFilter entry", kVariantFilters);
@@ -421,7 +426,7 @@ MaterialDefinition parseMaterialDefinition(std::string_view source) {
         if (block.name == "material") {
             if (hasMaterial) fail(block.nameLine, "duplicate material block");
             hasMaterial = true;
-            parseMaterialBlock(block, def.package);
+            parseMaterialBlock(block, def);
         } else if (block.name == "vertex" || block.name == "fragment") {
             CodeBlock& code = block.name == "vertex" ? def.vertex : def.fragment;
             if (code.present) fail(block.nameLine, "duplicate " + block.name + " block");
@@ -449,6 +454,17 @@ MaterialDefinition parseMaterialDefinition(std::string_view source) {
     }
     if (def.vertex.present && !std::regex_search(def.vertex.code, materialVertexFunction)) {
         fail(def.vertex.line, "vertex block must define void materialVertex(inout MaterialVertexInputs material)");
+    }
+
+    if (def.customSurfaceShading) {
+        static const std::regex surfaceShadingFunction(R"(vec3\s+surfaceShading\s*\()");
+        if (def.package.shadingModel != ShadingModel::Lit) {
+            fail(def.customSurfaceShadingLine, "customSurfaceShading requires the lit shading model");
+        }
+        if (!std::regex_search(def.fragment.code, surfaceShadingFunction)) {
+            fail(def.fragment.line, "customSurfaceShading: the fragment block must define vec3 surfaceShading("
+                                    "const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData)");
+        }
     }
 
     def.hasNormal = std::regex_search(def.fragment.code, normalWrite);

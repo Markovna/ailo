@@ -95,6 +95,7 @@ std::string generateShader(const MaterialDefinition& def, ShaderStage stage, Var
     define(out, "HAS_ATTRIBUTE_UV0", pkg.requiredAttributes & uint8_t(VertexAttribute::UV0));
     define(out, "HAS_ATTRIBUTE_TANGENTS", pkg.requiredAttributes & uint8_t(VertexAttribute::Tangents));
     define(out, "MATERIAL_HAS_NORMAL", def.hasNormal);
+    define(out, "MATERIAL_HAS_CUSTOM_SURFACE_SHADING", def.customSurfaceShading);
     for (size_t i = 0; i < pkg.variables.size(); i++) {
         out << "#define VARIABLE_CUSTOM" << i << " " << pkg.variables[i] << "\n";
         out << "#define VARIABLE_CUSTOM_AT" << i << " variable_" << pkg.variables[i] << "\n";

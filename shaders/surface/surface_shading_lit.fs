@@ -128,6 +128,8 @@ Light getDirectionalLight() {
     light.l = normalize(view.lightDirection);
     light.NoL = clamp01(dot(shading_normal, light.l));
     light.attenuation = 1.0;
+    light.position = vec3(0.0);
+    light.direction = -light.l;
     return light;
 }
 
@@ -182,6 +184,28 @@ float calculateShadow(vec3 worldPos, vec3 geometricNormal, float NoL) {
 }
 #endif
 
+#if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
+// Called for every light, even when the fragment faces away from it or is in its shadow,
+// so surfaceShading() can add its own ambient term.
+vec3 customSurfaceShading(const MaterialInputs material, const Pixel pixel, const Light light, float visibility) {
+    LightData lightData;
+    lightData.colorIntensity = light.colorIntensity;
+    lightData.l = light.l;
+    lightData.NdotL = light.NoL;
+    lightData.worldPosition = light.position;
+    lightData.attenuation = light.attenuation;
+    lightData.visibility = visibility;
+
+    ShadingData shadingData;
+    shadingData.diffuseColor = pixel.diffuseColor;
+    shadingData.f0 = pixel.f0;
+    shadingData.perceptualRoughness = pixel.perceptualRoughness;
+    shadingData.roughness = pixel.roughness;
+
+    return surfaceShading(material, shadingData, lightData);
+}
+#endif
+
 vec4 evaluateMaterial(const MaterialInputs material) {
     Pixel pixel;
     getPixel(material, pixel);
@@ -193,17 +217,31 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     // Use the geometric normal for shadowing: normal-mapped NoL can be positive on faces turned away from the light.
     vec3 geometricNormal = getWorldGeometricNormal();
     float geometricNoL = dot(geometricNormal, directionalLight.l);
+#if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
+    float visibility = 0.0;
+    if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
+        visibility = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
+    }
+    color += customSurfaceShading(material, pixel, directionalLight, visibility);
+#else
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
         float shadow = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
         color += surfaceShading(pixel, directionalLight, shadow);
     }
+#endif
+#elif defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
+    color += customSurfaceShading(material, pixel, directionalLight, 1.0);
 #else
     color += surfaceShading(pixel, directionalLight, 1.0);
 #endif
 
     for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
         Light light = getLight(i);
+#if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
+        color += customSurfaceShading(material, pixel, light, 1.0);
+#else
         color += surfaceShading(pixel, light, 1.0);
+#endif
     }
 
     const float ambientLuminance = 0.7;

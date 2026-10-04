@@ -45,6 +45,25 @@ struct MaterialInputs {
 #endif
 };
 
+#if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
+// Arguments of the material's surfaceShading(), same as Filament's.
+struct ShadingData {
+    vec3 diffuseColor;
+    vec3 f0;
+    float perceptualRoughness;
+    float roughness;
+};
+
+struct LightData {
+    vec4 colorIntensity;
+    vec3 l;
+    float NdotL;
+    vec3 worldPosition;
+    float attenuation;
+    float visibility;
+};
+#endif
+
 void initMaterial(out MaterialInputs material) {
     material.baseColor = vec4(1.0);
 #if defined(SHADING_MODEL_LIT)

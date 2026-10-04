@@ -27,6 +27,9 @@ struct MaterialDefinition {
     CodeBlock fragment;
 
     bool hasNormal = false;
+    // The fragment code provides surfaceShading(), called per light instead of the lit BRDF.
+    bool customSurfaceShading = false;
+    int customSurfaceShadingLine = 0;
 };
 
 MaterialDefinition parseMaterialDefinition(std::string_view source);

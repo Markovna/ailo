@@ -55,6 +55,8 @@ public:
         setUniform(name, UniformTraits<T>::type, words, firstElement);
     }
 
+    void copyParametersFrom(const MaterialInstance& other);
+
     // Uploads changed parameters. Call while recording a frame, before drawing with the instance.
     void commit(RenderAPI&);
     void bind(RenderAPI&) const;

@@ -369,6 +369,7 @@ add_shader(ailo shaders/skybox.vert)
 add_shader(ailo shaders/skybox.frag)
 
 add_material(ailo materials/lit.mat)
+add_material(ailo materials/toon.mat)
 
 
 # Add executable

@@ -62,6 +62,7 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 | `colorWrite`, `depthWrite`, `depthCulling` | bool | `true` |
 | `doubleSided` | bool | `false` |
 | `variantFilter` | `skinning`, `shadowReceiver`: variants the material never needs | none |
+| `customSurfaceShading` | bool, `lit` only: the fragment block provides `surfaceShading()` (see below) | `false` |
 
 ### Parameters
 
@@ -90,6 +91,25 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
   per-object uniforms in `shaders/common_uniforms.glsl` are available too.
 
 Errors in the material's code are reported against the `.mat` file and line.
+
+### Custom surface shading
+
+With `"customSurfaceShading": true`, the fragment block also defines
+
+```glsl
+vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadingData, const LightData lightData)
+```
+
+which replaces the lit BRDF for each light (the directional light and every point/spot light) and returns
+that light's contribution. It is called even when the fragment faces away from the light or is in its shadow
+(`NdotL` or `visibility` is 0), so it can add its own ambient term. Image-based lighting is still applied
+on top. The structures match Filament's:
+
+- `ShadingData`: `diffuseColor`, `f0`, `perceptualRoughness`, `roughness`
+- `LightData`: `colorIntensity` (rgb, intensity in w), `l` (towards the light), `NdotL`, `worldPosition`,
+  `attenuation`, `visibility` (shadowing)
+
+`materials/toon.mat` is an example, after Filament's toon shading.
 
 ## Variants
 

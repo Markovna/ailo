@@ -1,0 +1,37 @@
+material {
+    "name": "Toon",
+    "shadingModel": "lit",
+    // color, tangents: the meshes provide them, and declaring them keeps the vertex inputs matching the pipeline layout
+    "requires": ["color", "uv0", "tangents"],
+    "parameters": [
+        { "type": "sampler2d", "name": "baseColorMap", "default": "white" },
+        { "type": "float4", "name": "baseColorFactor", "default": [1, 1, 1, 1] },
+        { "type": "float", "name": "shades", "default": 5 },
+        { "type": "float", "name": "ambient", "default": 0.1 }
+    ],
+    "customSurfaceShading": true,
+    "blending": "opaque",
+    "culling": "back"
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = texture(materialParams_baseColorMap, getUV0()) * materialParams.baseColorFactor;
+    }
+
+    vec3 surfaceShading(
+            const MaterialInputs materialInputs,
+            const ShadingData shadingData,
+            const LightData lightData
+    ) {
+        float shades = materialParams.shades;
+        float toon = max(ceil(lightData.NdotL * shades) / shades, materialParams.ambient);
+
+        toon *= lightData.visibility * lightData.attenuation;
+
+        vec3 light = lightData.colorIntensity.rgb * lightData.colorIntensity.w;
+
+        return shadingData.diffuseColor * light * toon;
+    }
+}

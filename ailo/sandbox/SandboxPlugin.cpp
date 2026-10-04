@@ -1,6 +1,7 @@
 #include "SandboxPlugin.h"
 
 #include <cmath>
+#include <unordered_map>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
@@ -10,8 +11,10 @@
 #include "ecs/SceneLighting.h"
 #include "ecs/Spawn.h"
 #include "physics/PhysicsWorld.h"
+#include "render/MaterialInstance.h"
 #include "render/Model.h"
 #include "render/RenderAPI.h"
+#include "render/Renderable.h"
 #include "render/Skybox.h"
 #include "render/Texture.h"
 #include "ui/ImGuiPlugin.h"
@@ -19,6 +22,26 @@
 namespace ailo {
 
 namespace {
+
+constexpr auto kToonMatpack = "materials/toon.matpack";
+
+// Replaces every renderable's material instances with instances of `material`, keeping the values of the
+// parameters both materials share (e.g. the imported base color textures). Shared instances stay shared.
+void useMaterial(Scene& scene, AssetManager& assets, RenderAPI& api, const asset_ptr<Material>& material) {
+    std::unordered_map<const MaterialInstance*, asset_ptr<MaterialInstance>> replacements;
+    for (auto&& [entity, renderable] : scene.view<Renderable>().each()) {
+        for (auto& instance : renderable.materials) {
+            if (&instance->getMaterial() == material.get()) continue;
+
+            auto& replacement = replacements[instance.get()];
+            if (!replacement) {
+                replacement = MaterialInstance::create(assets, api, material);
+                replacement->copyParametersFrom(*instance);
+            }
+            instance = replacement;
+        }
+    }
+}
 
 void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     Scene& scene = world.scene();
@@ -53,8 +76,10 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
             .position = { 3.0f + 0.15f * (i % 2), 1.0f + 0.8f * i, 0.1f * (i % 3) },
             .rotation = glm::angleAxis(0.3f * i, glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f))),
             .scale = glm::vec3(0.25f),
-        });
+        }, MotionType::Dynamic);
     }
+
+    useMaterial(scene, assets, api, assets.load<Material>(kToonMatpack));
 }
 
 void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const PhysicsWorld* physics) {
@@ -70,7 +95,7 @@ void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const Physi
                 .position = { 3.0f + 0.3f * std::sin(dropped * 1.7f), 4.0f, 0.3f * std::cos(dropped * 1.3f) },
                 .rotation = glm::angleAxis(0.7f * dropped, glm::normalize(glm::vec3(1.0f, 0.5f, 0.2f))),
                 .scale = glm::vec3(0.25f),
-            });
+            }, MotionType::Dynamic);
         }
     }
     ImGui::End();
