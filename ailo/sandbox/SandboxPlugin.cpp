@@ -1,5 +1,7 @@
 #include "SandboxPlugin.h"
 
+#include <cmath>
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 
@@ -31,7 +33,7 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
 
     auto skyboxEntity = scene.addEntity();
     Renderable& skybox = scene.addComponent<Renderable>(skyboxEntity);
-    skybox.mesh = Mesh::cube(&assets, &api);
+    skybox.mesh = Mesh::skyboxCube(&assets, &api);
     skybox.materials.push_back(skyboxMaterial);
 
     auto iblPrefilter = Texture::loadCubemap(
@@ -49,14 +51,36 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
 
     scene::spawn(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));
     scene::spawn(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
+
+    // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
+    scene::spawnCube(scene, assets, api,
+        { .position = { 3.0f, -0.1f, 0.0f }, .scale = { 4.0f, 0.2f, 4.0f } },
+        MotionType::Static
+    );
+    for (int i = 0; i < 6; i++) {
+        scene::spawnCube(scene, assets, api, {
+            .position = { 3.0f + 0.15f * (i % 2), 1.0f + 0.8f * i, 0.1f * (i % 3) },
+            .rotation = glm::angleAxis(0.3f * i, glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f))),
+            .scale = glm::vec3(0.25f),
+        });
+    }
 }
 
-void drawConsole(const PhysicsWorld* physics) {
+void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const PhysicsWorld* physics) {
     ImGui::Begin("Console");
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     if (physics) {
         const PhysicsStats& stats = physics->stats();
         ImGui::Text("Physics: %u bodies (%u active), step %.3f ms", stats.numBodies, stats.numActiveBodies, stats.stepMs);
+        if (ImGui::Button("Drop cube")) {
+            static int dropped = 0;
+            dropped++;
+            scene::spawnCube(world.scene(), assets, api, {
+                .position = { 3.0f + 0.3f * std::sin(dropped * 1.7f), 4.0f, 0.3f * std::cos(dropped * 1.3f) },
+                .rotation = glm::angleAxis(0.7f * dropped, glm::normalize(glm::vec3(1.0f, 0.5f, 0.2f))),
+                .scale = glm::vec3(0.25f),
+            });
+        }
     }
     ImGui::End();
 }

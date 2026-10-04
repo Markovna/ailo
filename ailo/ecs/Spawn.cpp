@@ -5,9 +5,42 @@
 #include "Transform.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
+#include "render/Shader.h"
 #include "render/Skin.h"
+#include "render/Texture.h"
 
 namespace ailo::scene {
+
+namespace {
+
+asset_ptr<Material> whiteMaterial(AssetManager& assets, RenderAPI& api) {
+    constexpr auto kPath = "builtin://materials/white";
+    if (auto material = assets.get<Material>(kPath)) return material;
+
+    auto shader = Shader::load(&assets, &api, Shader::getDefaultShaderDescription());
+    auto material = assets.emplaceWithPath<Material>(kPath, &api, shader);
+    material->setTexture(0, assets.load<Texture>("builtin://textures/white"));
+    material->setTexture(1, assets.load<Texture>("builtin://textures/normal@norm"));
+    material->setTexture(2, assets.load<Texture>("builtin://textures/default_metallic_roughness"));
+    return material;
+}
+
+}
+
+Entity spawnCube(Scene& scene, AssetManager& assets, RenderAPI& api, const Transform& transform, MotionType motionType) {
+    const Entity entity = scene.addEntity();
+    scene.addComponent<TransformComponent>(entity, transform);
+
+    Renderable& renderable = scene.addComponent<Renderable>(entity);
+    renderable.mesh = Mesh::unitCube(&assets, &api);
+    renderable.materials.push_back(whiteMaterial(assets, api));
+
+    auto& rigidBody = scene.addComponent<RigidBody>(entity);
+    rigidBody.motionType = motionType;
+
+    scene.addComponent<Collider>(entity, Collider { .shape = BoxShape { .halfExtents = glm::vec3(0.5f) } });
+    return entity;
+}
 
 Entity spawn(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
     if (!prefab) return entt::null;

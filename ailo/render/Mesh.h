@@ -16,7 +16,8 @@ struct Mesh : public Asset {
     BufferObject indexBuffer;
     std::vector<Face> faces;
 
-    static asset_ptr<Mesh> cube(AssetManager* assetManager, RenderAPI* renderApi);
+    static asset_ptr<Mesh> skyboxCube(AssetManager* assetManager, RenderAPI* renderApi);
+    static asset_ptr<Mesh> unitCube(AssetManager* assetManager, RenderAPI* renderApi);
 };
 
 }
