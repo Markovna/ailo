@@ -185,6 +185,86 @@ inline glm::vec3 sampleEquirect(const float* data, int width, int height, const 
     ));
 }
 
+inline float D_GGX(float NoH, float a) {
+    const float a2 = a * a;
+    const float f = (NoH * a2 - NoH) * NoH + 1.0f;
+    return a2 / (PI * f * f);
+}
+
+// Mip chain of the equirect source for filtered importance sampling (Krivanek & Colbert 2008).
+// Level 0 aliases the loaded image.
+class EquirectMips {
+public:
+    EquirectMips(const float* data, int width, int height) {
+        m_levels.push_back({ data, width, height });
+        while (width > 1 || height > 1) {
+            const int w = std::max(width / 2, 1);
+            const int h = std::max(height / 2, 1);
+            m_storage.push_back(downsample(m_levels.back(), w, h));
+            m_levels.push_back({ m_storage.back().data(), w, h });
+            width = w;
+            height = h;
+        }
+        m_log2TexelSolidAngle = std::log2((TWO_PI / m_levels[0].width) * (PI / m_levels[0].height));
+        m_minSinTheta = std::sin(0.5f * PI / m_levels[0].height);
+    }
+
+    float maxLod() const { return static_cast<float>(m_levels.size() - 1); }
+
+    // log2 of the solid angle covered by a level 0 texel in direction dir.
+    float log2TexelSolidAngle(const glm::vec3& dir) const {
+        const float sinTheta = std::sqrt(std::max(1.0f - dir.y * dir.y, 0.0f));
+        return m_log2TexelSolidAngle + std::log2(std::max(sinTheta, m_minSinTheta));
+    }
+
+    glm::vec3 sample(const glm::vec2& uv, float lod) const {
+        lod = glm::clamp(lod, 0.0f, maxLod());
+        const int l0 = static_cast<int>(lod);
+        const float t = lod - static_cast<float>(l0);
+        const Level& a = m_levels[l0];
+        const glm::vec3 c0 = sampleEquirect(a.data, a.width, a.height, uv);
+        if (t == 0.0f) {
+            return c0;
+        }
+        const Level& b = m_levels[l0 + 1];
+        return glm::mix(c0, sampleEquirect(b.data, b.width, b.height, uv), t);
+    }
+
+private:
+    struct Level {
+        const float* data;
+        int width;
+        int height;
+    };
+
+    // 2x2 box filter; rows are weighted by sin(theta) since equirect texels shrink towards the poles.
+    static std::vector<float> downsample(const Level& src, int w, int h) {
+        std::vector<float> dst(static_cast<size_t>(w) * h * 3);
+        for (int y = 0; y < h; ++y) {
+            const int y0 = std::min(2 * y, src.height - 1);
+            const int y1 = std::min(2 * y + 1, src.height - 1);
+            const float w0 = std::sin((y0 + 0.5f) * PI / src.height);
+            const float w1 = y1 != y0 ? std::sin((y1 + 0.5f) * PI / src.height) : 0.0f;
+            const float norm = 0.5f / (w0 + w1);
+            for (int x = 0; x < w; ++x) {
+                const int x0 = std::min(2 * x, src.width - 1);
+                const int x1 = std::min(2 * x + 1, src.width - 1);
+                for (int c = 0; c < 3; ++c) {
+                    const float r0 = src.data[(y0 * src.width + x0) * 3 + c] + src.data[(y0 * src.width + x1) * 3 + c];
+                    const float r1 = src.data[(y1 * src.width + x0) * 3 + c] + src.data[(y1 * src.width + x1) * 3 + c];
+                    dst[(static_cast<size_t>(y) * w + x) * 3 + c] = (r0 * w0 + r1 * w1) * norm;
+                }
+            }
+        }
+        return dst;
+    }
+
+    std::vector<Level> m_levels;
+    std::vector<std::vector<float>> m_storage;
+    float m_log2TexelSolidAngle;
+    float m_minSinTheta;
+};
+
 // Precompute all sample directions and their corresponding UVs
 SampleData precomputeSamples(uint32_t sampleCount, int imageWidth) {
     SampleData data;
@@ -425,18 +505,25 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
         minLod = 0;
     }
 
-    size_t numSamples = config.sampleCount;
+    const uint32_t numSamples = config.sampleCount;
     const size_t numLevels = (baseExp + 1) - minLod;
+
+    const EquirectMips source(image.data, image.width, image.height);
 
     std::cout << "Generating prefiltered environment map (" << config.outputSize << "x"
               << config.outputSize << " base, " << baseExp << " base exp, " << numLevels << " mip levels)..." << std::endl;
 
+    // A GGX sample of the split-sum lobe, in the tangent frame of N = V.
+    struct LobeSample {
+        glm::vec3 L;
+        float NoL;
+        float log2SolidAngle; // log2 of the solid angle the sample stands for: 1 / (numSamples * pdf)
+    };
+    std::vector<LobeSample> lobe;
+
     for (size_t i = baseExp; i >= (baseExp + 1) - numLevels; --i) {
         const size_t dim = 1U << i; // NOLINT
         const size_t level = baseExp - i;
-        if (level >= 2) {
-            numSamples *= 2;
-        }
 
         const float lod = std::clamp(level / (numLevels - 1.0f), 0.0f, 1.0f);
         // map the lod to a perceptualRoughness
@@ -449,7 +536,20 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
                   << ", roughness=" << roughness
                   << ", samples=" << (mirror ? 1 : numSamples) << ")..." << std::endl;
 
-        const float iN = 1.0f / static_cast<float>(numSamples);
+        lobe.clear();
+        if (!mirror) {
+            const float iN = 1.0f / static_cast<float>(numSamples);
+            for (uint32_t s = 0; s < numSamples; ++s) {
+                const glm::vec3 H = hemisphereImportanceSampleDggx(hammersley(s, iN), roughness);
+                const float NoH = H.z; // == VoH
+                const glm::vec3 L(2.0f * NoH * H.x, 2.0f * NoH * H.y, 2.0f * NoH * NoH - 1.0f);
+                if (L.z > 0.0f) {
+                    // pdf(L) = D * NoH / (4 * VoH) = D / 4
+                    const float pdf = D_GGX(NoH, roughness) * 0.25f;
+                    lobe.push_back({ L, L.z, -std::log2(static_cast<float>(numSamples) * pdf) });
+                }
+            }
+        }
 
         for (int face = 0; face < 6; ++face) {
             CubemapFace cubeFace(static_cast<uint32_t>(dim));
@@ -464,15 +564,13 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
 
                     // Split-sum approximation: N = V = R (outgoing direction)
                     const glm::vec3 N = cubemapToDirection(face, u, v);
-                    const glm::vec3 V = N;
 
                     const uint32_t idx =
                         (static_cast<uint32_t>(y) * static_cast<uint32_t>(dim)
                          + static_cast<uint32_t>(x)) * 3;
 
                     if (mirror) {
-                        const glm::vec3 envSample = sampleEquirect(
-                            image.data, image.width, image.height, directionToEquirectUV(N));
+                        const glm::vec3 envSample = source.sample(directionToEquirectUV(N), 0.0f);
                         cubeFace.data[idx + 0] = envSample.x;
                         cubeFace.data[idx + 1] = envSample.y;
                         cubeFace.data[idx + 2] = envSample.z;
@@ -489,31 +587,18 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
                     glm::vec3 prefilteredColor(0.0f);
                     float totalWeight = 0.0f;
 
-                    for (size_t s = 0; s < numSamples; ++s) {
-                        // Low-discrepancy Hammersley point set
-                        const glm::vec2 Xi = hammersley(static_cast<uint32_t>(s), iN);
+                    for (const LobeSample& s : lobe) {
+                        const glm::vec3 L = tangentX * s.L.x + tangentY * s.L.y + N * s.L.z;
 
-                        // GGX importance-sample a half-vector in tangent space
-                        const glm::vec3 Hlocal = hemisphereImportanceSampleDggx(Xi, roughness);
+                        // Read the source mip whose texels cover the sample's solid angle, so each sample
+                        // integrates its neighbourhood instead of point-sampling it. +1 biases towards
+                        // blur, as overlapping footprints alias less (Krivanek & Colbert 2008).
+                        const float lod = 0.5f * (s.log2SolidAngle - source.log2TexelSolidAngle(L)) + 1.0f;
+                        const glm::vec3 envSample = source.sample(directionToEquirectUV(L), lod);
 
-                        // Rotate to world space
-                        const glm::vec3 H = glm::normalize(
-                            tangentX * Hlocal.x + tangentY * Hlocal.y + N * Hlocal.z);
-
-                        // Reflect V around H to get the incoming light direction
-                        const float VoH = glm::clamp(glm::dot(V, H), 0.0f, 1.0f);
-                        const glm::vec3 L = glm::normalize(2.0f * VoH * H - V);
-
-                        const float NoL = glm::clamp(glm::dot(N, L), 0.0f, 1.0f);
-                        if (NoL > 0.0f) {
-                            const glm::vec2 luv = directionToEquirectUV(L);
-                            const glm::vec3 envSample = sampleEquirect(
-                                image.data, image.width, image.height, luv);
-
-                            // Weight by NoL — cancels the cosine term in the pdf
-                            prefilteredColor += envSample * NoL;
-                            totalWeight += NoL;
-                        }
+                        // Weight by NoL — cancels the cosine term in the pdf
+                        prefilteredColor += envSample * s.NoL;
+                        totalWeight += s.NoL;
                     }
 
                     if (totalWeight > 0.0f) {
