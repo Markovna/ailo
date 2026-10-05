@@ -18,18 +18,20 @@ add_executable(matcomp
         src/ShaderCompiler.h
 )
 
-# shaderc from the Vulkan SDK. The SDK ships a separate debug build: its runtime library (/MDd) has to match ours.
-find_package(Vulkan REQUIRED)
-get_filename_component(VULKAN_SDK_LIB_DIR "${Vulkan_LIBRARY}" DIRECTORY)
-find_library(SHADERC_COMBINED_LIB shaderc_combined HINTS ${VULKAN_SDK_LIB_DIR} $ENV{VULKAN_SDK}/Lib $ENV{VULKAN_SDK}/lib REQUIRED)
-find_library(SHADERC_COMBINED_DEBUG_LIB shaderc_combinedd HINTS ${VULKAN_SDK_LIB_DIR} $ENV{VULKAN_SDK}/Lib $ENV{VULKAN_SDK}/lib)
-if(NOT SHADERC_COMBINED_DEBUG_LIB)
-    set(SHADERC_COMBINED_DEBUG_LIB ${SHADERC_COMBINED_LIB})
-endif()
+# glslang, built from the submodule with the same toolchain as matcomp. Added here rather than in the root so it
+# picks up the optimized flags above. Only GLSL -> SPIR-V is needed: no spirv-opt, HLSL or standalone tools.
+set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+set(ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
+set(ENABLE_SPVREMAPPER OFF CACHE BOOL "" FORCE)
+set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
+set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
+add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
 
-target_include_directories(matcomp PRIVATE ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(matcomp PRIVATE
         ailo_material
-        $<$<CONFIG:Debug>:${SHADERC_COMBINED_DEBUG_LIB}>
-        $<$<NOT:$<CONFIG:Debug>>:${SHADERC_COMBINED_LIB}>
+        glslang::glslang
+        glslang::SPIRV
+        glslang::glslang-default-resource-limits
 )

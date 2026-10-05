@@ -38,7 +38,7 @@ void define(std::ostringstream& out, const std::string& name, bool enabled = tru
     if (enabled) out << "#define " << name << "\n";
 }
 
-// #line with a file name needs GL_GOOGLE_cpp_style_line_directive, which shaderc enables together with #include.
+// #line with a file name needs GL_GOOGLE_cpp_style_line_directive, which ShaderCompiler enables together with #include.
 void lineDirective(std::ostringstream& out, int line, const std::string& sourceName) {
     std::string escaped;
     for (char c : sourceName) escaped += c == '\\' ? '/' : c;
