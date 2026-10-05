@@ -20,7 +20,8 @@ struct PerViewUniforms {
   glm::vec4 ambientLightColorIntensity;
 
   float iblSpecularMaxLod;
-  float __padding1[3];
+  uint32_t lightCount;
+  float __padding1[2];
   alignas(16) glm::mat4 lightViewProjection;
 };
 

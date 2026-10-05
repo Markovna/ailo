@@ -123,6 +123,7 @@ add_executable(ailo
     ailo/render/vulkan/Resources.h
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
+        ailo/ecs/Lights.h
         ailo/render/Renderable.cpp
         ailo/render/Renderable.h
         ailo/render/Skin.h

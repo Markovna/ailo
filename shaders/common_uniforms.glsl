@@ -7,6 +7,7 @@ struct ViewUniform {
    vec4 ambientLightColorIntensity;
 
    float iblSpecularMaxLod;
+   uint lightCount; // number of used slots in lights[]
    mat4 lightViewProjection;
 };
 

@@ -8,6 +8,7 @@
 
 #include "app/App.h"
 #include "assets/Assets.h"
+#include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Spawn.h"
 #include "physics/PhysicsWorld.h"
@@ -60,7 +61,22 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     sceneLighting.prefilteredEnvMap = iblPrefilter;
     sceneLighting.lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1));
 
-    auto characterTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+    auto pointLight = scene.addEntity();
+    scene.addComponent<TransformComponent>(pointLight, Transform { .position = { 3.0f, 1.5f, 0.5f } });
+    scene.addComponent<PointLight>(pointLight, PointLight { .color = { 1.0f, 1.0f, 0.0f } });
+
+    auto spotLight = scene.addEntity();
+    scene.addComponent<TransformComponent>(spotLight, Transform {
+        .position = { 0.0f, 1.5f, 2.5f },
+        .rotation = glm::quatLookAt(glm::normalize(glm::vec3(0.0f, 1.0f, 0.5f)), glm::vec3(0.0f, 1.0f, 0.0f)),
+    });
+    scene.addComponent<SpotLight>(spotLight, SpotLight {
+        .color = { 1.0f, 0.0f, 0.0f },
+        .innerAngle = glm::radians(42.0f),
+        .outerAngle = glm::radians(66.0f),
+    });
+
+    auto characterTransform =glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     scene::spawn(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));

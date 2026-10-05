@@ -235,7 +235,8 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     color += surfaceShading(pixel, directionalLight, 1.0);
 #endif
 
-    for(int i = 0; i < DYNAMIC_LIGHTS_COUNT; i++) {
+    int lightCount = min(int(view.lightCount), DYNAMIC_LIGHTS_COUNT);
+    for(int i = 0; i < lightCount; i++) {
         Light light = getLight(i);
 #if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
         color += customSurfaceShading(material, pixel, light, 1.0);

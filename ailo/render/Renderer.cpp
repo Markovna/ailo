@@ -8,6 +8,7 @@
 #include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
+#include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "glm/gtc/constants.hpp"
@@ -159,10 +160,11 @@ void Renderer::colorPass() {
   RenderAPI* backend = m_renderAPI;
 
   RenderPassDescription renderPass {};
-  renderPass.color[0] = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore };
-  renderPass.depth = { vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eDontCare };
+  renderPass.color[0] = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eStore };
+  renderPass.depth = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eDontCare };
 
-  backend->beginRenderPass(renderPass, vk::ClearColorValue(m_settings.clearColor.r, m_settings.clearColor.g, m_settings.clearColor.b, m_settings.clearColor.a));
+  const auto& clearColor = m_settings.clearColor;
+  backend->beginRenderPass(renderPass, vk::ClearColorValue(clearColor.r, clearColor.g, clearColor.b, clearColor.a));
 
   PipelineState pipelineState {};
 
@@ -261,19 +263,28 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camer
   m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->prefilteredEnvMap->getLevels() - 1 : 1;
   m_perViewUniformBufferData.lightViewProjection = lightVP;
 
-  float radius = 3.0f;
-  auto& light0 = m_lightUniformsBufferData[0];
-  light0.type = 0; // 0 - point, 1 - spot
-  light0.lightPositionFalloff = glm::vec4(3.0, 1.5, 0.5f, 1.0f / (radius * radius));
-  light0.lightColorIntensity = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
+  uint32_t lightCount = 0;
 
-  auto& light1 = m_lightUniformsBufferData[1];
-  light1 = light0;
-  light1.type = 1;
-  light1.lightPositionFalloff = glm::vec4(.0, 1.5, 2.5f, 1.0f / (radius * radius));
-  light1.lightColorIntensity = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-  light1.direction = glm::vec3(0.0f, 1.0f, 0.5f);
-  light1.scaleOffset = getSpotLightScaleOffset(glm::radians(42.0), glm::radians(66.0));
+  for (auto&& [entity, light, tr] : scene.view<PointLight, TransformComponent>().each()) {
+    if (lightCount == m_lightUniformsBufferData.size()) break;
+    auto& uniform = m_lightUniformsBufferData[lightCount++];
+    uniform.type = 0;
+    uniform.lightPositionFalloff = glm::vec4(tr.world().position, 1.0f / (light.radius * light.radius));
+    uniform.lightColorIntensity = glm::vec4(light.color, light.intensity);
+  }
+
+  for (auto&& [entity, light, tr] : scene.view<SpotLight, TransformComponent>().each()) {
+    if (lightCount == m_lightUniformsBufferData.size()) break;
+    const Transform& world = tr.world();
+    auto& uniform = m_lightUniformsBufferData[lightCount++];
+    uniform.type = 1;
+    uniform.lightPositionFalloff = glm::vec4(world.position, 1.0f / (light.radius * light.radius));
+    uniform.lightColorIntensity = glm::vec4(light.color, light.intensity);
+    uniform.direction = world.rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+    uniform.scaleOffset = getSpotLightScaleOffset(light.innerAngle, light.outerAngle);
+  }
+
+  m_perViewUniformBufferData.lightCount = lightCount;
 
   auto skybox = scene.tryGet<Skybox>(scene.single());
   m_drawSkybox = skybox && skybox->cubemap;
