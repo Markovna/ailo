@@ -17,11 +17,8 @@ class Scene {
   void removeEntity(entt::entity entity) { m_registry.destroy(entity); }
   bool isValid(entt::entity entity) const { return m_registry.valid(entity); }
 
-  // Destroys all entities (firing onDestroy signals) and recreates the singleton entity.
-  void clear() {
-    m_registry.clear();
-    m_singleEntity = m_registry.create();
-  }
+  // Destroys all entities (firing onDestroy signals).
+  void clear() { m_registry.clear(); }
 
   template<typename ...Types>
   decltype(auto) view() { return m_registry.view<Types...>(); }
@@ -41,8 +38,6 @@ class Scene {
         return m_registry.on_destroy<Type>();
     }
 
-  decltype(auto) single() const { return m_singleEntity; }
-
   template<typename Type>
   decltype(auto) get(entt::entity entity) {
     return m_registry.get<Type>(entity);
@@ -57,7 +52,6 @@ class Scene {
 
  private:
   entt::registry m_registry;
-  entt::entity m_singleEntity;
 };
 
 }

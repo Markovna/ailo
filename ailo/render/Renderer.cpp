@@ -228,7 +228,7 @@ void Renderer::endFrame() {
 void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera) {
   auto& backend = *m_renderAPI;
 
-  auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());
+  const SceneLighting* sceneLighting = camera.lighting;
   glm::vec3 lightDir = sceneLighting ? sceneLighting->lightDirection : glm::vec3(0.0f, 1.0f, 0.0f);
 
   // Compute light view-projection matrix

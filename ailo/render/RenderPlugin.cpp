@@ -8,6 +8,7 @@
 #include "app/App.h"
 #include "assets/Assets.h"
 #include "ecs/Camera.h"
+#include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "platform/PlatformPlugin.h"
 
@@ -24,6 +25,7 @@ void render(Renderer& renderer, World& world, Query<Renderable> renderables, Que
             viewProjection.projection = camera.projection(aspect);
         }
         viewProjection.skybox = world.scene().tryGet<Skybox>(entity);
+        viewProjection.lighting = world.scene().tryGet<SceneLighting>(entity);
         break;
     }
     renderer.render(world.scene(), renderables, viewProjection);

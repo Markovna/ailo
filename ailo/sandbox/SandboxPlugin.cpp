@@ -55,16 +55,16 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
         vk::Format::eR32G32B32A32Sfloat,
         true);
 
-    auto& sceneLighting = scene.addComponent<SceneLighting>(scene.single());
-    sceneLighting.prefilteredEnvMap = iblPrefilter;
-    sceneLighting.lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1));
-
     scene::spawn(scene,
         TransformComponent { },
         Camera { },
         OrbitCamera { .distance = 10.0f },
         Skybox {
             .cubemap = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
+        },
+        SceneLighting {
+            .prefilteredEnvMap = iblPrefilter,
+            .lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1)),
         });
 
     auto pointLight = scene.addEntity();
