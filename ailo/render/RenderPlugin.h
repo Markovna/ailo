@@ -7,8 +7,8 @@ namespace ailo {
 class App;
 
 // Requires: PlatformPlugin (Window), AssetPlugin (AssetManager).
-// Resources: RenderAPI, Renderer, Camera. Registers the Texture, Material (.matpack) and Model (ModelImporter) asset loaders.
-// Render:   Renderer::render(scene, camera).
+// Resources: RenderAPI, Renderer. Registers the Texture, Material (.matpack) and Model (ModelImporter) asset loaders.
+// Render:   Renderer::render(scene) from the first entity with Camera + TransformComponent (identity view if none).
 // Shutdown: waits for the GPU, clears the scene, releases the renderer's asset references and frees all assets.
 //           The device itself is destroyed by ~RenderAPI when the World tears down resources (reverse insertion order),
 //           i.e. after resources inserted later (Renderer, plugin-owned GPU objects) are destroyed.

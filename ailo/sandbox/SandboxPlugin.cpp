@@ -8,6 +8,7 @@
 
 #include "app/App.h"
 #include "assets/Assets.h"
+#include "ecs/Camera.h"
 #include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Spawn.h"
@@ -19,6 +20,7 @@
 #include "render/Skybox.h"
 #include "render/Texture.h"
 #include "ui/ImGuiPlugin.h"
+#include "ui/OrbitCameraPlugin.h"
 
 namespace ailo {
 
@@ -60,6 +62,11 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     auto& sceneLighting = scene.addComponent<SceneLighting>(scene.single());
     sceneLighting.prefilteredEnvMap = iblPrefilter;
     sceneLighting.lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1));
+
+    auto camera = scene.addEntity();
+    scene.addComponent<TransformComponent>(camera);
+    scene.addComponent<Camera>(camera);
+    scene.addComponent<OrbitCamera>(camera, OrbitCamera { .distance = 10.0f });
 
     auto pointLight = scene.addEntity();
     scene.addComponent<TransformComponent>(pointLight, Transform { .position = { 3.0f, 1.5f, 0.5f } });

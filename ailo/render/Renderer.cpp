@@ -84,7 +84,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
 
 Renderer::~Renderer() = default;
 
-void Renderer::render(Scene& scene, Query<Renderable> renderables, const Camera& camera) {
+void Renderer::render(Scene& scene, Query<Renderable> renderables, const ViewProjection& camera) {
   if (!beginFrame()) {
     return;
   }
@@ -225,7 +225,7 @@ void Renderer::endFrame() {
   m_renderAPI->endFrame();
 }
 
-void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const Camera& camera) {
+void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera) {
   auto& backend = *m_renderAPI;
 
   auto sceneLighting = scene.tryGet<SceneLighting>(scene.single());

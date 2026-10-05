@@ -22,7 +22,7 @@ int main() {
             .addPlugin(ImGuiPlugin {})
             .addPlugin(AnimationPlugin {})
             .addPlugin(PhysicsPlugin {})
-            .addPlugin(OrbitCameraPlugin { .camera = { .distance = 10.0f } })
+            .addPlugin(OrbitCameraPlugin {})
             .addPlugin(SandboxPlugin {})
             .run();
     } catch (const std::exception& e) {

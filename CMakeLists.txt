@@ -124,6 +124,8 @@ add_executable(ailo
         ailo/ecs/SceneLighting.cpp
         ailo/ecs/SceneLighting.h
         ailo/ecs/Lights.h
+        ailo/ecs/Camera.cpp
+        ailo/ecs/Camera.h
         ailo/render/Renderable.cpp
         ailo/render/Renderable.h
         ailo/render/Skin.h

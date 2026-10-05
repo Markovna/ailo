@@ -56,7 +56,7 @@ struct BonesUniform {
   Bone bones[kMaxBones];
 };
 
-struct Camera {
+struct ViewProjection {
   glm::mat4 projection = glm::mat4(1.0f);
   glm::mat4 view = glm::mat4(1.0f);
 };
@@ -163,13 +163,13 @@ public:
 
   // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
   // Skips the frame if the swapchain image could not be acquired (e.g. during resize).
-  void render(Scene& scene, Query<Renderable> renderables, const Camera& camera);
+  void render(Scene& scene, Query<Renderable> renderables, const ViewProjection& camera);
 
   // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
   void addOverlayPass(OverlayPass pass);
 
   bool beginFrame();
-  void prepare(Scene& scene, Query<Renderable>& renderables, const Camera& camera);
+  void prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera);
   void shadowPass();
   void colorPass();
   void endFrame();
