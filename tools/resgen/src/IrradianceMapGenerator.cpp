@@ -4,6 +4,7 @@
 #include <glm/gtc/constants.hpp>
 #include <cmath>
 #include <algorithm>
+#include <bit>
 #include <iostream>
 #include <vector>
 
@@ -401,44 +402,6 @@ bool IrradianceMapGenerator::irradiance(
     return true;
 }
 
-namespace details {
-template<typename T, typename = std::enable_if_t<std::is_unsigned_v<T>>>
-constexpr inline T ctz(T x) noexcept {
-    static_assert(sizeof(T) * CHAR_BIT <= 64, "details::ctz() only support up to 64 bits");
-    T c = sizeof(T) * CHAR_BIT;
-#if defined(_MSC_VER)
-    // equivalent to x & -x, but MSVC yield a warning for using unary minus operator on unsigned types
-    x &= (~x + 1);
-#else
-    // equivalent to x & (~x + 1), but some compilers generate a better sequence on ARM
-    x &= -x;
-#endif
-    if (x) c--;
-    if constexpr (sizeof(T) * CHAR_BIT >= 64) {
-        if (x & T(0x00000000FFFFFFFF)) c -= 32;
-    }
-    if constexpr (sizeof(T) * CHAR_BIT >= 32) {
-        if (x & T(0x0000FFFF0000FFFF)) c -= 16;
-    }
-    if constexpr (sizeof(T) * CHAR_BIT >= 16) {
-        if (x & T(0x00FF00FF00FF00FF)) c -= 8;
-    }
-    if (x & T(0x0F0F0F0F0F0F0F0F)) c -= 4;
-    if (x & T(0x3333333333333333)) c -= 2;
-    if (x & T(0x5555555555555555)) c -= 1;
-    return c;
-}
-
-}
-
-constexpr inline unsigned long long ctz(unsigned long long x) noexcept {
-#if __has_builtin(__builtin_ctzll)
-    return __builtin_ctzll(x);
-#else
-    return details::ctz(x);
-#endif
-}
-
 static float lodToPerceptualRoughness(float lod) noexcept {
     const float a = 2.0f;
     const float b = -1.0f;
@@ -456,8 +419,8 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
     }
 
     const uint32_t minLodSize = 16;
-    const size_t baseExp = ctz(config.outputSize);
-    size_t minLod = ctz(minLodSize);
+    const size_t baseExp = std::countr_zero(config.outputSize);
+    size_t minLod = std::countr_zero(minLodSize);
     if (minLod >= baseExp) {
         minLod = 0;
     }
@@ -479,10 +442,12 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
         // map the lod to a perceptualRoughness
         const float perceptualRoughness = lodToPerceptualRoughness(lod);
         const float roughness = perceptualRoughness * perceptualRoughness;
+        // At roughness 0 the GGX lobe is a delta (every sample yields L = N), so a single lookup gives the same result.
+        const bool mirror = roughness == 0.0f;
 
         std::cout << "Mip level " << level << " (dim=" << dim
                   << ", roughness=" << roughness
-                  << ", samples=" << numSamples << ")..." << std::endl;
+                  << ", samples=" << (mirror ? 1 : numSamples) << ")..." << std::endl;
 
         const float iN = 1.0f / static_cast<float>(numSamples);
 
@@ -500,6 +465,19 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
                     // Split-sum approximation: N = V = R (outgoing direction)
                     const glm::vec3 N = cubemapToDirection(face, u, v);
                     const glm::vec3 V = N;
+
+                    const uint32_t idx =
+                        (static_cast<uint32_t>(y) * static_cast<uint32_t>(dim)
+                         + static_cast<uint32_t>(x)) * 3;
+
+                    if (mirror) {
+                        const glm::vec3 envSample = sampleEquirect(
+                            image.data, image.width, image.height, directionToEquirectUV(N));
+                        cubeFace.data[idx + 0] = envSample.x;
+                        cubeFace.data[idx + 1] = envSample.y;
+                        cubeFace.data[idx + 2] = envSample.z;
+                        continue;
+                    }
 
                     // Build an orthonormal tangent frame around N
                     const glm::vec3 up = std::abs(N.z) < 0.999f
@@ -542,9 +520,6 @@ bool IrradianceMapGenerator::prefilter(const std::string& inputPath, const std::
                         prefilteredColor /= totalWeight;
                     }
 
-                    const uint32_t idx =
-                        (static_cast<uint32_t>(y) * static_cast<uint32_t>(dim)
-                         + static_cast<uint32_t>(x)) * 3;
                     cubeFace.data[idx + 0] = prefilteredColor.x;
                     cubeFace.data[idx + 1] = prefilteredColor.y;
                     cubeFace.data[idx + 2] = prefilteredColor.z;
