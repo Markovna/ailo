@@ -38,7 +38,7 @@ Entity spawnCube(Scene& scene, AssetManager& assets, RenderAPI& api, const Trans
     return entity;
 }
 
-Entity spawn(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
+Entity spawnPrefab(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
     if (!prefab) return entt::null;
 
     const Entity root = scene.addEntity();

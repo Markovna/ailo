@@ -49,10 +49,6 @@ void useMaterial(Scene& scene, AssetManager& assets, RenderAPI& api, const asset
 void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     Scene& scene = world.scene();
 
-    scene.addComponent<Skybox>(scene.single(), Skybox {
-        .cubemap = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
-    });
-
     auto iblPrefilter = Texture::loadCubemap(
         &assets, &api,
         "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
@@ -63,10 +59,13 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     sceneLighting.prefilteredEnvMap = iblPrefilter;
     sceneLighting.lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1));
 
-    auto camera = scene.addEntity();
-    scene.addComponent<TransformComponent>(camera);
-    scene.addComponent<Camera>(camera);
-    scene.addComponent<OrbitCamera>(camera, OrbitCamera { .distance = 10.0f });
+    scene::spawn(scene,
+        TransformComponent { },
+        Camera { },
+        OrbitCamera { .distance = 10.0f },
+        Skybox {
+            .cubemap = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
+        });
 
     auto pointLight = scene.addEntity();
     scene.addComponent<TransformComponent>(pointLight, Transform { .position = { 3.0f, 1.5f, 0.5f } });
@@ -86,8 +85,8 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     auto characterTransform =glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    scene::spawn(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));
-    scene::spawn(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
+    scene::spawnPrefab(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));
+    scene::spawnPrefab(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
     scene::spawnCube(scene, assets, api,

@@ -3,6 +3,7 @@
 #include "Material.h"
 #include "Model.h"
 #include "RenderAPI.h"
+#include "Skybox.h"
 #include "Texture.h"
 #include "app/App.h"
 #include "assets/Assets.h"
@@ -22,6 +23,7 @@ void render(Renderer& renderer, World& world, Query<Renderable> renderables, Que
         if (float aspect = window.aspect(); aspect > 0.0f) {
             viewProjection.projection = camera.projection(aspect);
         }
+        viewProjection.skybox = world.scene().tryGet<Skybox>(entity);
         break;
     }
     renderer.render(world.scene(), renderables, viewProjection);

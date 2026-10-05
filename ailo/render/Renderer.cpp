@@ -286,7 +286,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
 
   m_perViewUniformBufferData.lightCount = lightCount;
 
-  auto skybox = scene.tryGet<Skybox>(scene.single());
+  const Skybox* skybox = camera.skybox;
   m_drawSkybox = skybox && skybox->cubemap;
 
   // One extra slot for the skybox's (identity) object uniforms.
