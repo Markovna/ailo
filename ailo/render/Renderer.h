@@ -211,6 +211,7 @@ private:
   Unique<gpu::DescriptorSet> m_objectDescriptorSet;
   bool m_objectDescriptorSetDirty = true;
   asset_ptr<Texture> m_iblDfgLut;
+  asset_ptr<Texture> m_defaultIblSpecular;
   TextureHandle m_iblSpecularMap;
 
   std::vector<asset_ptr<Asset>> m_persistentAssets;

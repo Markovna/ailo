@@ -8,8 +8,8 @@
 #include <iostream>
 #include <vector>
 
-#include "../../../third_party/glm/glm/ext/scalar_constants.hpp"
-#include "../../../third_party/stb_image/include/stb_image/stb_image_write.h"
+#include "glm/ext/scalar_constants.hpp"
+#include "stb_image/stb_image_write.h"
 
 #ifdef _OPENMP
 #include <omp.h>

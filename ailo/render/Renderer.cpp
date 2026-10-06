@@ -54,7 +54,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultMetallicRoughnessTexture(assetManager)));
   m_persistentAssets.push_back(asset_ptr_cast<Asset>(createDefaultNormalTexture(assetManager)));
-  m_persistentAssets.push_back(asset_ptr_cast<Asset>(createBlackCubemapTexture(assetManager)));
+  m_defaultIblSpecular = createBlackCubemapTexture(assetManager);
 
   // vk::Format::eR32G32B32A32Sfloat
   m_iblDfgLut = assetManager->load<Texture>(m_settings.dfgLutPath);
@@ -70,6 +70,8 @@ Renderer::Renderer(RenderAPI* renderApi, AssetManager* assetManager, const Rende
   backend->updateDescriptorSetBuffer(m_viewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
   backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblDfgLut->getHandle(), std::to_underlying(PerViewDescriptorBindings::IBL_DFG_LUT), kClampToEdgeSampler);
+  m_iblSpecularMap = m_defaultIblSpecular->getHandle();
+  backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
   m_shadowViewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_shadowViewUniformBufferData));
   m_shadowViewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
@@ -260,7 +262,9 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.2f);
   m_perViewUniformBufferData.lightDirection = lightDir;
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
-  m_perViewUniformBufferData.iblSpecularMaxLod = sceneLighting ? sceneLighting->prefilteredEnvMap->getLevels() - 1 : 1;
+  const Texture& iblSpecular = sceneLighting && sceneLighting->prefilteredEnvMap
+      ? *sceneLighting->prefilteredEnvMap : *m_defaultIblSpecular;
+  m_perViewUniformBufferData.iblSpecularMaxLod = static_cast<float>(iblSpecular.getLevels() - 1);
   m_perViewUniformBufferData.lightViewProjection = lightVP;
 
   uint32_t lightCount = 0;
@@ -408,9 +412,8 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
     backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), objectIndex * sizeof(PerObjectUniforms));
   }
 
-  auto iblTexHandle = sceneLighting ? sceneLighting->prefilteredEnvMap->getHandle() : TextureHandle{};
-  if (iblTexHandle != m_iblSpecularMap) {
-    m_iblSpecularMap = iblTexHandle;
+  if (iblSpecular.getHandle() != m_iblSpecularMap) {
+    m_iblSpecularMap = iblSpecular.getHandle();
     backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
   }
 }
@@ -461,6 +464,7 @@ asset_ptr<Texture> Renderer::createBlackCubemapTexture(AssetManager* assetManage
 void Renderer::releaseAssets() {
   m_persistentAssets.clear();
   m_iblDfgLut.reset();
+  m_defaultIblSpecular.reset();
   m_skyboxMaterial.reset();
   m_skyboxMesh.reset();
 
