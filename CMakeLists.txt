@@ -51,6 +51,16 @@ add_library(ailo_material STATIC
 )
 target_include_directories(ailo_material PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 
+# Texture package format and packer, shared by the engine and the offline asset compiler.
+add_library(ailo_texture STATIC
+    ailo/render/texture/TexturePackage.cpp
+    ailo/render/texture/TexturePackage.h
+    ailo/render/texture/TexturePacker.cpp
+    ailo/render/texture/TexturePacker.h
+)
+target_include_directories(ailo_texture PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
+target_link_libraries(ailo_texture PRIVATE stb_image)
+
 add_subdirectory(tools/matcomp)
 
 # Add executable
@@ -388,6 +398,9 @@ target_include_directories(apptest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 add_executable(assettest ailo/assets/asset_tests.cpp)
 target_link_libraries(assettest EnTT::EnTT)
 target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
+
+add_executable(texturetest ailo/render/texture/texture_tests.cpp)
+target_link_libraries(texturetest ailo_texture stb_image)
 
 add_executable(transformtest
         ailo/ecs/transform_tests.cpp
