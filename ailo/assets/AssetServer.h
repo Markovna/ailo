@@ -1,7 +1,6 @@
 #pragma once
 #include <cassert>
 #include <cstdint>
-#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -196,11 +195,9 @@ public:
         return ptr.value();
     }
 
+    // Throws std::invalid_argument if a loader for T is already registered.
     template<class T>
-    using LoaderFactory = std::move_only_function<std::unique_ptr<AssetLoader<T>>()>;
-
-    template<class T>
-    void registerLoader(LoaderFactory<T> factory);
+    void registerLoader(std::unique_ptr<AssetLoader<T>> loader);
 
     template<class T>
     void registerStorage(AssetStorage<T>*);
@@ -413,8 +410,12 @@ AssetPtr<U> LoadContext<T>::load(const std::string& key) {
 // ---------------------------------------------------------------------------
 
 template<class T>
-void AssetServer::registerLoader(LoaderFactory<T> factory) {
-    setLoader(entt::type_index<T>::value(), factory());
+void AssetServer::registerLoader(std::unique_ptr<AssetLoader<T>> loader) {
+    const auto type = entt::type_index<T>::value();
+    if (findLoader(type)) {
+        throw std::invalid_argument(std::string("asset loader already registered for type ") + typeid(T).name());
+    }
+    setLoader(type, std::move(loader));
 }
 
 template <class T>

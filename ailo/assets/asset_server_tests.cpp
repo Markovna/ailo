@@ -268,7 +268,7 @@ void testDependentReleasesDependency() {
 // ---------------------------------------------------------------------------
 
 void registerTextureLoader(AssetServer& server, int* calls) {
-    server.registerLoader<Texture>([calls] { return std::make_unique<TextureLoader>(calls); });
+    server.registerLoader<Texture>(std::make_unique<TextureLoader>(calls));
 }
 
 void testServerLoad() {
@@ -311,7 +311,7 @@ void testServerLoadsDependencies() {
     server.registerStorage(&textures);
     server.registerStorage(&materials);
     registerTextureLoader(server, &calls);
-    server.registerLoader<Material>([] { return std::make_unique<MaterialLoader>(); });
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
     {
         auto texture = server.load<Texture>("brick.tex");
         auto material = server.load<Material>("brick");
@@ -350,7 +350,7 @@ void testUnregisteredDependencyStorageThrows() {
     AssetServer server;
     server.registerStorage(&materials);
     registerTextureLoader(server, &calls);
-    server.registerLoader<Material>([] { return std::make_unique<MaterialLoader>(); });
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
 
     assert((throws<std::runtime_error>([&] { server.load<Material>("brick"); })));
     assert(calls == 0);
@@ -378,11 +378,25 @@ void testServerWithoutLoaderThrows() {
     assert(textures.empty());
 }
 
+void testRegisteringLoaderTwiceThrows() {
+    int first = 0;
+    int second = 0;
+    AssetStorage<Texture> textures;
+    AssetServer server;
+    server.registerStorage(&textures);
+    registerTextureLoader(server, &first);
+    assert((throws<std::invalid_argument>([&] { registerTextureLoader(server, &second); })));
+
+    // The original loader stays registered
+    auto a = server.load<Texture>("a");
+    assert(first == 1 && second == 0);
+}
+
 void testLoaderThatDoesNotConstructThrows() {
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
-    server.registerLoader<Texture>([] { return std::make_unique<NoConstructLoader<Texture>>(); });
+    server.registerLoader<Texture>(std::make_unique<NoConstructLoader<Texture>>());
     assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
 }
 
@@ -391,7 +405,7 @@ void testLoaderThrowingAfterConstructDoesNotLeak() {
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
-    server.registerLoader<Texture>([] { return std::make_unique<ThrowAfterConstructLoader<Texture>>(); });
+    server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
     assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
     assert(g_log == std::vector<std::string>{ "~Texture a" });
     assert(textures.empty());
@@ -402,7 +416,7 @@ void testDoubleConstructThrows() {
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
-    server.registerLoader<Texture>([] { return std::make_unique<DoubleConstructLoader<Texture>>(); });
+    server.registerLoader<Texture>(std::make_unique<DoubleConstructLoader<Texture>>());
     assert((throws<std::logic_error>([&] { server.load<Texture>("a"); })));
     assert(g_log == std::vector<std::string>{ "~Texture a" });
     assert(textures.empty());
@@ -433,6 +447,7 @@ int main() {
     testUnregisteredDependencyStorageThrows();
     testUnregisterStorage();
     testServerWithoutLoaderThrows();
+    testRegisteringLoaderTwiceThrows();
     testLoaderThatDoesNotConstructThrows();
     testLoaderThrowingAfterConstructDoesNotLeak();
     testDoubleConstructThrows();
