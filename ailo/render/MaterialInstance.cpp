@@ -24,7 +24,7 @@ const char* defaultTexturePath(const material::MaterialParameter& p) {
 
 }
 
-MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetManager& assets, asset_ptr<Material> material)
+MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetServer& server, AssetPtr<Material> material)
     : m_material(std::move(material)) {
     const auto& package = m_material->getPackage();
 
@@ -45,12 +45,12 @@ MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetManager& assets, a
 
     for (const auto& p : package.parameters) {
         if (material::isSampler(p.type)) {
-            m_samplers.push_back({ .binding = p.binding, .texture = assets.load<Texture>(defaultTexturePath(p)) });
+            m_samplers.push_back({ .binding = p.binding, .texture = server.load<Texture>(defaultTexturePath(p)) });
         }
     }
 }
 
-void MaterialInstance::setParameter(std::string_view name, asset_ptr<Texture> texture, const SamplerParams& sampler) {
+void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler) {
     const auto* p = m_material->findParameter(name);
     if (!p || !material::isSampler(p->type)) {
         std::cerr << "Material '" << m_material->getName() << "' has no sampler parameter '" << name << "'" << std::endl;
@@ -145,8 +145,10 @@ void MaterialInstance::bind(RenderAPI& renderApi) const {
     }
 }
 
-asset_ptr<MaterialInstance> MaterialInstance::create(AssetManager& assets, RenderAPI& renderApi, const asset_ptr<Material>& material) {
-    return assets.emplace<MaterialInstance>(&renderApi, assets, material);
+AssetPtr<MaterialInstance> MaterialInstance::create(AssetStorage<MaterialInstance>& storage, AssetServer& server,
+                                                    RenderAPI& renderApi, const AssetPtr<Material>& material,
+                                                    std::string_view key) {
+    return storage.emplace(storage.uniqueKey(key), &renderApi, server, material);
 }
 
 }

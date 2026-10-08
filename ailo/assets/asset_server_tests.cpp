@@ -3,11 +3,12 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-using namespace ailo::assets;
+using namespace ailo;
 
 namespace {
 
@@ -24,6 +25,21 @@ struct Material {
     ~Material() { g_log.push_back("~Material " + name); }
     std::string name;
     AssetPtr<Texture> texture;
+};
+
+// Holds another asset of its own type, so releasing it re-enters its own storage.
+struct Node {
+    Node(std::string name, AssetPtr<Node> next) : name(std::move(name)), next(std::move(next)) {}
+    ~Node() { g_log.push_back("~Node " + name); }
+    std::string name;
+    AssetPtr<Node> next;
+};
+
+// A model owning a sub-asset it builds in place.
+struct Model {
+    Model(AssetPtr<Material> material, AssetPtr<Texture> embedded) : material(std::move(material)), embedded(std::move(embedded)) {}
+    AssetPtr<Material> material;
+    AssetPtr<Texture> embedded;
 };
 
 struct Throwing {
@@ -49,6 +65,28 @@ public:
     void load(const std::string& key, LoadContext<Material>& context) override {
         auto texture = context.load<Texture>(key + ".tex");
         context.construct(key, std::move(texture));
+    }
+};
+
+// "house" -> material "house.mat" (a dependency, loaded through the context) and texture
+// "house#embedded" (a sub-asset, emplaced directly into its storage)
+class ModelLoader : public AssetLoader<Model> {
+public:
+    explicit ModelLoader(AssetStorage<Texture>* textures) : m_textures(textures) {}
+    void load(const std::string& key, LoadContext<Model>& context) override {
+        auto material = context.load<Material>(key + ".mat");
+        auto embedded = m_textures->emplace(m_textures->uniqueKey(key + "#embedded"), "embedded");
+        context.construct(std::move(material), std::move(embedded));
+    }
+private:
+    AssetStorage<Texture>* m_textures;
+};
+
+class RenamingTextureLoader : public AssetLoader<Texture> {
+public:
+    void load(const std::string& key, LoadContext<Texture>& context) override {
+        Texture& texture = context.construct("unnamed");
+        texture.name = key;
     }
 };
 
@@ -263,6 +301,59 @@ void testDependentReleasesDependency() {
     assert((g_log == std::vector<std::string>{ "~Material brick", "~Texture albedo" }));
 }
 
+void testNestedSameTypeRelease() {
+    g_log.clear();
+    AssetStorage<Node> storage;
+    {
+        auto tail = storage.emplace("c", "c", AssetPtr<Node>{});
+        auto middle = storage.emplace("b", "b", std::move(tail));
+        auto head = storage.emplace("a", "a", std::move(middle));
+        assert(storage.size() == 3);
+    }
+    assert(storage.empty());
+    assert((g_log == std::vector<std::string>{ "~Node a", "~Node b", "~Node c" }));
+}
+
+void testUniqueKey() {
+    AssetStorage<Texture> storage;
+    assert(storage.uniqueKey("a") == "a");
+
+    auto first = storage.emplace(storage.uniqueKey("a"), "first");
+    const std::string secondKey = storage.uniqueKey("a");
+    assert(secondKey != "a");
+    auto second = storage.emplace(secondKey, "second");
+    const std::string thirdKey = storage.uniqueKey("a");
+    assert(thirdKey != "a" && thirdKey != secondKey);
+    auto third = storage.emplace(thirdKey, "third");
+    assert(storage.size() == 3);
+
+    // Once the base key is free again it is handed out unchanged
+    first.reset();
+    assert(storage.uniqueKey("a") == "a");
+}
+
+void testReportLeaks() {
+    AssetStorage<Texture> textures;
+    AssetStorage<Material> materials;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerStorage(&materials);
+
+    std::ostringstream none;
+    assert(server.reportLeaks(none) == 0);
+    assert(none.str().empty());
+
+    auto texture = textures.emplace("t", "t");
+    auto copy = texture;
+    auto material = materials.emplace("m", "m", AssetPtr<Texture>{});
+
+    std::ostringstream out;
+    assert(server.reportLeaks(out) == 2);
+    const std::string report = out.str();
+    assert(report.find("'t' (2 references)") != std::string::npos);
+    assert(report.find("'m' (1 references)") != std::string::npos);
+}
+
 // ---------------------------------------------------------------------------
 // AssetServer
 // ---------------------------------------------------------------------------
@@ -320,6 +411,45 @@ void testServerLoadsDependencies() {
         assert(calls == 1);
     }
     assert((g_log == std::vector<std::string>{ "~Material brick", "~Texture brick.tex" }));
+}
+
+void testConstructReturnsAsset() {
+    AssetStorage<Texture> textures;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerLoader<Texture>(std::make_unique<RenamingTextureLoader>());
+    auto texture = server.load<Texture>("renamed");
+    assert(texture->name == "renamed");
+}
+
+void testLoaderWithDependencyAndSubAsset() {
+    int calls = 0;
+    AssetStorage<Texture> textures;
+    AssetStorage<Material> materials;
+    AssetStorage<Model> models;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerStorage(&materials);
+    server.registerStorage(&models);
+    registerTextureLoader(server, &calls);
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
+    server.registerLoader<Model>(std::make_unique<ModelLoader>(&textures));
+
+    AssetPtr<Texture> keptSubAsset;
+    {
+        auto model = server.load<Model>("house");
+        assert(model->material->texture->name == "house.mat.tex");
+        assert(model->embedded->name == "embedded");
+        assert(textures.has("house#embedded"));
+        keptSubAsset = model->embedded;
+    }
+    assert(models.empty() && materials.empty());
+    assert(textures.size() == 1);
+
+    // Re-importing while the old sub-asset is still alive must not collide with it
+    auto model = server.load<Model>("house");
+    assert(!(model->embedded == keptSubAsset));
+    assert(textures.size() == 3);
 }
 
 void testServerReturnsAssetsAlreadyInStorage() {
@@ -439,9 +569,14 @@ int main() {
     testStaleIndexResolvesToNothing();
     testKeyCanBeReusedAfterRelease();
     testDependentReleasesDependency();
+    testNestedSameTypeRelease();
+    testUniqueKey();
+    testReportLeaks();
 
     testServerLoad();
     testServerLoadsDependencies();
+    testConstructReturnsAsset();
+    testLoaderWithDependencyAndSubAsset();
     testServerReturnsAssetsAlreadyInStorage();
     testServerWithoutStorageThrows();
     testUnregisteredDependencyStorageThrows();

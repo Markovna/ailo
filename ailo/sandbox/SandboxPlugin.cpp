@@ -7,7 +7,7 @@
 #include <imgui.h>
 
 #include "app/App.h"
-#include "assets/Assets.h"
+#include "assets/AssetServer.h"
 #include "ecs/Camera.h"
 #include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
@@ -30,15 +30,16 @@ constexpr auto kToonMatpack = "materials/toon.matpack";
 
 // Replaces every renderable's material instances with instances of `material`, keeping the values of the
 // parameters both materials share (e.g. the imported base color textures). Shared instances stay shared.
-void useMaterial(Scene& scene, AssetManager& assets, RenderAPI& api, const asset_ptr<Material>& material) {
-    std::unordered_map<const MaterialInstance*, asset_ptr<MaterialInstance>> replacements;
+void useMaterial(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances, AssetServer& server,
+                 const AssetPtr<Material>& material) {
+    std::unordered_map<const MaterialInstance*, AssetPtr<MaterialInstance>> replacements;
     for (auto&& [entity, renderable] : scene.view<Renderable>().each()) {
         for (auto& instance : renderable.materials) {
             if (&instance->getMaterial() == material.get()) continue;
 
             auto& replacement = replacements[instance.get()];
             if (!replacement) {
-                replacement = MaterialInstance::create(assets, api, material);
+                replacement = MaterialInstance::create(materialInstances, server, api, material, material->getName());
                 replacement->copyParametersFrom(*instance);
             }
             instance = replacement;
@@ -46,11 +47,10 @@ void useMaterial(Scene& scene, AssetManager& assets, RenderAPI& api, const asset
     }
 }
 
-void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
-    Scene& scene = world.scene();
-
+void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textures, AssetStorage<Mesh>& meshes,
+                AssetStorage<MaterialInstance>& materialInstances, RenderAPI& api) {
     auto iblPrefilter = Texture::loadCubemap(
-        &assets, &api,
+        textures, &api,
         "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
         vk::Format::eR32G32B32A32Sfloat,
         true);
@@ -60,7 +60,7 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
         Camera { },
         OrbitCamera { .distance = 10.0f },
         Skybox {
-            .cubemap = Texture::loadCubemap(&assets, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
+            .cubemap = Texture::loadCubemap(textures, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
         },
         SceneLighting {
             .prefilteredEnvMap = iblPrefilter,
@@ -85,26 +85,27 @@ void setupScene(World& world, AssetManager& assets, RenderAPI& api) {
     auto characterTransform =glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    scene::spawnPrefab(scene, assets.load<Model>("assets/models/sponza/sponza.gltf"));
-    scene::spawnPrefab(scene, assets.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/sponza.gltf"));
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
-    scene::spawnCube(scene, assets, api,
+    scene::spawnCube(scene, meshes, api, materialInstances, server,
         { .position = { 3.0f, -0.1f, 0.0f }, .scale = { 4.0f, 0.2f, 4.0f } },
         MotionType::Static
     );
     for (int i = 0; i < 6; i++) {
-        scene::spawnCube(scene, assets, api, {
+        scene::spawnCube(scene, meshes, api, materialInstances, server, {
             .position = { 3.0f + 0.15f * (i % 2), 1.0f + 0.8f * i, 0.1f * (i % 3) },
             .rotation = glm::angleAxis(0.3f * i, glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f))),
             .scale = glm::vec3(0.25f),
         }, MotionType::Dynamic);
     }
 
-    // useMaterial(scene, assets, api, assets.load<Material>(kToonMatpack));
+    // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMatpack));
 }
 
-void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const PhysicsWorld* physics) {
+void drawConsole(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes, AssetStorage<MaterialInstance>& materialInstances,
+                 RenderAPI& api, const PhysicsWorld* physics) {
     ImGui::Begin("Console");
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     if (physics) {
@@ -113,7 +114,7 @@ void drawConsole(World& world, AssetManager& assets, RenderAPI& api, const Physi
         if (ImGui::Button("Drop cube")) {
             static int dropped = 0;
             dropped++;
-            scene::spawnCube(world.scene(), assets, api, {
+            scene::spawnCube(scene, meshes, api, materialInstances, server, {
                 .position = { 3.0f + 0.3f * std::sin(dropped * 1.7f), 4.0f, 0.3f * std::cos(dropped * 1.3f) },
                 .rotation = glm::angleAxis(0.7f * dropped, glm::normalize(glm::vec3(1.0f, 0.5f, 0.2f))),
                 .scale = glm::vec3(0.25f),

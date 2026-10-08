@@ -66,7 +66,6 @@ add_subdirectory(tools/matcomp)
 # Add executable
 add_executable(ailo
     ailo/main.cpp
-    ailo/assets/Assets.h
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
     ailo/render/ImGuiRenderer.cpp
@@ -396,10 +395,6 @@ add_executable(apptest
 )
 target_link_libraries(apptest EnTT::EnTT)
 target_include_directories(apptest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
-
-add_executable(assettest ailo/assets/asset_tests.cpp)
-target_link_libraries(assettest EnTT::EnTT)
-target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 
 add_executable(assetservertest
         ailo/assets/asset_server_tests.cpp

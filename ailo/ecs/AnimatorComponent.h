@@ -7,8 +7,8 @@
 namespace ailo {
 
 struct AnimatorComponent {
-    asset_ptr<Skeleton> skeleton;
-    std::vector<asset_ptr<AnimationClip>> clips;
+    AssetPtr<Skeleton> skeleton;
+    std::vector<AssetPtr<AnimationClip>> clips;
     uint32_t currentClip = 0;
     float currentTime    = 0.0f;
     bool  playing        = true;

@@ -2,7 +2,6 @@
 
 #include "OS.h"
 #include "Renderer.h"
-#include "assets/Assets.h"
 
 namespace ailo {
 
@@ -37,10 +36,6 @@ ShaderDescription& Shader::getHdrShader() {
         }
     };
     return description;
-}
-
-asset_ptr<Shader> Shader::load(AssetManager* assetManager, RenderAPI* renderApi, const ShaderDescription& description) {
-    return assetManager->emplace<Shader>(renderApi, description);
 }
 
 Shader::Shader(RenderAPI* renderApi, const ShaderDescription& description)

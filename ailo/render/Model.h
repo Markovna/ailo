@@ -6,32 +6,43 @@
 #include "MaterialInstance.h"
 #include "Mesh.h"
 #include "Skeleton.h"
-#include "assets/Assets.h"
+#include "assets/AssetServer.h"
 
 namespace ailo {
 
-struct Model : public Asset {
+struct Model {
     struct MeshInstance {
-        asset_ptr<Mesh> mesh;
-        asset_ptr<MaterialInstance> material;
+        AssetPtr<Mesh> mesh;
+        AssetPtr<MaterialInstance> material;
         glm::mat4 transform;
         bool skinned = false;
     };
 
     std::vector<MeshInstance> instances;
-    asset_ptr<Skeleton> skeleton;
-    std::vector<asset_ptr<AnimationClip>> clips;
+    AssetPtr<Skeleton> skeleton;
+    std::vector<AssetPtr<AnimationClip>> clips;
 };
 
 class ModelImporter : public AssetLoader<Model> {
 public:
-    ModelImporter(RenderAPI* renderApi) : m_renderApi(renderApi) {}
+    struct Storages {
+        AssetStorage<Texture>* textures;
+        AssetStorage<Mesh>* meshes;
+        AssetStorage<MaterialInstance>* materialInstances;
+        AssetStorage<Skeleton>* skeletons;
+        AssetStorage<AnimationClip>* clips;
+    };
+
+    ModelImporter(RenderAPI* renderApi, AssetServer* server, const Storages& storages)
+        : m_renderApi(renderApi), m_server(server), m_storages(storages) {}
 
 protected:
-    void load(LoadContext<Model>& ctx, const std::string& path) override;
+    void load(const std::string& path, LoadContext<Model>& ctx) override;
 
 private:
     RenderAPI* m_renderApi;
+    AssetServer* m_server;
+    Storages m_storages;
 };
 
 }

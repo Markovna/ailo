@@ -2,11 +2,11 @@
 #include "RenderAPI.h"
 #include "RenderPrimitive.h"
 
-#include "assets/Assets.h"
+#include "assets/AssetServer.h"
 
 namespace ailo {
 
-struct Mesh : public Asset {
+struct Mesh {
     struct Face {
         uint32_t indexOffset;
         uint32_t indexCount;
@@ -16,8 +16,8 @@ struct Mesh : public Asset {
     BufferObject indexBuffer;
     std::vector<Face> faces;
 
-    static asset_ptr<Mesh> skyboxCube(AssetManager* assetManager, RenderAPI* renderApi);
-    static asset_ptr<Mesh> unitCube(AssetManager* assetManager, RenderAPI* renderApi);
+    static AssetPtr<Mesh> skyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi);
+    static AssetPtr<Mesh> unitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi);
 };
 
 }

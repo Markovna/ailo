@@ -32,13 +32,13 @@ concept UniformValue = requires { UniformTraits<T>::type; };
 
 // Parameter values of a Material: owns the MaterialParams uniform buffer and the set 2 descriptor set.
 // Sampler parameters start with the built-in texture named by their default.
-class MaterialInstance : public Asset {
+class MaterialInstance {
 public:
-    MaterialInstance(RenderAPI*, AssetManager&, asset_ptr<Material>);
+    MaterialInstance(RenderAPI*, AssetServer&, AssetPtr<Material>);
 
     const Material& getMaterial() const { return *m_material; }
 
-    void setParameter(std::string_view name, asset_ptr<Texture> texture, const SamplerParams& sampler = {});
+    void setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler = {});
 
     template<UniformValue T>
     void setParameter(std::string_view name, const T& value) {
@@ -61,12 +61,14 @@ public:
     void commit(RenderAPI&);
     void bind(RenderAPI&) const;
 
-    static asset_ptr<MaterialInstance> create(AssetManager&, RenderAPI&, const asset_ptr<Material>&);
+    // Stored under a unique key derived from `key`.
+    static AssetPtr<MaterialInstance> create(AssetStorage<MaterialInstance>&, AssetServer&, RenderAPI&,
+                                             const AssetPtr<Material>&, std::string_view key);
 
 private:
     struct Sampler {
         uint32_t binding;
-        asset_ptr<Texture> texture;
+        AssetPtr<Texture> texture;
         SamplerParams params;
         bool dirty = true;
     };
@@ -86,7 +88,7 @@ private:
 
     void setUniform(std::string_view name, material::ParameterType type, std::span<const uint32_t> words, uint32_t firstElement);
 
-    asset_ptr<Material> m_material;
+    AssetPtr<Material> m_material;
     std::vector<uint8_t> m_uniforms;
     bool m_uniformsDirty = true;
     Unique<gpu::Buffer> m_uniformBuffer;

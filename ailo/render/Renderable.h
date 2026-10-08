@@ -5,9 +5,9 @@
 namespace ailo {
 
 struct Renderable {
-    asset_ptr<Mesh> mesh;
+    AssetPtr<Mesh> mesh;
     // One per mesh face.
-    std::vector<asset_ptr<MaterialInstance>> materials;
+    std::vector<AssetPtr<MaterialInstance>> materials;
 
     bool castShadows = true;
     bool receiveShadows = true;

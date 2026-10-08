@@ -6,7 +6,7 @@
 #include "Skybox.h"
 #include "Texture.h"
 #include "app/App.h"
-#include "assets/Assets.h"
+#include "assets/AssetPlugin.h"
 #include "ecs/Camera.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
@@ -31,28 +31,43 @@ void render(Renderer& renderer, World& world, Query<Renderable> renderables, Que
     renderer.render(world.scene(), renderables, viewProjection);
 }
 
-void shutdown(World& world, RenderAPI& api, Renderer& renderer, AssetManager& assets) {
+void shutdown(World& world, RenderAPI& api, Renderer& renderer) {
     api.waitIdle();
 
     world.scene().clear();
 
     renderer.releaseAssets();
-
-    assets.shutdown();
 }
 
 }
 
 void RenderPlugin::build(App& app) {
     auto& window = app.resource<Window>();
-    auto& assets = app.resource<AssetManager>();
+    auto& server = app.resource<AssetServer>();
 
     auto& api = app.insertResource<RenderAPI>(window.handle());
-    assets.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
-    assets.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
-    assets.registerLoader<Model>(std::make_unique<ModelImporter>(&api));
 
-    app.insertResource<Renderer>(&api, &assets, settings);
+    // Inserted after the RenderAPI and in dependency order: storages are destroyed in reverse, dependents first.
+    auto& textures = addAssetType<Texture>(app);
+    addAssetType<Material>(app);
+    auto& meshes = addAssetType<Mesh>(app);
+    auto& skeletons = addAssetType<Skeleton>(app);
+    auto& clips = addAssetType<AnimationClip>(app);
+    auto& materialInstances = addAssetType<MaterialInstance>(app);
+    addAssetType<Model>(app);
+
+    server.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
+    server.registerLoader<Model>(std::make_unique<ModelImporter>(&api, &server, ModelImporter::Storages {
+        .textures = &textures,
+        .meshes = &meshes,
+        .materialInstances = &materialInstances,
+        .skeletons = &skeletons,
+        .clips = &clips,
+    }));
+
+    // After the storages, so the renderer's asset references are dropped before they are destroyed.
+    app.insertResource<Renderer>(&api, server, textures, meshes, materialInstances, settings);
 
     app.addSystem(Stage::Render, render, "RenderPlugin::render");
     app.addSystem(Stage::Shutdown, shutdown, "RenderPlugin::shutdown");

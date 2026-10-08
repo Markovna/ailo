@@ -67,6 +67,13 @@ struct SystemParam<World&> {
     static std::string_view typeName() { return "World"; }
 };
 
+template<>
+struct SystemParam<Scene&> {
+    static Scene& fetch(World& world) { return world.scene(); }
+    static bool available(const World&) { return true; }
+    static std::string_view typeName() { return "Scene"; }
+};
+
 template<typename... Cs>
 struct SystemParam<Query<Cs...>> {
     static Query<Cs...> fetch(World& world) { return Query<Cs...> { world.scene().template view<Cs...>() }; }

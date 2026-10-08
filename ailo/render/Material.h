@@ -4,7 +4,7 @@
 #include <bitset>
 
 #include "RenderAPI.h"
-#include "assets/Assets.h"
+#include "assets/AssetServer.h"
 #include "material/MaterialPackage.h"
 
 namespace ailo {
@@ -14,7 +14,7 @@ constexpr auto kLit = "materials/lit.matpack";
 constexpr auto kSkybox = "materials/skybox.matpack";
 }
 
-class Material : public Asset {
+class Material {
 public:
     Material(RenderAPI*, material::MaterialPackage);
 
@@ -44,7 +44,7 @@ public:
     explicit MaterialLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
 
 protected:
-    void load(LoadContext<Material>& ctx, const std::string& path) override;
+    void load(const std::string& key, LoadContext<Material>& ctx) override;
 
 private:
     RenderAPI* m_renderApi;

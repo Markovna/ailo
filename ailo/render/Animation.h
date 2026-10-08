@@ -5,7 +5,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "assets/Assets.h"
 
 namespace ailo {
 
@@ -59,7 +58,7 @@ T BoneChannel::interpolate(float time, const std::vector<AnimationKey<T>>& chann
     return ailo::interpolate(k0.value, k1.value, glm::clamp(t, 0.0f, 1.0f));
 }
 
-struct AnimationClip : public Asset {
+struct AnimationClip {
     std::string name;
     float duration = 0.0f; // seconds
     float ticksPerSecond = 25.0f;

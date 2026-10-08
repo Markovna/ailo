@@ -53,11 +53,11 @@ static constexpr uint16_t sCubeIndices[] = {
     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35
 };
 
-asset_ptr<Mesh> Mesh::skyboxCube(AssetManager* assetManager, RenderAPI* renderApi) {
-    auto mesh = assetManager->get<Mesh>("builtin://meshes/cube");
-    if (mesh) return mesh;
+AssetPtr<Mesh> Mesh::skyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
+    constexpr auto kPath = "builtin://meshes/cube";
+    if (auto mesh = storage.get(kPath)) return *mesh;
 
-    mesh = assetManager->emplaceWithPath<Mesh>("builtin://meshes/cube");
+    auto mesh = storage.emplace(kPath);
 
     vk::VertexInputBindingDescription binding{};
     binding.binding = 0;
@@ -82,9 +82,9 @@ asset_ptr<Mesh> Mesh::skyboxCube(AssetManager* assetManager, RenderAPI* renderAp
     return mesh;
 }
 
-asset_ptr<Mesh> Mesh::unitCube(AssetManager* assetManager, RenderAPI* renderApi) {
+AssetPtr<Mesh> Mesh::unitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
     constexpr auto kPath = "builtin://meshes/unit_cube";
-    if (auto mesh = assetManager->get<Mesh>(kPath)) return mesh;
+    if (auto mesh = storage.get(kPath)) return *mesh;
 
     // Per face: outward normal and tangent (the +U direction); b = normal x tangent points up the face.
     struct Face { glm::vec3 normal; glm::vec3 tangent; };
@@ -123,7 +123,7 @@ asset_ptr<Mesh> Mesh::unitCube(AssetManager* assetManager, RenderAPI* renderApi)
         }
     }
 
-    auto mesh = assetManager->emplaceWithPath<Mesh>(kPath);
+    auto mesh = storage.emplace(kPath);
     mesh->vertexBuffer = VertexBuffer(renderApi, pbrVertexInput(), sizeof(vertices));
     mesh->vertexBuffer.updateBuffer(renderApi, vertices.data(), sizeof(vertices));
     mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(indices));

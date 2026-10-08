@@ -12,7 +12,7 @@
 
 namespace ailo {
 
-// Owns the scene and all engine-wide resources (singletons such as RenderAPI, Renderer, AssetManager).
+// Owns the scene and all engine-wide resources (singletons such as RenderAPI, Renderer, AssetServer).
 // Resources are heap-allocated, so references stay valid when more resources are inserted,
 // and they are destroyed in reverse insertion order after the scene has been cleared.
 class World {
@@ -97,7 +97,7 @@ private:
 };
 
 inline World::~World() {
-    // Entities first: components hold asset_ptrs and GPU handles owned by resources.
+    // Entities first: components hold AssetPtrs and GPU handles owned by resources.
     m_scene.clear();
 
     while (!m_resources.empty()) {

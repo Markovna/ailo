@@ -1,10 +1,10 @@
 #pragma once
 #include "RenderAPI.h"
-#include "../assets/Assets.h"
+#include "assets/AssetServer.h"
 
 namespace ailo {
 
-class Texture : public Asset {
+class Texture {
 public:
     Texture(RenderAPI*, TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
 
@@ -16,9 +16,10 @@ public:
     uint32_t getLevels() const { return m_levels; }
 
     static void load(LoadContext<Texture>&, RenderAPI*, const std::string& key, bool mipmaps = false);
-    static asset_ptr<Texture> loadCubemap(AssetManager*, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
-    static asset_ptr<Texture> fromEmbedded(AssetManager*, RenderAPI*, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
-    static asset_ptr<Texture> fromEmbeddedCompressed(AssetManager*, RenderAPI*, const void* data, size_t dataSize, vk::Format format);
+    static AssetPtr<Texture> loadCubemap(AssetStorage<Texture>&, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
+    // Embedded textures are stored under a unique key derived from `key`.
+    static AssetPtr<Texture> fromEmbedded(AssetStorage<Texture>&, RenderAPI*, const std::string& key, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
+    static AssetPtr<Texture> fromEmbeddedCompressed(AssetStorage<Texture>&, RenderAPI*, const std::string& key, const void* data, size_t dataSize, vk::Format format);
 
 private:
     Unique<gpu::Texture> m_handle;
@@ -30,7 +31,7 @@ public:
     TextureLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
 
 protected:
-    void load(LoadContext<Texture>& ctx, const std::string& path) override;
+    void load(const std::string& key, LoadContext<Texture>& ctx) override;
 
 private:
     RenderAPI* m_renderApi;

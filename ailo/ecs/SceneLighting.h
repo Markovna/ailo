@@ -4,7 +4,7 @@
 namespace ailo {
 
 struct SceneLighting {
-    asset_ptr<Texture> prefilteredEnvMap;
+    AssetPtr<Texture> prefilteredEnvMap;
     glm::vec3 lightDirection;
 };
 

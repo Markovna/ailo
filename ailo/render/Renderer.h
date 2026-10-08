@@ -163,7 +163,9 @@ class Renderer {
 public:
   using OverlayPass = std::move_only_function<void()>;
 
-  Renderer(RenderAPI*, AssetManager*, const RendererSettings& settings = {});
+  // The storages receive the built-in textures, the skybox mesh and the skybox material instance.
+  Renderer(RenderAPI*, AssetServer&, AssetStorage<Texture>&, AssetStorage<Mesh>&,
+           AssetStorage<MaterialInstance>&, const RendererSettings& settings = {});
   ~Renderer();
 
   // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
@@ -179,7 +181,7 @@ public:
   void colorPass();
   void endFrame();
 
-  // Drops the renderer's asset references so the AssetManager can free them before it shuts down.
+  // Drops the renderer's asset references, so they are freed before the shutdown leak report.
   // GPU objects owned by the renderer are released by its destructor.
   void releaseAssets();
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
@@ -187,11 +189,11 @@ public:
 private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
-  asset_ptr<Texture> createWhiteTexture(AssetManager*);
-  asset_ptr<Texture> createBlackTexture(AssetManager*);
-  asset_ptr<Texture> createDefaultNormalTexture(AssetManager*);
-  asset_ptr<Texture> createDefaultMetallicRoughnessTexture(AssetManager*);
-  asset_ptr<Texture> createBlackCubemapTexture(AssetManager*);
+  AssetPtr<Texture> createWhiteTexture(AssetStorage<Texture>&);
+  AssetPtr<Texture> createBlackTexture(AssetStorage<Texture>&);
+  AssetPtr<Texture> createDefaultNormalTexture(AssetStorage<Texture>&);
+  AssetPtr<Texture> createDefaultMetallicRoughnessTexture(AssetStorage<Texture>&);
+  AssetPtr<Texture> createBlackCubemapTexture(AssetStorage<Texture>&);
 
   void drawSkybox();
 
@@ -210,18 +212,19 @@ private:
   Unique<gpu::DescriptorSet> m_shadowViewDescriptorSet;
   Unique<gpu::DescriptorSet> m_objectDescriptorSet;
   bool m_objectDescriptorSetDirty = true;
-  asset_ptr<Texture> m_iblDfgLut;
-  asset_ptr<Texture> m_defaultIblSpecular;
+  AssetPtr<Texture> m_iblDfgLut;
+  AssetPtr<Texture> m_defaultIblSpecular;
   TextureHandle m_iblSpecularMap;
 
-  std::vector<asset_ptr<Asset>> m_persistentAssets;
+  // Built-in textures: MaterialInstance resolves sampler defaults by their keys.
+  std::vector<AssetPtr<Texture>> m_persistentAssets;
 
   // Shadow mapping
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
 
-  asset_ptr<MaterialInstance> m_skyboxMaterial;
-  asset_ptr<Mesh> m_skyboxMesh;
+  AssetPtr<MaterialInstance> m_skyboxMaterial;
+  AssetPtr<Mesh> m_skyboxMesh;
   TextureHandle m_skyboxTexture;
   bool m_drawSkybox = false;
   uint32_t m_skyboxObjectBufferOffset = 0;

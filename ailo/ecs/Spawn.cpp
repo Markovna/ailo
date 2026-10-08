@@ -12,24 +12,25 @@ namespace ailo::scene {
 
 namespace {
 
-asset_ptr<MaterialInstance> whiteMaterial(AssetManager& assets, RenderAPI& api) {
+AssetPtr<MaterialInstance> whiteMaterial(RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances, AssetServer& server) {
     constexpr auto kPath = "builtin://materials/white";
-    if (auto instance = assets.get<MaterialInstance>(kPath)) return instance;
+    if (auto instance = materialInstances.get(kPath)) return *instance;
 
-    auto instance = assets.emplaceWithPath<MaterialInstance>(kPath, &api, assets, assets.load<Material>(materials::kLit));
-    instance->setParameter("metallicRoughnessMap", assets.load<Texture>("builtin://textures/default_metallic_roughness"));
+    auto instance = materialInstances.emplace(kPath, &api, server, server.load<Material>(materials::kLit));
+    instance->setParameter("metallicRoughnessMap", server.load<Texture>("builtin://textures/default_metallic_roughness"));
     return instance;
 }
 
 }
 
-Entity spawnCube(Scene& scene, AssetManager& assets, RenderAPI& api, const Transform& transform, MotionType motionType) {
+Entity spawnCube(Scene& scene, AssetStorage<Mesh>& meshes, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances,
+                 AssetServer& server, const Transform& transform, MotionType motionType) {
     const Entity entity = scene.addEntity();
     scene.addComponent<TransformComponent>(entity, transform);
 
     Renderable& renderable = scene.addComponent<Renderable>(entity);
-    renderable.mesh = Mesh::unitCube(&assets, &api);
-    renderable.materials.push_back(whiteMaterial(assets, api));
+    renderable.mesh = Mesh::unitCube(meshes, &api);
+    renderable.materials.push_back(whiteMaterial(api, materialInstances, server));
 
     auto& rigidBody = scene.addComponent<RigidBody>(entity);
     rigidBody.motionType = motionType;
@@ -38,7 +39,7 @@ Entity spawnCube(Scene& scene, AssetManager& assets, RenderAPI& api, const Trans
     return entity;
 }
 
-Entity spawnPrefab(Scene& scene, const asset_ptr<Model>& prefab, const glm::mat4& transform) {
+Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const glm::mat4& transform) {
     if (!prefab) return entt::null;
 
     const Entity root = scene.addEntity();

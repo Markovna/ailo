@@ -68,26 +68,27 @@ void processNode(
     }
 }
 
-asset_ptr<Texture> loadTexture(AssetManager* assetManager, const std::string& texturePath, const std::string& modelDirectory) {
+AssetPtr<Texture> loadTexture(LoadContext<Model>& ctx, const std::string& texturePath, const std::string& modelDirectory) {
     std::filesystem::path fullPath;
     if (std::filesystem::path(texturePath).is_absolute()) {
         fullPath = texturePath;
     } else {
         fullPath = std::filesystem::path(modelDirectory) / texturePath;
     }
-    return assetManager->load<Texture>(fullPath.string());
+    return ctx.load<Texture>(fullPath.string());
 }
 
-asset_ptr<Texture> loadMaterialTexture(AssetManager* assetManager, RenderAPI* renderApi, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
+AssetPtr<Texture> loadMaterialTexture(LoadContext<Model>& ctx, AssetStorage<Texture>& textures, RenderAPI* renderApi, const aiScene* scene, const aiMaterial* material, aiTextureType textureType, vk::Format format, const std::string& modelDirectory) {
     if (material->GetTextureCount(textureType) <= 0) return {};
     aiString texturePath;
     if (material->GetTexture(textureType, 0, &texturePath) != AI_SUCCESS) return {};
 
     auto embedded = scene->GetEmbeddedTexture(texturePath.C_Str());
     if (embedded) {
+        const std::string key = std::format("{}#texture/{}", ctx.key(), texturePath.C_Str());
         if (embedded->mHeight > 0)
-            return Texture::fromEmbedded(assetManager, renderApi, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
-        return Texture::fromEmbeddedCompressed(assetManager, renderApi, embedded->pcData, embedded->mWidth, format);
+            return Texture::fromEmbedded(textures, renderApi, key, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
+        return Texture::fromEmbeddedCompressed(textures, renderApi, key, embedded->pcData, embedded->mWidth, format);
     }
 
     // The loader picks the format from the key's tags: sRGB by default, UNORM with "@norm".
@@ -95,14 +96,14 @@ asset_ptr<Texture> loadMaterialTexture(AssetManager* assetManager, RenderAPI* re
     if (format == vk::Format::eR8G8B8A8Unorm) {
         key.append("@norm");
     }
-    return loadTexture(assetManager, key, modelDirectory);
+    return loadTexture(ctx, key, modelDirectory);
 }
 
 }
 
-void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
-    AssetManager* assetManager = ctx.assetManager();
+void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
     RenderAPI* renderApi = m_renderApi;
+    auto& textures = *m_storages.textures;
 
     Assimp::Importer importer;
 
@@ -161,9 +162,9 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
     // Step 3: build skeleton — all included nodes in parent-first DFS order.
     //   globalBoneRegistry: bone name → boneOutputIndex (index in BonesUniform::bones[])
     //   non-bone nodes get boneOutputIndex = -1 and don't write to BonesUniform.
-    asset_ptr<Skeleton> skeleton;
+    AssetPtr<Skeleton> skeleton;
     if (hasAnySkinning)
-        skeleton = assetManager->emplaceWithPath<Skeleton>(path + "#skeleton");
+        skeleton = m_storages.skeletons->emplace(m_storages.skeletons->uniqueKey(path + "#skeleton"));
     std::unordered_map<std::string, uint32_t> globalBoneRegistry; // bone name → boneOutputIndex
 
     if (hasAnySkinning) {
@@ -208,20 +209,20 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
     // -------------------------------------------------------------------------
     // Materials
     // -------------------------------------------------------------------------
-    auto litMaterial = assetManager->load<Material>(materials::kLit);
-    std::vector<asset_ptr<MaterialInstance>> materials(aiscene->mNumMaterials);
+    auto litMaterial = ctx.load<Material>(materials::kLit);
+    std::vector<AssetPtr<MaterialInstance>> materials(aiscene->mNumMaterials);
 
     for (unsigned int i = 0; i < aiscene->mNumMaterials; i++) {
         aiMaterial* mat = aiscene->mMaterials[i];
 
-        auto diffuse = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
-        if (!diffuse) diffuse = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        auto diffuse = loadMaterialTexture(ctx, textures, renderApi, aiscene, mat, aiTextureType_BASE_COLOR, vk::Format::eR8G8B8A8Srgb, modelDirectory);
+        if (!diffuse) diffuse = loadMaterialTexture(ctx, textures, renderApi, aiscene, mat, aiTextureType_DIFFUSE, vk::Format::eR8G8B8A8Srgb, modelDirectory);
 
-        auto normalMap = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
+        auto normalMap = loadMaterialTexture(ctx, textures, renderApi, aiscene, mat, aiTextureType_NORMALS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
 
-        auto metallicRoughness = loadMaterialTexture(assetManager, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
+        auto metallicRoughness = loadMaterialTexture(ctx, textures, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
 
-        auto instance = assetManager->emplaceWithPath<MaterialInstance>(subPath("material", i), renderApi, *assetManager, litMaterial);
+        auto instance = MaterialInstance::create(*m_storages.materialInstances, *m_server, *renderApi, litMaterial, subPath("material", i));
         instance->setParameter("baseColorMap", diffuse);
         instance->setParameter("normalMap", normalMap);
         instance->setParameter("metallicRoughnessMap", metallicRoughness);
@@ -239,7 +240,7 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
             if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS)
                 instance->setParameter("roughnessFactor", roughness);
         } else if (!metallicRoughness) {
-            instance->setParameter("metallicRoughnessMap", assetManager->load<Texture>("builtin://textures/default_metallic_roughness"));
+            instance->setParameter("metallicRoughnessMap", ctx.load<Texture>("builtin://textures/default_metallic_roughness"));
         }
 
         materials[i] = instance;
@@ -289,12 +290,12 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
     for (unsigned int i = 0; i < aiscene->mNumMeshes; i++)
         meshHasBones[i] = aiscene->mMeshes[i]->mNumBones > 0;
 
-    std::vector<asset_ptr<Mesh>> meshes;
+    std::vector<AssetPtr<Mesh>> meshes;
     meshes.reserve(aiscene->mNumMeshes);
 
     for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
         aiMesh* aiMesh = aiscene->mMeshes[i];
-        meshes.push_back(assetManager->emplaceWithPath<Mesh>(subPath("mesh", i)));
+        meshes.push_back(m_storages.meshes->emplace(m_storages.meshes->uniqueKey(subPath("mesh", i))));
         auto mesh = meshes.back();
 
         std::vector<uint16_t> indices;
@@ -383,12 +384,12 @@ void ModelImporter::load(LoadContext<Model>& ctx, const std::string& path) {
     // -------------------------------------------------------------------------
     // Parse animation clips
     // -------------------------------------------------------------------------
-    std::vector<asset_ptr<AnimationClip>> clips;
+    std::vector<AssetPtr<AnimationClip>> clips;
     if (hasAnySkinning) {
         clips.reserve(aiscene->mNumAnimations);
         for (unsigned int i = 0; i < aiscene->mNumAnimations; i++) {
             aiAnimation* aiAnim = aiscene->mAnimations[i];
-            auto clip = assetManager->emplaceWithPath<AnimationClip>(subPath("clip", i));
+            auto clip = m_storages.clips->emplace(m_storages.clips->uniqueKey(subPath("clip", i)));
             clip->name = aiAnim->mName.C_Str();
             clip->ticksPerSecond = aiAnim->mTicksPerSecond > 0.0 ? static_cast<float>(aiAnim->mTicksPerSecond) : 25.0f;
             clip->duration = static_cast<float>(aiAnim->mDuration) / clip->ticksPerSecond;

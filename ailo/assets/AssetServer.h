@@ -1,11 +1,14 @@
 #pragma once
 #include <cassert>
 #include <cstdint>
+#include <format>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
@@ -15,7 +18,7 @@
 #include "common/slot_map.h"
 #include "entt/entt.hpp"
 
-namespace ailo::assets {
+namespace ailo {
 
 template<class T>
 class AssetPtr;
@@ -24,6 +27,10 @@ namespace detail {
     class AssetStorageBase {
     public:
         virtual ~AssetStorageBase() = default;
+
+        virtual std::size_t size() const = 0;
+        // Prints every asset still in the storage, with its key and reference count.
+        virtual void reportLeaks(std::ostream& out) const = 0;
     };
 
     class AssetLoaderBase {
@@ -87,8 +94,13 @@ public:
     template<class ...Args>
     AssetPtr<T> emplace(const std::string& key, Args&&... args);
 
-    std::size_t size() const { return m_map.size(); }
+    // Returns `base` if no asset uses it, otherwise `base~N` for the first free N.
+    std::string uniqueKey(std::string_view base);
+
+    std::size_t size() const override { return m_map.size(); }
     bool empty() const { return m_map.empty(); }
+
+    void reportLeaks(std::ostream& out) const override;
 
 private:
 
@@ -102,6 +114,7 @@ private:
 
     SlotMap m_map;
     std::unordered_map<std::string, Key> m_keys;
+    std::uint64_t m_uniqueCounter = 0;
 };
 
 // Owning, reference-counted handle
@@ -147,7 +160,7 @@ public:
 
     // Creates the asset being loaded under this context's key. Must be called exactly once.
     template<class ...Args>
-    void construct(Args&&... args);
+    T& construct(Args&&... args);
 
     // Loads a dependency (of any asset type) through the same server.
     template<class U = T>
@@ -201,6 +214,9 @@ public:
 
     template<class T>
     void registerStorage(AssetStorage<T>*);
+
+    // Prints every asset still alive in the registered storages and returns how many there are.
+    std::size_t reportLeaks(std::ostream& out = std::cerr) const;
 
 private:
     template<class T> AssetStorage<T>& getStorage();
@@ -278,6 +294,24 @@ AssetPtr<T> AssetStorage<T>::emplace(const std::string& key, Args&&... args) {
 }
 
 template<class T>
+std::string AssetStorage<T>::uniqueKey(std::string_view base) {
+    std::string key(base);
+    while (has(key)) {
+        key = std::format("{}~{}", base, ++m_uniqueCounter);
+    }
+    return key;
+}
+
+template<class T>
+void AssetStorage<T>::reportLeaks(std::ostream& out) const {
+    for (const Entry& entry : m_map) {
+        out << "[AssetServer] leaked " << entt::type_name<T>::value()
+            << " '" << entry.key << "'"
+            << " (" << entry.refCount << " references)" << std::endl;
+    }
+}
+
+template<class T>
 auto AssetStorage<T>::findEntry(AssetIndex index) -> Entry* {
     return const_cast<Entry*>(std::as_const(*this).findEntry(index));
 }
@@ -310,6 +344,9 @@ template<class T>
 void AssetStorage<T>::remove(AssetIndex index) noexcept {
     Entry* entry = m_map.get(index.value());
     m_keys.erase(entry->key);
+    // Destroy the asset while its slot is still occupied: its destructor may release other assets of this storage,
+    // which must not re-enter slot_map::erase.
+    entry->asset.reset();
     m_map.erase(index.value());
 }
 
@@ -392,11 +429,12 @@ LoadContext<T>::LoadContext(AssetServer* assetServer, AssetStorage<T>& storage, 
 
 template<class T>
 template<class ...Args>
-void LoadContext<T>::construct(Args&&... args) {
+T& LoadContext<T>::construct(Args&&... args) {
     if (m_asset) {
         throw std::logic_error("asset '" + m_key + "' was already constructed");
     }
     m_asset = m_storage.emplace(m_key, std::forward<Args>(args)...);
+    return **m_asset;
 }
 
 template<class T>
