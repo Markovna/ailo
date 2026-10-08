@@ -3,6 +3,7 @@
 #include "AnimatorComponent.h"
 #include "Hierarchy.h"
 #include "Transform.h"
+#include "render/DefaultAssets.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
 #include "render/Skin.h"
@@ -17,7 +18,7 @@ AssetPtr<MaterialInstance> whiteMaterial(RenderAPI& api, AssetStorage<MaterialIn
     if (auto instance = materialInstances.get(kPath)) return *instance;
 
     auto instance = materialInstances.emplace(kPath, &api, server, server.load<Material>(materials::kLit));
-    instance->setParameter("metallicRoughnessMap", server.load<Texture>("builtin://textures/default_metallic_roughness"));
+    instance->setParameter("metallicRoughnessMap", server.load<Texture>(kDefaultMetallicRoughnessTexture));
     return instance;
 }
 

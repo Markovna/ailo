@@ -163,9 +163,9 @@ class Renderer {
 public:
   using OverlayPass = std::move_only_function<void()>;
 
-  // The storages receive the built-in textures, the skybox mesh and the skybox material instance.
-  Renderer(RenderAPI*, AssetServer&, AssetStorage<Texture>&, AssetStorage<Mesh>&,
-           AssetStorage<MaterialInstance>&, const RendererSettings& settings = {});
+  // Requires the DefaultAssets to be alive. The storages receive the skybox mesh and the skybox material instance.
+  Renderer(RenderAPI*, AssetServer&, AssetStorage<Mesh>&, AssetStorage<MaterialInstance>&,
+           const RendererSettings& settings = {});
   ~Renderer();
 
   // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
@@ -185,12 +185,6 @@ public:
 
 private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
-
-  AssetPtr<Texture> createWhiteTexture(AssetStorage<Texture>&);
-  AssetPtr<Texture> createBlackTexture(AssetStorage<Texture>&);
-  AssetPtr<Texture> createDefaultNormalTexture(AssetStorage<Texture>&);
-  AssetPtr<Texture> createDefaultMetallicRoughnessTexture(AssetStorage<Texture>&);
-  AssetPtr<Texture> createBlackCubemapTexture(AssetStorage<Texture>&);
 
   void drawSkybox();
 
@@ -212,9 +206,6 @@ private:
   AssetPtr<Texture> m_iblDfgLut;
   AssetPtr<Texture> m_defaultIblSpecular;
   TextureHandle m_iblSpecularMap;
-
-  // Built-in textures: MaterialInstance resolves sampler defaults by their keys.
-  std::vector<AssetPtr<Texture>> m_persistentAssets;
 
   // Shadow mapping
   Unique<gpu::Texture> m_shadowMapTexture;

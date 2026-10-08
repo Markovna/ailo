@@ -5,6 +5,7 @@
 
 #include "app/System.h"
 
+#include "DefaultAssets.h"
 #include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
@@ -48,15 +49,10 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
-Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Texture>& textures,
-                   AssetStorage<Mesh>& meshes, AssetStorage<MaterialInstance>& materialInstances,
-                   const RendererSettings& settings)
+Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mesh>& meshes,
+                   AssetStorage<MaterialInstance>& materialInstances, const RendererSettings& settings)
   : m_settings(settings), m_renderAPI(renderApi) {
-  m_persistentAssets.push_back(createWhiteTexture(textures));
-  m_persistentAssets.push_back(createBlackTexture(textures));
-  m_persistentAssets.push_back(createDefaultMetallicRoughnessTexture(textures));
-  m_persistentAssets.push_back(createDefaultNormalTexture(textures));
-  m_defaultIblSpecular = createBlackCubemapTexture(textures);
+  m_defaultIblSpecular = server.load<Texture>(kBlackCubeTexture);
 
   // vk::Format::eR32G32B32A32Sfloat
   m_iblDfgLut = server.load<Texture>(m_settings.dfgLutPath);
@@ -418,49 +414,6 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
     m_iblSpecularMap = iblSpecular.getHandle();
     backend.updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
   }
-}
-
-AssetPtr<Texture> Renderer::createWhiteTexture(AssetStorage<Texture>& textures) {
-  static const std::array<uint8_t, 4> white = { 255, 255, 255, 255 };
-
-  auto texture = textures.emplace("builtin://textures/white", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(m_renderAPI, white.data(), 4);
-  return texture;
-}
-
-AssetPtr<Texture> Renderer::createBlackTexture(AssetStorage<Texture>& textures) {
-  static const std::array<uint8_t, 4> black = { 0, 0, 0, 255 };
-
-  auto texture = textures.emplace("builtin://textures/black", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(m_renderAPI, black.data(), 4);
-  return texture;
-}
-
-AssetPtr<Texture> Renderer::createDefaultNormalTexture(AssetStorage<Texture>& textures) {
-  static const std::array<uint8_t, 4> normal = { 128, 128, 255, 255 };
-
-  auto texture = textures.emplace("builtin://textures/normal@norm", m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(m_renderAPI, normal.data(), 4);
-  return texture;
-}
-
-AssetPtr<Texture> Renderer::createDefaultMetallicRoughnessTexture(AssetStorage<Texture>& textures) {
-  static const std::array<uint8_t, 4> metallicRoughness = { 0, 128, 0, 255 };
-
-  auto texture = textures.emplace("builtin://textures/default_metallic_roughness",
-    m_renderAPI, TextureType::TEXTURE_2D, vk::Format::eR8G8B8A8Unorm, TextureUsage::Sampled, 1, 1, 1);
-  texture->updateImage(m_renderAPI, metallicRoughness.data(), 4);
-  return texture;
-}
-
-AssetPtr<Texture> Renderer::createBlackCubemapTexture(AssetStorage<Texture>& textures) {
-  static const std::array<uint8_t, 4> black = { 0, 0, 0, 255 };
-
-  auto texture = textures.emplace("builtin://textures/black_cube", m_renderAPI, TextureType::TEXTURE_CUBEMAP, vk::Format::eR8G8B8A8Srgb, TextureUsage::Sampled, 1, 1, 1);
-  for (uint32_t face = 0; face < 6; face++) {
-    texture->updateImage(m_renderAPI, black.data(), black.size(), 1, 1, 0, 0, face, 1);
-  }
-  return texture;
 }
 
 }

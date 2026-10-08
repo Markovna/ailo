@@ -175,6 +175,8 @@ add_executable(ailo
         ailo/physics/PhysicsWorld.h
         ailo/assets/AssetServer.h
         ailo/assets/AssetServer.cpp
+        ailo/render/DefaultAssets.cpp
+        ailo/render/DefaultAssets.h
 )
 
 # Link libraries

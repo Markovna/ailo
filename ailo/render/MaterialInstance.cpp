@@ -4,6 +4,7 @@
 #include <cstring>
 #include <iostream>
 
+#include "DefaultAssets.h"
 #include "Renderer.h"
 
 namespace ailo {
@@ -13,13 +14,13 @@ namespace {
 const char* defaultTexturePath(const material::MaterialParameter& p) {
     switch (p.samplerDefault) {
         case material::SamplerDefault::White:
-            return "builtin://textures/white";
+            return kWhiteTexture;
         case material::SamplerDefault::Black:
-            return p.type == material::ParameterType::SamplerCubemap ? "builtin://textures/black_cube" : "builtin://textures/black";
+            return p.type == material::ParameterType::SamplerCubemap ? kBlackCubeTexture : kBlackTexture;
         case material::SamplerDefault::Normal:
-            return "builtin://textures/normal@norm";
+            return kNormalTexture;
     }
-    return "builtin://textures/white";
+    return kWhiteTexture;
 }
 
 }

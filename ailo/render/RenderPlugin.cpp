@@ -59,7 +59,9 @@ void RenderPlugin::build(App& app) {
         .clips = &clips,
     }));
 
-    app.insertResource<Renderer>(&api, server, textures, meshes, materialInstances, settings);
+    app.insertResource<DefaultAssets>(&api, textures);
+
+    app.insertResource<Renderer>(&api, server, meshes, materialInstances, settings);
 
     app.addSystem(Stage::Render, render, "RenderPlugin::render");
 }
