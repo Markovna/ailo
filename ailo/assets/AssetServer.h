@@ -238,6 +238,8 @@ private:
 
 template<class T>
 AssetStorage<T>::~AssetStorage() {
+    // Storages outlive every resource inserted after them, so whatever is still here is a real leak.
+    reportLeaks(std::cerr);
     assert(m_map.empty() && "AssetStorage destroyed while AssetPtrs still reference it");
 }
 

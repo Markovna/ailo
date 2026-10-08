@@ -1,5 +1,6 @@
 #include "RenderPlugin.h"
 
+#include "DefaultAssets.h"
 #include "Material.h"
 #include "Model.h"
 #include "RenderAPI.h"
@@ -31,14 +32,6 @@ void render(Renderer& renderer, World& world, Query<Renderable> renderables, Que
     renderer.render(world.scene(), renderables, viewProjection);
 }
 
-void shutdown(World& world, RenderAPI& api, Renderer& renderer) {
-    api.waitIdle();
-
-    world.scene().clear();
-
-    renderer.releaseAssets();
-}
-
 }
 
 void RenderPlugin::build(App& app) {
@@ -66,11 +59,9 @@ void RenderPlugin::build(App& app) {
         .clips = &clips,
     }));
 
-    // After the storages, so the renderer's asset references are dropped before they are destroyed.
     app.insertResource<Renderer>(&api, server, textures, meshes, materialInstances, settings);
 
     app.addSystem(Stage::Render, render, "RenderPlugin::render");
-    app.addSystem(Stage::Shutdown, shutdown, "RenderPlugin::shutdown");
 }
 
 }

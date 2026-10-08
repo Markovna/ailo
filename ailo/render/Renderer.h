@@ -181,9 +181,6 @@ public:
   void colorPass();
   void endFrame();
 
-  // Drops the renderer's asset references, so they are freed before the shutdown leak report.
-  // GPU objects owned by the renderer are released by its destructor.
-  void releaseAssets();
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
 
 private:

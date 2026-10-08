@@ -463,15 +463,4 @@ AssetPtr<Texture> Renderer::createBlackCubemapTexture(AssetStorage<Texture>& tex
   return texture;
 }
 
-void Renderer::releaseAssets() {
-  m_persistentAssets.clear();
-  m_iblDfgLut.reset();
-  m_defaultIblSpecular.reset();
-  m_skyboxMaterial.reset();
-  m_skyboxMesh.reset();
-
-  m_renderData.clear();
-  m_overlayPasses.clear();
-}
-
 }
