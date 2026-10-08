@@ -61,9 +61,8 @@ public:
     void commit(RenderAPI&);
     void bind(RenderAPI&) const;
 
-    // Stored under a unique key derived from `key`.
     static AssetPtr<MaterialInstance> create(AssetStorage<MaterialInstance>&, AssetServer&, RenderAPI&,
-                                             const AssetPtr<Material>&, std::string_view key);
+                                             const AssetPtr<Material>&);
 
 private:
     struct Sampler {

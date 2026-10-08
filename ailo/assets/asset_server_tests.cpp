@@ -75,7 +75,7 @@ public:
     explicit ModelLoader(AssetStorage<Texture>* textures) : m_textures(textures) {}
     void load(const std::string& key, LoadContext<Model>& context) override {
         auto material = context.load<Material>(key + ".mat");
-        auto embedded = m_textures->emplace(m_textures->uniqueKey(key + "#embedded"), "embedded");
+        auto embedded = m_textures->emplace(noname_t{}, "embedded");
         context.construct(std::move(material), std::move(embedded));
     }
 private:
@@ -314,24 +314,6 @@ void testNestedSameTypeRelease() {
     assert((g_log == std::vector<std::string>{ "~Node a", "~Node b", "~Node c" }));
 }
 
-void testUniqueKey() {
-    AssetStorage<Texture> storage;
-    assert(storage.uniqueKey("a") == "a");
-
-    auto first = storage.emplace(storage.uniqueKey("a"), "first");
-    const std::string secondKey = storage.uniqueKey("a");
-    assert(secondKey != "a");
-    auto second = storage.emplace(secondKey, "second");
-    const std::string thirdKey = storage.uniqueKey("a");
-    assert(thirdKey != "a" && thirdKey != secondKey);
-    auto third = storage.emplace(thirdKey, "third");
-    assert(storage.size() == 3);
-
-    // Once the base key is free again it is handed out unchanged
-    first.reset();
-    assert(storage.uniqueKey("a") == "a");
-}
-
 void testReportLeaks() {
     AssetStorage<Texture> textures;
     AssetStorage<Material> materials;
@@ -440,13 +422,13 @@ void testLoaderWithDependencyAndSubAsset() {
         auto model = server.load<Model>("house");
         assert(model->material->texture->name == "house.mat.tex");
         assert(model->embedded->name == "embedded");
-        assert(textures.has("house#embedded"));
+        assert(textures.size() == 2);
         keptSubAsset = model->embedded;
     }
     assert(models.empty() && materials.empty());
     assert(textures.size() == 1);
 
-    // Re-importing while the old sub-asset is still alive must not collide with it
+    // Re-importing while the old anonymous sub-asset is still alive creates a new one
     auto model = server.load<Model>("house");
     assert(!(model->embedded == keptSubAsset));
     assert(textures.size() == 3);
@@ -570,7 +552,6 @@ int main() {
     testKeyCanBeReusedAfterRelease();
     testDependentReleasesDependency();
     testNestedSameTypeRelease();
-    testUniqueKey();
     testReportLeaks();
 
     testServerLoad();

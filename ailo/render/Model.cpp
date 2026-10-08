@@ -5,7 +5,6 @@
 #include <assimp/postprocess.h>
 #include <assimp/material.h>
 #include <filesystem>
-#include <format>
 #include <functional>
 #include <stdexcept>
 #include <unordered_map>
@@ -85,10 +84,9 @@ AssetPtr<Texture> loadMaterialTexture(LoadContext<Model>& ctx, AssetStorage<Text
 
     auto embedded = scene->GetEmbeddedTexture(texturePath.C_Str());
     if (embedded) {
-        const std::string key = std::format("{}#texture/{}", ctx.key(), texturePath.C_Str());
         if (embedded->mHeight > 0)
-            return Texture::fromEmbedded(textures, renderApi, key, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
-        return Texture::fromEmbeddedCompressed(textures, renderApi, key, embedded->pcData, embedded->mWidth, format);
+            return Texture::fromEmbedded(textures, renderApi, embedded->pcData, embedded->mWidth * embedded->mHeight * sizeof(aiTexel), format, embedded->mWidth, embedded->mHeight);
+        return Texture::fromEmbeddedCompressed(textures, renderApi, embedded->pcData, embedded->mWidth, format);
     }
 
     // The loader picks the format from the key's tags: sRGB by default, UNORM with "@norm".
@@ -120,10 +118,6 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
 
     std::filesystem::path modelPath(path);
     std::string modelDirectory = modelPath.parent_path().string();
-
-    auto subPath = [&](std::string_view kind, unsigned int index) {
-        return std::format("{}#{}/{}", path, kind, index);
-    };
 
     // -------------------------------------------------------------------------
     // Skinning: collect bone names and build skeleton
@@ -164,7 +158,7 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
     //   non-bone nodes get boneOutputIndex = -1 and don't write to BonesUniform.
     AssetPtr<Skeleton> skeleton;
     if (hasAnySkinning)
-        skeleton = m_storages.skeletons->emplace(m_storages.skeletons->uniqueKey(path + "#skeleton"));
+        skeleton = m_storages.skeletons->emplace(noname_t{});
     std::unordered_map<std::string, uint32_t> globalBoneRegistry; // bone name → boneOutputIndex
 
     if (hasAnySkinning) {
@@ -222,7 +216,7 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
 
         auto metallicRoughness = loadMaterialTexture(ctx, textures, renderApi, aiscene, mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, vk::Format::eR8G8B8A8Unorm, modelDirectory);
 
-        auto instance = MaterialInstance::create(*m_storages.materialInstances, *m_server, *renderApi, litMaterial, subPath("material", i));
+        auto instance = MaterialInstance::create(*m_storages.materialInstances, *m_server, *renderApi, litMaterial);
         instance->setParameter("baseColorMap", diffuse);
         instance->setParameter("normalMap", normalMap);
         instance->setParameter("metallicRoughnessMap", metallicRoughness);
@@ -295,7 +289,7 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
 
     for (unsigned int i = 0; i < aiscene->mNumMeshes; i++) {
         aiMesh* aiMesh = aiscene->mMeshes[i];
-        meshes.push_back(m_storages.meshes->emplace(m_storages.meshes->uniqueKey(subPath("mesh", i))));
+        meshes.push_back(m_storages.meshes->emplace(noname_t{}));
         auto mesh = meshes.back();
 
         std::vector<uint16_t> indices;
@@ -389,7 +383,7 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
         clips.reserve(aiscene->mNumAnimations);
         for (unsigned int i = 0; i < aiscene->mNumAnimations; i++) {
             aiAnimation* aiAnim = aiscene->mAnimations[i];
-            auto clip = m_storages.clips->emplace(m_storages.clips->uniqueKey(subPath("clip", i)));
+            auto clip = m_storages.clips->emplace(noname_t{});
             clip->name = aiAnim->mName.C_Str();
             clip->ticksPerSecond = aiAnim->mTicksPerSecond > 0.0 ? static_cast<float>(aiAnim->mTicksPerSecond) : 25.0f;
             clip->duration = static_cast<float>(aiAnim->mDuration) / clip->ticksPerSecond;

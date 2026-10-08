@@ -39,7 +39,7 @@ void useMaterial(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& m
 
             auto& replacement = replacements[instance.get()];
             if (!replacement) {
-                replacement = MaterialInstance::create(materialInstances, server, api, material, material->getName());
+                replacement = MaterialInstance::create(materialInstances, server, api, material);
                 replacement->copyParametersFrom(*instance);
             }
             instance = replacement;

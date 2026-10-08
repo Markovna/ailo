@@ -61,6 +61,8 @@ private:
     ValueType m_value = ValueType::invalid();
 };
 
+struct noname_t {};
+
 template<class T>
 class AssetStorage final : public detail::AssetStorageBase {
 private:
@@ -90,12 +92,12 @@ public:
     T* get(AssetIndex index);
     const T* get(AssetIndex index) const;
 
-    // Throws std::invalid_argument if an asset with this key already exists.
+    // Throws std::invalid_argument if the key is empty or an asset with this key already exists.
     template<class ...Args>
     AssetPtr<T> emplace(const std::string& key, Args&&... args);
 
-    // Returns `base` if no asset uses it, otherwise `base~N` for the first free N.
-    std::string uniqueKey(std::string_view base);
+    template<class ...Args>
+    AssetPtr<T> emplace(noname_t, Args&&... args);
 
     std::size_t size() const override { return m_map.size(); }
     bool empty() const { return m_map.empty(); }
@@ -114,7 +116,6 @@ private:
 
     SlotMap m_map;
     std::unordered_map<std::string, Key> m_keys;
-    std::uint64_t m_uniqueCounter = 0;
 };
 
 // Owning, reference-counted handle
@@ -275,6 +276,9 @@ const T* AssetStorage<T>::get(AssetIndex index) const {
 template<class T>
 template<class ...Args>
 AssetPtr<T> AssetStorage<T>::emplace(const std::string& key, Args&&... args) {
+    if (key.empty()) {
+        throw std::invalid_argument("asset key must not be empty");
+    }
     if (has(key)) {
         throw std::invalid_argument("asset '" + key + "' already exists");
     }
@@ -293,13 +297,19 @@ AssetPtr<T> AssetStorage<T>::emplace(const std::string& key, Args&&... args) {
     return AssetPtr<T>(this, AssetIndex { slot });
 }
 
-template<class T>
-std::string AssetStorage<T>::uniqueKey(std::string_view base) {
-    std::string key(base);
-    while (has(key)) {
-        key = std::format("{}~{}", base, ++m_uniqueCounter);
+template <class T>
+template <class ... Args>
+AssetPtr<T> AssetStorage<T>::emplace(noname_t, Args&&... args) {
+    const Key slot = m_map.emplace();
+    try {
+        Entry& entry = *m_map.get(slot);
+        entry.asset.emplace(std::forward<Args>(args)...);
+    } catch (...) {
+        m_map.erase(slot);
+        throw;
     }
-    return key;
+
+    return AssetPtr<T>(this, AssetIndex { slot });
 }
 
 template<class T>
@@ -343,7 +353,9 @@ std::uint32_t AssetStorage<T>::refCount(AssetIndex index) const noexcept {
 template<class T>
 void AssetStorage<T>::remove(AssetIndex index) noexcept {
     Entry* entry = m_map.get(index.value());
-    m_keys.erase(entry->key);
+    if (!entry->key.empty()) {
+        m_keys.erase(entry->key);
+    }
     // Destroy the asset while its slot is still occupied: its destructor may release other assets of this storage,
     // which must not re-enter slot_map::erase.
     entry->asset.reset();

@@ -80,8 +80,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Textu
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_shadowViewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
-  m_skyboxMaterial = MaterialInstance::create(materialInstances, server, *m_renderAPI, server.load<Material>(materials::kSkybox),
-                                              "builtin://materials/skybox");
+  m_skyboxMaterial = MaterialInstance::create(materialInstances, server, *m_renderAPI, server.load<Material>(materials::kSkybox));
   m_skyboxMesh = Mesh::skyboxCube(meshes, m_renderAPI);
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));

@@ -132,7 +132,7 @@ AssetPtr<Texture> Texture::loadCubemap(AssetStorage<Texture>& storage, RenderAPI
                 auto [pixels, byteSize, texWidth, texHeight] = loadFace(face_path, face, mip);
 
                 if (!tex)
-                    tex = storage.emplace(storage.uniqueKey(path), renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, texWidth, texHeight, mipLevels);
+                    tex = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, texWidth, texHeight, mipLevels);
 
                 tex->updateImage(renderApi, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1, mip);
                 stbi_image_free(pixels);
@@ -145,7 +145,7 @@ AssetPtr<Texture> Texture::loadCubemap(AssetStorage<Texture>& storage, RenderAPI
 
             if (!tex) {
                 constexpr int MAX_MIP_LEVELS = 4;
-                tex = storage.emplace(storage.uniqueKey(path), renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
+                tex = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, texWidth, texHeight, MAX_MIP_LEVELS);
             }
 
             tex->updateImage(renderApi, pixels, byteSize, texWidth, texHeight, 0, 0, face, 1);
@@ -158,9 +158,9 @@ AssetPtr<Texture> Texture::loadCubemap(AssetStorage<Texture>& storage, RenderAPI
     return tex;
 }
 
-AssetPtr<Texture> Texture::fromEmbedded(AssetStorage<Texture>& storage, RenderAPI* renderApi, const std::string& key, const void* data, size_t dataSize, vk::Format format, uint32_t width,
+AssetPtr<Texture> Texture::fromEmbedded(AssetStorage<Texture>& storage, RenderAPI* renderApi, const void* data, size_t dataSize, vk::Format format, uint32_t width,
     uint32_t height, uint8_t levels) {
-    auto texture = storage.emplace(storage.uniqueKey(key), renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, width, height, levels);
+    auto texture = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, width, height, levels);
     texture->updateImage(renderApi, data, dataSize, width, height, 0, 0, 0, 1);
 
     if (levels > 1) {
@@ -169,7 +169,7 @@ AssetPtr<Texture> Texture::fromEmbedded(AssetStorage<Texture>& storage, RenderAP
     return texture;
 }
 
-AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage, RenderAPI* renderApi, const std::string& key, const void* data, size_t dataSize, vk::Format format) {
+AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage, RenderAPI* renderApi, const void* data, size_t dataSize, vk::Format format) {
     int texChannels;
     int texWidth, texHeight;
     int desiredChannels = STBI_rgb_alpha;
@@ -177,7 +177,7 @@ AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage
     unsigned char* pixels = stbi_load_from_memory(static_cast<stbi_uc const*>(data), dataSize, &texWidth, &texHeight, &texChannels, desiredChannels);
     auto byteSize = texWidth * texHeight * desiredChannels * sizeof(uint8_t);
 
-    auto texture = storage.emplace(storage.uniqueKey(key), renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight);
+    auto texture = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight);
     texture->updateImage(renderApi, pixels, byteSize, texWidth, texHeight, 0, 0, 0, 1);
 
     stbi_image_free(pixels);

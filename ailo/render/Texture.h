@@ -18,8 +18,8 @@ public:
     static void load(LoadContext<Texture>&, RenderAPI*, const std::string& key, bool mipmaps = false);
     static AssetPtr<Texture> loadCubemap(AssetStorage<Texture>&, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
     // Embedded textures are stored under a unique key derived from `key`.
-    static AssetPtr<Texture> fromEmbedded(AssetStorage<Texture>&, RenderAPI*, const std::string& key, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
-    static AssetPtr<Texture> fromEmbeddedCompressed(AssetStorage<Texture>&, RenderAPI*, const std::string& key, const void* data, size_t dataSize, vk::Format format);
+    static AssetPtr<Texture> fromEmbedded(AssetStorage<Texture>&, RenderAPI*, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
+    static AssetPtr<Texture> fromEmbeddedCompressed(AssetStorage<Texture>&, RenderAPI*, const void* data, size_t dataSize, vk::Format format);
 
 private:
     Unique<gpu::Texture> m_handle;

@@ -146,9 +146,8 @@ void MaterialInstance::bind(RenderAPI& renderApi) const {
 }
 
 AssetPtr<MaterialInstance> MaterialInstance::create(AssetStorage<MaterialInstance>& storage, AssetServer& server,
-                                                    RenderAPI& renderApi, const AssetPtr<Material>& material,
-                                                    std::string_view key) {
-    return storage.emplace(storage.uniqueKey(key), &renderApi, server, material);
+                                                    RenderAPI& renderApi, const AssetPtr<Material>& material) {
+    return storage.emplace(noname_t{}, &renderApi, server, material);
 }
 
 }
