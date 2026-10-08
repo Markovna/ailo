@@ -174,6 +174,8 @@ add_executable(ailo
         ailo/physics/PhysicsPlugin.h
         ailo/physics/PhysicsWorld.cpp
         ailo/physics/PhysicsWorld.h
+        ailo/assets/AssetServer.h
+        ailo/assets/AssetServer.cpp
 )
 
 # Link libraries
@@ -398,6 +400,13 @@ target_include_directories(apptest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 add_executable(assettest ailo/assets/asset_tests.cpp)
 target_link_libraries(assettest EnTT::EnTT)
 target_include_directories(assettest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
+
+add_executable(assetservertest
+        ailo/assets/asset_server_tests.cpp
+        ailo/assets/AssetServer.cpp
+)
+target_link_libraries(assetservertest EnTT::EnTT)
+target_include_directories(assetservertest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 
 add_executable(texturetest ailo/render/texture/texture_tests.cpp)
 target_link_libraries(texturetest ailo_texture stb_image)
