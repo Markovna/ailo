@@ -5,7 +5,7 @@
 
 #include "app/System.h"
 
-#include "DefaultAssets.h"
+#include "DefaultAssetFactory.h"
 #include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
@@ -49,10 +49,9 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   return { scale, offset };
 }
 
-Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mesh>& meshes,
-                   AssetStorage<MaterialInstance>& materialInstances, const RendererSettings& settings)
+Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances, const RendererSettings& settings)
   : m_settings(settings), m_renderAPI(renderApi) {
-  m_defaultIblSpecular = server.load<Texture>(kBlackCubeTexture);
+  m_defaultIblSpecular = server.load<Texture>(textures::kBlackCube);
 
   // vk::Format::eR32G32B32A32Sfloat
   m_iblDfgLut = server.load<Texture>(m_settings.dfgLutPath);
@@ -77,7 +76,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mesh>
   backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
 
   m_skyboxMaterial = MaterialInstance::create(materialInstances, server, *m_renderAPI, server.load<Material>(materials::kSkybox));
-  m_skyboxMesh = Mesh::skyboxCube(meshes, m_renderAPI);
+  m_skyboxMesh = server.load<Mesh>(meshes::kSkyboxCube);
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
 }

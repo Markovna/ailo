@@ -93,7 +93,6 @@ add_executable(ailo
     ailo/render/Skybox.h
     ailo/render/Texture.cpp
     ailo/render/Texture.h
-    ailo/render/Mesh.cpp
     ailo/render/Mesh.h
     ailo/render/Model.cpp
     ailo/render/Model.h
@@ -175,8 +174,9 @@ add_executable(ailo
         ailo/physics/PhysicsWorld.h
         ailo/assets/AssetServer.h
         ailo/assets/AssetServer.cpp
-        ailo/render/DefaultAssets.cpp
         ailo/render/DefaultAssets.h
+        ailo/render/DefaultAssetFactory.cpp
+        ailo/render/DefaultAssetFactory.h
 )
 
 # Link libraries

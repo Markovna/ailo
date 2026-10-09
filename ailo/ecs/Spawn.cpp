@@ -3,7 +3,7 @@
 #include "AnimatorComponent.h"
 #include "Hierarchy.h"
 #include "Transform.h"
-#include "render/DefaultAssets.h"
+#include "render/DefaultAssetFactory.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
 #include "render/Skin.h"
@@ -18,19 +18,19 @@ AssetPtr<MaterialInstance> whiteMaterial(RenderAPI& api, AssetStorage<MaterialIn
     if (auto instance = materialInstances.get(kPath)) return *instance;
 
     auto instance = materialInstances.emplace(kPath, &api, server, server.load<Material>(materials::kLit));
-    instance->setParameter("metallicRoughnessMap", server.load<Texture>(kDefaultMetallicRoughnessTexture));
+    instance->setParameter("metallicRoughnessMap", server.load<Texture>(textures::kDefaultMetallicRoughness));
     return instance;
 }
 
 }
 
-Entity spawnCube(Scene& scene, AssetStorage<Mesh>& meshes, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances,
+Entity spawnCube(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances,
                  AssetServer& server, const Transform& transform, MotionType motionType) {
     const Entity entity = scene.addEntity();
     scene.addComponent<TransformComponent>(entity, transform);
 
     Renderable& renderable = scene.addComponent<Renderable>(entity);
-    renderable.mesh = Mesh::unitCube(meshes, &api);
+    renderable.mesh = server.load<Mesh>(meshes::kUnitCube);
     renderable.materials.push_back(whiteMaterial(api, materialInstances, server));
 
     auto& rigidBody = scene.addComponent<RigidBody>(entity);

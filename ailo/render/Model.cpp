@@ -11,7 +11,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "DefaultAssets.h"
+#include "DefaultAssetFactory.h"
 #include "MaterialInstance.h"
 #include "Texture.h"
 
@@ -235,7 +235,7 @@ void ModelImporter::load(const std::string& path, LoadContext<Model>& ctx) {
             if (mat->Get(AI_MATKEY_ROUGHNESS_FACTOR, roughness) == AI_SUCCESS)
                 instance->setParameter("roughnessFactor", roughness);
         } else if (!metallicRoughness) {
-            instance->setParameter("metallicRoughnessMap", ctx.load<Texture>(kDefaultMetallicRoughnessTexture));
+            instance->setParameter("metallicRoughnessMap", ctx.load<Texture>(textures::kDefaultMetallicRoughness));
         }
 
         materials[i] = instance;

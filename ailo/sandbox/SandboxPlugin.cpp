@@ -89,12 +89,12 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
     scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
-    scene::spawnCube(scene, meshes, api, materialInstances, server,
+    scene::spawnCube(scene, api, materialInstances, server,
         { .position = { 3.0f, -0.1f, 0.0f }, .scale = { 4.0f, 0.2f, 4.0f } },
         MotionType::Static
     );
     for (int i = 0; i < 6; i++) {
-        scene::spawnCube(scene, meshes, api, materialInstances, server, {
+        scene::spawnCube(scene, api, materialInstances, server, {
             .position = { 3.0f + 0.15f * (i % 2), 1.0f + 0.8f * i, 0.1f * (i % 3) },
             .rotation = glm::angleAxis(0.3f * i, glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f))),
             .scale = glm::vec3(0.25f),
@@ -104,7 +104,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
     // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMatpack));
 }
 
-void drawConsole(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes, AssetStorage<MaterialInstance>& materialInstances,
+void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances,
                  RenderAPI& api, const PhysicsWorld* physics) {
     ImGui::Begin("Console");
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
@@ -114,7 +114,7 @@ void drawConsole(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes, 
         if (ImGui::Button("Drop cube")) {
             static int dropped = 0;
             dropped++;
-            scene::spawnCube(scene, meshes, api, materialInstances, server, {
+            scene::spawnCube(scene, api, materialInstances, server, {
                 .position = { 3.0f + 0.3f * std::sin(dropped * 1.7f), 4.0f, 0.3f * std::cos(dropped * 1.3f) },
                 .rotation = glm::angleAxis(0.7f * dropped, glm::normalize(glm::vec3(1.0f, 0.5f, 0.2f))),
                 .scale = glm::vec3(0.25f),

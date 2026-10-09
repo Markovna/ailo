@@ -15,9 +15,6 @@ struct Mesh {
     VertexBuffer vertexBuffer;
     BufferObject indexBuffer;
     std::vector<Face> faces;
-
-    static AssetPtr<Mesh> skyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi);
-    static AssetPtr<Mesh> unitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi);
 };
 
 }

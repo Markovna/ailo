@@ -1,5 +1,6 @@
 #include "RenderPlugin.h"
 
+#include "DefaultAssetFactory.h"
 #include "DefaultAssets.h"
 #include "Material.h"
 #include "Model.h"
@@ -41,9 +42,9 @@ void RenderPlugin::build(App& app) {
     auto& api = app.insertResource<RenderAPI>(window.handle());
 
     // Inserted after the RenderAPI and in dependency order: storages are destroyed in reverse, dependents first.
-    auto& textures = addAssetType<Texture>(app);
+    auto& textureStorage = addAssetType<Texture>(app);
     addAssetType<Material>(app);
-    auto& meshes = addAssetType<Mesh>(app);
+    auto& meshStorage = addAssetType<Mesh>(app);
     auto& skeletons = addAssetType<Skeleton>(app);
     auto& clips = addAssetType<AnimationClip>(app);
     auto& materialInstances = addAssetType<MaterialInstance>(app);
@@ -52,16 +53,18 @@ void RenderPlugin::build(App& app) {
     server.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
     server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
     server.registerLoader<Model>(std::make_unique<ModelImporter>(&api, &server, ModelImporter::Storages {
-        .textures = &textures,
-        .meshes = &meshes,
+        .textures = &textureStorage,
+        .meshes = &meshStorage,
         .materialInstances = &materialInstances,
         .skeletons = &skeletons,
         .clips = &clips,
     }));
 
-    app.insertResource<DefaultAssets>(&api, textures);
+    auto& defaults = app.insertResource<DefaultAssets>();
+    textures::createDefaultAssets(defaults, textureStorage, api);
+    meshes::createDefaultAssets(defaults, meshStorage, api);
 
-    app.insertResource<Renderer>(&api, server, meshes, materialInstances, settings);
+    app.insertResource<Renderer>(&api, server, materialInstances, settings);
 
     app.addSystem(Stage::Render, render, "RenderPlugin::render");
 }

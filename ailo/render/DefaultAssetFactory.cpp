@@ -1,12 +1,35 @@
-#include "Mesh.h"
+#include "DefaultAssetFactory.h"
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <utility>
+
+#include "DefaultAssets.h"
+#include "Mesh.h"
+#include "Texture.h"
 
 namespace ailo {
 
 namespace {
+
+using Pixel = std::array<uint8_t, 4>;
+
+AssetPtr<Texture> createTexture2D(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
+                                  vk::Format format, const Pixel& pixel) {
+    auto texture = textures.emplace(key, &renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, 1, 1, 1);
+    texture->updateImage(&renderApi, pixel.data(), pixel.size());
+    return texture;
+}
+
+AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
+                                vk::Format format, const Pixel& pixel) {
+    auto texture = textures.emplace(key, &renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, 1, 1, 1);
+    for (uint32_t face = 0; face < 6; face++) {
+        texture->updateImage(&renderApi, pixel.data(), pixel.size(), 1, 1, 0, 0, face, 1);
+    }
+    return texture;
+}
 
 // Same layout as the non-skinned vertices of ModelImporter, which the PBR shader reads.
 struct PbrVertex {
@@ -33,9 +56,7 @@ VertexInputDescription pbrVertexInput() {
     return input;
 }
 
-}
-
-static constexpr glm::vec3 sCubeVertices[] = {
+constexpr glm::vec3 sCubeVertices[] = {
     {-10.0f,  10.0f, -10.0f}, {-10.0f, -10.0f, -10.0f}, { 10.0f, -10.0f, -10.0f},
     { 10.0f, -10.0f, -10.0f}, { 10.0f,  10.0f, -10.0f}, {-10.0f,  10.0f, -10.0f},
     {-10.0f, -10.0f,  10.0f}, {-10.0f, -10.0f, -10.0f}, {-10.0f,  10.0f, -10.0f},
@@ -49,15 +70,12 @@ static constexpr glm::vec3 sCubeVertices[] = {
     {-10.0f, -10.0f, -10.0f}, {-10.0f, -10.0f,  10.0f}, { 10.0f, -10.0f, -10.0f},
     { 10.0f, -10.0f, -10.0f}, {-10.0f, -10.0f,  10.0f}, { 10.0f, -10.0f,  10.0f},
 };
-static constexpr uint16_t sCubeIndices[] = {
+constexpr uint16_t sCubeIndices[] = {
     0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35
 };
 
-AssetPtr<Mesh> Mesh::skyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
-    constexpr auto kPath = "builtin://meshes/cube";
-    if (auto mesh = storage.get(kPath)) return *mesh;
-
-    auto mesh = storage.emplace(kPath);
+AssetPtr<Mesh> createSkyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
+    auto mesh = storage.emplace(meshes::kSkyboxCube);
 
     vk::VertexInputBindingDescription binding{};
     binding.binding = 0;
@@ -82,10 +100,7 @@ AssetPtr<Mesh> Mesh::skyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderAp
     return mesh;
 }
 
-AssetPtr<Mesh> Mesh::unitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
-    constexpr auto kPath = "builtin://meshes/unit_cube";
-    if (auto mesh = storage.get(kPath)) return *mesh;
-
+AssetPtr<Mesh> createUnitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi) {
     // Per face: outward normal and tangent (the +U direction); b = normal x tangent points up the face.
     struct Face { glm::vec3 normal; glm::vec3 tangent; };
     constexpr std::array<Face, 6> faces = {{
@@ -123,13 +138,28 @@ AssetPtr<Mesh> Mesh::unitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi)
         }
     }
 
-    auto mesh = storage.emplace(kPath);
+    auto mesh = storage.emplace(meshes::kUnitCube);
     mesh->vertexBuffer = VertexBuffer(renderApi, pbrVertexInput(), sizeof(vertices));
     mesh->vertexBuffer.updateBuffer(renderApi, vertices.data(), sizeof(vertices));
     mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(indices));
     mesh->indexBuffer.updateBuffer(renderApi, indices.data(), sizeof(indices));
     mesh->faces.push_back({ 0, static_cast<uint32_t>(indices.size()) });
     return mesh;
+}
+
+}
+
+void textures::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Texture>& storage, RenderAPI& renderApi) {
+    defaults.add(createTexture2D(renderApi, storage, kWhite, vk::Format::eR8G8B8A8Srgb, { 255, 255, 255, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kBlack, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kNormal, vk::Format::eR8G8B8A8Unorm, { 128, 128, 255, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kDefaultMetallicRoughness, vk::Format::eR8G8B8A8Unorm, { 0, 128, 0, 255 }));
+    defaults.add(createCubemap(renderApi, storage, kBlackCube, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
+}
+
+void meshes::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Mesh>& storage, RenderAPI& renderApi) {
+    defaults.add(createSkyboxCube(storage, &renderApi));
+    defaults.add(createUnitCube(storage, &renderApi));
 }
 
 }

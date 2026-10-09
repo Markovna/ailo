@@ -163,8 +163,8 @@ class Renderer {
 public:
   using OverlayPass = std::move_only_function<void()>;
 
-  // Requires the DefaultAssets to be alive. The storages receive the skybox mesh and the skybox material instance.
-  Renderer(RenderAPI*, AssetServer&, AssetStorage<Mesh>&, AssetStorage<MaterialInstance>&,
+  // Requires the DefaultAssets to be alive. The storage receives the skybox material instance.
+  Renderer(RenderAPI*, AssetServer&, AssetStorage<MaterialInstance>&,
            const RendererSettings& settings = {});
   ~Renderer();
 
