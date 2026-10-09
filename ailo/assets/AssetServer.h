@@ -29,8 +29,6 @@ namespace detail {
         virtual ~AssetStorageBase() = default;
 
         virtual std::size_t size() const = 0;
-        // Prints every asset still in the storage, with its key and reference count.
-        virtual void reportLeaks(std::ostream& out) const = 0;
     };
 
     class AssetLoaderBase {
@@ -65,7 +63,6 @@ struct noname_t {};
 
 template<class T>
 class AssetStorage final : public detail::AssetStorageBase {
-private:
     friend class AssetPtr<T>;
 
     struct Entry {
@@ -74,8 +71,8 @@ private:
         std::uint32_t refCount = 0;
     };
 
-    using SlotMap = dod::slot_map<Entry, typename AssetIndex<T>::ValueType>;
     using AssetIndex = AssetIndex<T>;
+    using SlotMap = dod::slot_map<Entry, typename AssetIndex::ValueType>;
 
 public:
     using Key = SlotMap::key;
@@ -102,7 +99,7 @@ public:
     std::size_t size() const override { return m_map.size(); }
     bool empty() const { return m_map.empty(); }
 
-    void reportLeaks(std::ostream& out) const override;
+    void reportLeaks(std::ostream& out) const;
 
 private:
 
@@ -215,9 +212,6 @@ public:
 
     template<class T>
     void registerStorage(AssetStorage<T>*);
-
-    // Prints every asset still alive in the registered storages and returns how many there are.
-    std::size_t reportLeaks(std::ostream& out = std::cerr) const;
 
 private:
     template<class T> AssetStorage<T>& getStorage();

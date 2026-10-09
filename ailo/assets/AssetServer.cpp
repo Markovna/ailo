@@ -16,15 +16,6 @@ detail::AssetLoaderBase* AssetServer::findLoader(entt::id_type type) const {
     return it == m_loaders.end() ? nullptr : it->second.get();
 }
 
-std::size_t AssetServer::reportLeaks(std::ostream& out) const {
-    std::size_t leaked = 0;
-    for (auto& [type, storage] : m_storages) {
-        storage->reportLeaks(out);
-        leaked += storage->size();
-    }
-    return leaked;
-}
-
 void AssetServer::setLoader(entt::id_type type, std::unique_ptr<detail::AssetLoaderBase> loader) {
     m_loaders.emplace(type, std::move(loader));
 }

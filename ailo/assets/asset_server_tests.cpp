@@ -322,15 +322,19 @@ void testReportLeaks() {
     server.registerStorage(&materials);
 
     std::ostringstream none;
-    assert(server.reportLeaks(none) == 0);
+    textures.reportLeaks(none);
     assert(none.str().empty());
+
+    materials.reportLeaks(none);
+    assert(materials.empty());
 
     auto texture = textures.emplace("t", "t");
     auto copy = texture;
     auto material = materials.emplace("m", "m", AssetPtr<Texture>{});
 
     std::ostringstream out;
-    assert(server.reportLeaks(out) == 2);
+    textures.reportLeaks(out);
+    materials.reportLeaks(out);
     const std::string report = out.str();
     assert(report.find("'t' (2 references)") != std::string::npos);
     assert(report.find("'m' (1 references)") != std::string::npos);
