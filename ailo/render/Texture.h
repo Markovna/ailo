@@ -1,4 +1,6 @@
 #pragma once
+#include <filesystem>
+
 #include "RenderAPI.h"
 #include "assets/AssetServer.h"
 
@@ -30,9 +32,13 @@ public:
     TextureLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
 
 protected:
+    // "<path>.tex" loads the texture package texc built from it; any other key decodes the image at <path>.
     void load(const std::string& key, LoadContext<Texture>& ctx) override;
 
 private:
+    void loadPackage(const std::filesystem::path& texPath, LoadContext<Texture>& ctx);
+    void loadImage(const std::string& key, LoadContext<Texture>& ctx);
+
     RenderAPI* m_renderApi;
 };
 

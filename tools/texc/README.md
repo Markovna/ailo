@@ -14,6 +14,9 @@ texc --dump <package.texpack>
 In CMake: `add_texture(ailo assets/<dir>/<name>.tex)` produces `<build>/assets/<dir>/<name>.texpack`. The `.tex` file itself
 is not copied into the build.
 
+The engine loads it with `server.load<Texture>("assets/<dir>/<name>.tex")`: `TextureLoader` reads the `.texpack` next to
+the key's path.
+
 ## Format
 
 Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Unknown properties are errors.

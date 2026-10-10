@@ -6,6 +6,8 @@
 #include <iostream>
 #include <ostream>
 
+#include "FileIO.h"
+#include "render/texture/TexturePackage.h"
 #include "stb_image/stb_image.h"
 
 namespace ailo {
@@ -126,7 +128,69 @@ AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage
     return texture;
 }
 
+namespace {
+
+vk::Format toVkFormat(texture::TextureFormat format) {
+    switch (format) {
+        case texture::TextureFormat::RGBA8:      return vk::Format::eR8G8B8A8Unorm;
+        case texture::TextureFormat::RGBA8_SRGB: return vk::Format::eR8G8B8A8Srgb;
+        case texture::TextureFormat::RGBA32F:    return vk::Format::eR32G32B32A32Sfloat;
+    }
+    throw std::runtime_error("unknown texture package format");
+}
+
+TextureType toTextureType(texture::TextureType type) {
+    return type == texture::TextureType::Cubemap ? TextureType::TEXTURE_CUBEMAP : TextureType::TEXTURE_2D;
+}
+
+}
+
 void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
+    auto first = key.find_first_of('@');
+    std::filesystem::path path = key.substr(0, first);
+    if (path.extension() == ".tex") {
+        if (first != std::string::npos) {
+            throw std::runtime_error("texture '" + key + "': tags are not supported for .tex textures, set the options in the .tex file");
+        }
+        loadPackage(path, ctx);
+    } else {
+        loadImage(key, ctx);
+    }
+}
+
+// texc packs <dir>/<name>.tex into <dir>/<name>.texpack in the build folder.
+void TextureLoader::loadPackage(const std::filesystem::path& texPath, LoadContext<Texture>& ctx) {
+    auto packagePath = texPath;
+    packagePath.replace_extension(".texpack");
+
+    std::string data;
+    if (!fileio::readFile(packagePath, data)) {
+        throw std::runtime_error("texture '" + packagePath.generic_string() + "': cannot read file (is " +
+                                 texPath.generic_string() + " added with add_texture?)");
+    }
+
+    std::string error;
+    auto pkg = texture::TexturePackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
+    if (!pkg) {
+        throw std::runtime_error("texture '" + packagePath.generic_string() + "': " + error);
+    }
+
+    Texture& tex = ctx.construct(m_renderApi, toTextureType(pkg->type), toVkFormat(pkg->format), TextureUsage::Sampled,
+                                 pkg->width, pkg->height, pkg->allocatedLevels());
+
+    // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
+    for (uint32_t level = 0; level < pkg->levels; level++) {
+        auto image = pkg->image(level, 0);
+        tex.updateImage(m_renderApi, image.data(), image.size() * pkg->layers(), pkg->levelWidth(level),
+                        pkg->levelHeight(level), 0, 0, 0, pkg->layers(), level);
+    }
+
+    if (pkg->generateMipmaps) {
+        tex.generateMipmaps(m_renderApi);
+    }
+}
+
+void TextureLoader::loadImage(const std::string& key, LoadContext<Texture>& ctx) {
     const bool mipmaps = true;
     std::set<std::string> tags;
     auto first = key.find_first_of('@');

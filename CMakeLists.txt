@@ -40,6 +40,8 @@ set(JPH_USE_MTL OFF CACHE BOOL "" FORCE)
 set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/JoltPhysics/Build)
 
+add_subdirectory(libs/fileio)
+
 add_subdirectory(tools/resgen)
 
 add_library(ailo_material STATIC
@@ -61,7 +63,6 @@ add_library(ailo_texture STATIC
 target_include_directories(ailo_texture PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 target_link_libraries(ailo_texture PRIVATE stb_image)
 
-add_subdirectory(tools/fileio)
 add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 add_subdirectory(tools/texc)
@@ -194,6 +195,8 @@ target_link_libraries(ailo
         assimp::assimp
         Jolt
         ailo_material
+        ailo_texture
+        ailo_fileio
 )
 
 # Include directories
