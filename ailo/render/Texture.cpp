@@ -27,64 +27,6 @@ void Texture::generateMipmaps(RenderAPI* renderApi) {
     renderApi->generateMipmaps(m_handle);
 }
 
-void Texture::load(LoadContext<Texture>& ctx, RenderAPI* renderApi, const std::string& key, bool mipmaps) {
-    std::set<std::string> tags;
-    auto first = key.find_first_of('@');
-    if (first != std::string::npos) {
-        size_t start = first, end;
-        while ((end = key.find('@', start)) != std::string::npos) {
-            tags.insert(key.substr(start, end - start));
-            start = end + 1;
-        }
-        tags.insert(key.substr(start));
-    }
-
-    auto path = key.substr(0, first);
-    bool isHdr = stbi_is_hdr(path.c_str());
-
-    vk::Format format = isHdr ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR8G8B8A8Srgb;
-    if (tags.contains("norm")) {
-        format = vk::Format::eR8G8B8A8Unorm;
-    }
-
-    Texture* tex;
-    if (!isHdr) {
-        // Load texture
-        int texWidth, texHeight, texChannels;
-        int desiredChannels = STBI_rgb_alpha;
-
-        stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
-        if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
-            throw std::runtime_error("failed to load texture image!");
-        }
-
-        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = &ctx.construct(renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
-        tex->updateImage(renderApi, pixels, texWidth * texHeight * desiredChannels);
-        stbi_image_free(pixels);
-
-    } else {
-        int texWidth, texHeight, texChannels;
-        int desiredChannels = STBI_rgb_alpha;
-
-        float* pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
-        if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
-            throw std::runtime_error("failed to load texture image!");
-        }
-
-        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = &ctx.construct(renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
-        tex->updateImage(renderApi, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
-        stbi_image_free(pixels);
-    }
-
-    if (mipmaps) {
-        tex->generateMipmaps(renderApi);
-    }
-}
-
 AssetPtr<Texture> Texture::loadCubemap(AssetStorage<Texture>& storage, RenderAPI* renderApi, const std::string& path, vk::Format format, bool loadMipmaps) {
     const char* suffixes[] = { "_px", "_nx", "_py", "_ny", "_pz", "_nz" };
     std::filesystem::path p(path);
@@ -185,7 +127,62 @@ AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage
 }
 
 void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
-    Texture::load(ctx, m_renderApi, key, true);
+    const bool mipmaps = true;
+    std::set<std::string> tags;
+    auto first = key.find_first_of('@');
+    if (first != std::string::npos) {
+        size_t start = first, end;
+        while ((end = key.find('@', start)) != std::string::npos) {
+            tags.insert(key.substr(start, end - start));
+            start = end + 1;
+        }
+        tags.insert(key.substr(start));
+    }
+
+    auto path = key.substr(0, first);
+    bool isHdr = stbi_is_hdr(path.c_str());
+
+    vk::Format format = isHdr ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR8G8B8A8Srgb;
+    if (tags.contains("norm")) {
+        format = vk::Format::eR8G8B8A8Unorm;
+    }
+
+    Texture* tex;
+    if (!isHdr) {
+        // Load texture
+        int texWidth, texHeight, texChannels;
+        int desiredChannels = STBI_rgb_alpha;
+
+        stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        if (!pixels) {
+            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        tex = &ctx.construct(m_renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex->updateImage(m_renderApi, pixels, texWidth * texHeight * desiredChannels);
+        stbi_image_free(pixels);
+
+    } else {
+        int texWidth, texHeight, texChannels;
+        int desiredChannels = STBI_rgb_alpha;
+
+        float* pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        if (!pixels) {
+            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            throw std::runtime_error("failed to load texture image!");
+        }
+
+        uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        tex = &ctx.construct(m_renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex->updateImage(m_renderApi, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
+        stbi_image_free(pixels);
+    }
+
+    if (mipmaps) {
+        tex->generateMipmaps(m_renderApi);
+    }
 }
 
 }

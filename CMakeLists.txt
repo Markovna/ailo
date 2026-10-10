@@ -64,6 +64,7 @@ target_link_libraries(ailo_texture PRIVATE stb_image)
 add_subdirectory(tools/fileio)
 add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
+add_subdirectory(tools/texc)
 
 # Add executable
 add_executable(ailo
@@ -294,6 +295,26 @@ function(add_material TARGET MATERIAL)
 
     set_source_files_properties(${OUTPUT} PROPERTIES GENERATED TRUE)
     target_sources(${TARGET} PRIVATE ${OUTPUT})
+endfunction()
+
+# Packs the image(s) named by a texture definition (.tex) into <build>/<dir>/<name>.texpack, next to the copied assets.
+function(add_texture TARGET TEXTURE)
+    get_filename_component(TEXTURE_NAME ${TEXTURE} NAME_WE)
+    get_filename_component(TEXTURE_DIR ${TEXTURE} DIRECTORY)
+    set(OUTPUT ${CMAKE_BINARY_DIR}/${TEXTURE_DIR}/${TEXTURE_NAME}.texpack)
+
+    add_custom_command(
+            OUTPUT ${OUTPUT}
+            COMMAND $<TARGET_FILE:texc> --depfile ${OUTPUT}.d -o ${OUTPUT} ${CMAKE_SOURCE_DIR}/${TEXTURE}
+            DEPENDS texc ${CMAKE_SOURCE_DIR}/${TEXTURE}
+            DEPFILE ${OUTPUT}.d
+            COMMENT "Packing texture ${TEXTURE_NAME}.texpack"
+    )
+
+    set_source_files_properties(${OUTPUT} PROPERTIES GENERATED TRUE)
+    target_sources(${TARGET} PRIVATE ${OUTPUT})
+
+    set_property(GLOBAL APPEND PROPERTY AILO_ASSET_BUILD_INPUTS ${TEXTURE})
 endfunction()
 
 # Generate DFG LUT texture using resgen tool

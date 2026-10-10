@@ -15,7 +15,6 @@ public:
     TextureHandle getHandle() const { return m_handle; }
     uint32_t getLevels() const { return m_levels; }
 
-    static void load(LoadContext<Texture>&, RenderAPI*, const std::string& key, bool mipmaps = false);
     static AssetPtr<Texture> loadCubemap(AssetStorage<Texture>&, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
     // Embedded textures are stored under a unique key derived from `key`.
     static AssetPtr<Texture> fromEmbedded(AssetStorage<Texture>&, RenderAPI*, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
