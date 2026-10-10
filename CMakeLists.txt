@@ -300,26 +300,6 @@ function(add_material TARGET MATERIAL)
     target_sources(${TARGET} PRIVATE ${OUTPUT})
 endfunction()
 
-# Packs the image(s) named by a texture definition (.tex) into <build>/<dir>/<name>.texpack, next to the copied assets.
-function(add_texture TARGET TEXTURE)
-    get_filename_component(TEXTURE_NAME ${TEXTURE} NAME_WE)
-    get_filename_component(TEXTURE_DIR ${TEXTURE} DIRECTORY)
-    set(OUTPUT ${CMAKE_BINARY_DIR}/${TEXTURE_DIR}/${TEXTURE_NAME}.texpack)
-
-    add_custom_command(
-            OUTPUT ${OUTPUT}
-            COMMAND $<TARGET_FILE:texc> --depfile ${OUTPUT}.d -o ${OUTPUT} ${CMAKE_SOURCE_DIR}/${TEXTURE}
-            DEPENDS texc ${CMAKE_SOURCE_DIR}/${TEXTURE}
-            DEPFILE ${OUTPUT}.d
-            COMMENT "Packing texture ${TEXTURE_NAME}.texpack"
-    )
-
-    set_source_files_properties(${OUTPUT} PROPERTIES GENERATED TRUE)
-    target_sources(${TARGET} PRIVATE ${OUTPUT})
-
-    set_property(GLOBAL APPEND PROPERTY AILO_ASSET_BUILD_INPUTS ${TEXTURE})
-endfunction()
-
 # Generate DFG LUT texture using resgen tool
 set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/assets/textures/dfg_lut.hdr)
 add_custom_command(
@@ -368,36 +348,43 @@ function(add_radiance_map TARGET INPUT_HDR)
     )
 
     target_sources(${TARGET} PRIVATE ${STAMP})
-
-    # Only resgen reads the source HDR; the engine loads the prefiltered output.
-    set_property(GLOBAL APPEND PROPERTY AILO_ASSET_BUILD_INPUTS ${INPUT_HDR})
 endfunction()
 
 add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
-# Copy source assets into the build folder, next to generated ones, so the executable can run from there.
-# One rule per file: only new or changed files are copied. New files are picked up on the next build.
-file(GLOB_RECURSE AILO_ASSET_FILES CONFIGURE_DEPENDS RELATIVE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/assets/*)
-get_property(AILO_ASSET_BUILD_INPUTS GLOBAL PROPERTY AILO_ASSET_BUILD_INPUTS)
-if(AILO_ASSET_BUILD_INPUTS)
-    list(REMOVE_ITEM AILO_ASSET_FILES ${AILO_ASSET_BUILD_INPUTS})
+# Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
+# assets/ with the tool its "__type" maps to in config.json and copies everything else. CMake only generates the
+# manifest the first time; after that it regenerates itself when assets are added, removed or edited.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+if(CMAKE_GENERATOR MATCHES "Ninja")
+    set(AILO_NINJA ${CMAKE_MAKE_PROGRAM})
+else()
+    find_program(AILO_NINJA ninja REQUIRED)
 endif()
 
-set(AILO_ASSET_OUTPUTS "")
-foreach(ASSET IN LISTS AILO_ASSET_FILES)
-    set(ASSET_OUTPUT "${CMAKE_BINARY_DIR}/${ASSET}")
-    get_filename_component(ASSET_OUTPUT_DIR "${ASSET_OUTPUT}" DIRECTORY)
-    add_custom_command(
-            OUTPUT "${ASSET_OUTPUT}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${ASSET_OUTPUT_DIR}"
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/${ASSET}" "${ASSET_OUTPUT}"
-            DEPENDS "${CMAKE_SOURCE_DIR}/${ASSET}"
-            COMMENT "Copying ${ASSET}"
-    )
-    list(APPEND AILO_ASSET_OUTPUTS "${ASSET_OUTPUT}")
-endforeach()
+set(AILO_ASSET_MANIFEST ${CMAKE_BINARY_DIR}/build_assets.ninja)
+add_custom_command(
+        OUTPUT ${AILO_ASSET_MANIFEST}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/gen.py
+                --source ${CMAKE_SOURCE_DIR}/assets
+                --build-dir ${CMAKE_BINARY_DIR}
+                --config ${CMAKE_SOURCE_DIR}/build/config.json
+                --cmake ${CMAKE_COMMAND}
+                --tool texc=$<TARGET_FILE:texc>
+        DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
+        COMMENT "Generating build_assets.ninja"
+)
 
-add_custom_target(ailo_assets ALL DEPENDS ${AILO_ASSET_OUTPUTS})
+# cleandead removes the outputs of assets that no longer exist.
+add_custom_target(ailo_assets ALL
+        COMMAND ${AILO_NINJA} -f ${AILO_ASSET_MANIFEST}
+        COMMAND ${AILO_NINJA} -f ${AILO_ASSET_MANIFEST} -t cleandead
+        DEPENDS ${AILO_ASSET_MANIFEST}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Building assets"
+        USES_TERMINAL
+)
+add_dependencies(ailo_assets texc)
 add_dependencies(ailo ailo_assets)
 
 # Add shaders

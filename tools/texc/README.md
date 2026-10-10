@@ -11,8 +11,9 @@ texc --dump <package.texpack>
 - `--depfile` lists the `.tex` file and every source image, so editing an image repacks it.
 - `--dump` prints a package's header: type, format, size, levels, mipmap generation, data size.
 
-In CMake: `add_texture(ailo assets/<dir>/<name>.tex)` produces `<build>/assets/<dir>/<name>.texpack`. The `.tex` file itself
-is not copied into the build.
+It is run by the asset build (`build/README.md`): every asset in `assets/` with `"__type": "texture"`
+(`assets/<dir>/<name>.tex`) is packed into `<build>/assets/<dir>/<name>.texpack`. Its source images are copied
+into the build too, like any other file.
 
 The engine loads it with `server.load<Texture>("assets/<dir>/<name>.tex")`: `TextureLoader` reads the `.texpack` next to
 the key's path.
@@ -23,6 +24,7 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 
 ```
 {
+    "__type": "texture",
     "source": "bricks_albedo.png",
     "srgb": true,
     "mipmaps": true
@@ -31,6 +33,7 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 
 | Property  | Type             | Default | Meaning |
 |-----------|------------------|---------|---------|
+| `__type`  | `"texture"`      |         | Optional for texc; the asset build only packs files that have it. |
 | `source`  | string           |         | Image path, relative to the `.tex` file. For a cubemap, the base path of the six faces: `sky.jpg` reads `sky_px.jpg`, `sky_nx.jpg`, `sky_py.jpg`, `sky_ny.jpg`, `sky_pz.jpg`, `sky_nz.jpg`. |
 | `faces`   | array of 6 strings |       | Cubemap only, instead of `source`: the faces in the order +x, -x, +y, -y, +z, -z. |
 | `type`    | `"2d"` \| `"cubemap"` | `"2d"` | Cubemap faces must be square and all the same size and format. |

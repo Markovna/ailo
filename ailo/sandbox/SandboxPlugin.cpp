@@ -60,7 +60,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
         Camera { },
         OrbitCamera { .distance = 10.0f },
         Skybox {
-            .cubemap = Texture::loadCubemap(textures, &api, "assets/textures/yokohama/yokohama.jpg", vk::Format::eR8G8B8A8Srgb),
+            .cubemap = server.load<Texture>("assets/textures/yokohama/yokohama.tex"),
         },
         SceneLighting {
             .prefilteredEnvMap = iblPrefilter,

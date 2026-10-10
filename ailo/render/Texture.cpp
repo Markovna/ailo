@@ -166,7 +166,7 @@ void TextureLoader::loadPackage(const std::filesystem::path& texPath, LoadContex
     std::string data;
     if (!fileio::readFile(packagePath, data)) {
         throw std::runtime_error("texture '" + packagePath.generic_string() + "': cannot read file (is " +
-                                 texPath.generic_string() + " added with add_texture?)");
+                                 texPath.generic_string() + " missing \"__type\": \"texture\"?)");
     }
 
     std::string error;

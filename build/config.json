@@ -1,0 +1,13 @@
+{
+    // Asset type ("__type" in an asset file) -> the tool that compiles it. Assets of other types and plain files are
+    // copied as is. See build/README.md.
+    "types": {
+        "texture": {
+            "tool": "texc",
+            "output": ".texpack",
+            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "depfile": "$out.d",
+            "description": "Packing texture"
+        }
+    }
+}
