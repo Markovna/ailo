@@ -2,12 +2,12 @@
 #include <bit>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "FileIO.h"
 #include "MaterialDefinition.h"
 #include "ShaderCompiler.h"
 #include "ShaderGenerator.h"
@@ -15,6 +15,7 @@
 namespace fs = std::filesystem;
 using namespace ailo::material;
 using namespace matcomp;
+using namespace ailo::fileio;
 
 namespace {
 
@@ -22,22 +23,6 @@ void printUsage() {
     std::cerr <<
         "usage: matcomp [-I <dir>]... -o <output.matpack> [--depfile <file>] [--emit-glsl <dir>] <input.mat>\n"
         "       matcomp --dump <package.matpack>\n";
-}
-
-bool readFile(const fs::path& path, std::string& out) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file) return false;
-    std::ostringstream content;
-    content << file.rdbuf();
-    out = content.str();
-    return true;
-}
-
-bool writeFile(const fs::path& path, const void* data, size_t size) {
-    if (path.has_parent_path()) fs::create_directories(path.parent_path());
-    std::ofstream file(path, std::ios::binary);
-    file.write(static_cast<const char*>(data), std::streamsize(size));
-    return bool(file);
 }
 
 std::string variantName(ShaderStage stage, Variant v) {

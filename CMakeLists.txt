@@ -61,6 +61,7 @@ add_library(ailo_texture STATIC
 target_include_directories(ailo_texture PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 target_link_libraries(ailo_texture PRIVATE stb_image)
 
+add_subdirectory(tools/fileio)
 add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 

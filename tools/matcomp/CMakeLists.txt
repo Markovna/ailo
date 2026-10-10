@@ -28,6 +28,7 @@ set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
 
 target_link_libraries(matcomp PRIVATE
+        ailo_fileio
         ailo_json
         ailo_material
         glslang::glslang

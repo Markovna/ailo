@@ -1,7 +1,6 @@
 #include "ShaderCompiler.h"
 
-#include <fstream>
-#include <sstream>
+#include "FileIO.h"
 
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
@@ -53,14 +52,12 @@ private:
     };
 
     IncludeResult* tryOpen(const fs::path& candidate) {
-        std::ifstream file(candidate, std::ios::binary);
-        if (!file) return nullptr;
-        std::ostringstream content;
-        content << file.rdbuf();
+        std::string content;
+        if (!ailo::fileio::readFile(candidate, content)) return nullptr;
 
         fs::path resolved = fs::weakly_canonical(candidate);
         m_dependencies.insert(resolved);
-        return makeResult(resolved.generic_string(), content.str());
+        return makeResult(resolved.generic_string(), std::move(content));
     }
 
     static IncludeResult* makeResult(const std::string& name, std::string content) {
