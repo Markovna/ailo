@@ -57,9 +57,7 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
     const json::Value* facesValue = nullptr;
 
     for (const auto& [key, v] : root.asObject()) {
-        if (key == "__type") {
-            if (getString(v, "__type") != "texture") fail(v.line, "\"__type\" must be \"texture\", got \"" + v.asString() + "\"");
-        } else if (key == "source") sourceValue = &v;
+        if (key == "source") sourceValue = &v;
         else if (key == "faces") facesValue = &v;
         else if (key == "type") def.type = getType(v);
         else if (key == "srgb") def.options.srgb = getBool(v, "srgb");

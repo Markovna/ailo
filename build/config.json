@@ -1,13 +1,16 @@
 {
-    // Asset type ("__type" in an asset file) -> the tool that compiles it. Assets of other types and plain files are
-    // copied as is. See build/README.md.
-    "types": {
-        "texture": {
-            "tool": "texc",
-            "output": ".texpack",
+    // Tool -> the extensions it compiles, each mapped to the extension of its output. Files with any other extension
+    // are copied as is. See build/README.md.
+    "tools": {
+        "texc": {
+            "extensions": { ".tex": ".texpack" },
             "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
-            "depfile": "$out.d",
-            "description": "Packing texture"
+            "depfile": "$out.d"
+        },
+        "matcomp": {
+            "extensions": { ".mat": ".matpack" },
+            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "depfile": "$out.d"
         }
     }
 }

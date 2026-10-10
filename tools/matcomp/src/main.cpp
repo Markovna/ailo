@@ -174,6 +174,7 @@ int main(int argc, char** argv) {
     MaterialPackage& pkg = def.package;
     if (pkg.name.empty()) pkg.name = input.stem().string();
 
+    includeDirs.emplace_back(MATCOMP_SHADER_DIR);
     ShaderCompiler compiler(includeDirs);
 
     for (ShaderStage stage : { ShaderStage::Vertex, ShaderStage::Fragment }) {

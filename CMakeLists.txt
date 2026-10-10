@@ -284,22 +284,6 @@ function(add_shader TARGET SHADER)
     target_sources(${TARGET} PRIVATE ${SPIRV})
 endfunction()
 
-function(add_material TARGET MATERIAL)
-    get_filename_component(MATERIAL_NAME ${MATERIAL} NAME_WE)
-    set(OUTPUT ${CMAKE_BINARY_DIR}/materials/${MATERIAL_NAME}.matpack)
-
-    add_custom_command(
-            OUTPUT ${OUTPUT}
-            COMMAND $<TARGET_FILE:matcomp> -I ${CMAKE_SOURCE_DIR}/shaders --depfile ${OUTPUT}.d -o ${OUTPUT} ${CMAKE_SOURCE_DIR}/${MATERIAL}
-            DEPENDS matcomp ${CMAKE_SOURCE_DIR}/${MATERIAL}
-            DEPFILE ${OUTPUT}.d
-            COMMENT "Compiling material ${MATERIAL_NAME}.matpack"
-    )
-
-    set_source_files_properties(${OUTPUT} PROPERTIES GENERATED TRUE)
-    target_sources(${TARGET} PRIVATE ${OUTPUT})
-endfunction()
-
 # Generate DFG LUT texture using resgen tool
 set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/assets/textures/dfg_lut.hdr)
 add_custom_command(
@@ -353,8 +337,8 @@ endfunction()
 add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
 # Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
-# assets/ with the tool its "__type" maps to in config.json and copies everything else. CMake only generates the
-# manifest the first time; after that it regenerates itself when assets are added, removed or edited.
+# assets/ with the tool its extension maps to in config.json and copies everything else. CMake only generates the
+# manifest the first time; after that it regenerates itself when assets are added or removed.
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 if(CMAKE_GENERATOR MATCHES "Ninja")
     set(AILO_NINJA ${CMAKE_MAKE_PROGRAM})
@@ -371,6 +355,7 @@ add_custom_command(
                 --config ${CMAKE_SOURCE_DIR}/build/config.json
                 --cmake ${CMAKE_COMMAND}
                 --tool texc=$<TARGET_FILE:texc>
+                --tool matcomp=$<TARGET_FILE:matcomp>
         DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
         COMMENT "Generating build_assets.ninja"
 )
@@ -384,7 +369,7 @@ add_custom_target(ailo_assets ALL
         COMMENT "Building assets"
         USES_TERMINAL
 )
-add_dependencies(ailo_assets texc)
+add_dependencies(ailo_assets texc matcomp)
 add_dependencies(ailo ailo_assets)
 
 # Add shaders
@@ -394,11 +379,6 @@ add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
 add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
-
-add_material(ailo assets/materials/lit.mat)
-add_material(ailo assets/materials/toon.mat)
-add_material(ailo assets/materials/skybox.mat)
-
 
 # Add executable
 add_executable(ditest ailo/di/di_tests.cpp)

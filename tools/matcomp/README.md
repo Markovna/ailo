@@ -11,12 +11,13 @@ matcomp [-I <dir>]... -o <output.matpack> [--depfile <file>] [--emit-glsl <dir>]
 matcomp --dump <package.matpack>
 ```
 
-- `-I` adds an include directory (the build passes `shaders/`).
+- `-I` adds an include directory. The engine's `shaders/` folder is always searched, after these.
 - `--depfile` writes the `.mat` file and every included template, so editing a template rebuilds the materials.
 - `--emit-glsl` writes the generated GLSL of each variant, for debugging.
 - `--dump` prints a package: properties, parameter layout and defaults, variants.
 
-In CMake: `add_material(ailo materials/<name>.mat)` produces `<build>/materials/<name>.matpack`.
+It is run by the asset build (`build/README.md`): every `.mat` file in `assets/` (`assets/<dir>/<name>.mat`) is
+compiled into `<build>/assets/<dir>/<name>.matpack`.
 
 ## Format
 
@@ -132,7 +133,7 @@ Identical SPIR-V is stored once in the package.
 ## Using a material in the engine
 
 ```cpp
-auto lit = assets.load<Material>(materials::kLit);                  // "materials/lit.matpack"
+auto lit = assets.load<Material>(materials::kLit);                  // "assets/materials/lit.matpack"
 auto instance = MaterialInstance::create(assets, api, lit);
 instance->setParameter("baseColorMap", texture);                    // samplers by name
 instance->setParameter("roughnessFactor", 0.5f);                    // uniforms by name, type-checked

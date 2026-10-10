@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Writes build_assets.ninja: one edge per file in the assets folder, compiling it or copying it into the build folder.
 
-An asset file is a JSON file (comments allowed) with a "__type" property. The config maps that type to the tool that
-compiles it; assets of any other type, and every other file, are copied. The manifest regenerates itself when an asset
-file is edited or a file is added to or removed from the assets folder. See README.md.
+The config maps file extensions to the tool that compiles them and the extension of the output; every other file is
+copied. The manifest regenerates itself when a file is added to or removed from the assets folder. See README.md.
 """
 
 import argparse
@@ -13,7 +12,6 @@ import sys
 from pathlib import Path
 
 MANIFEST = "build_assets.ninja"
-JSON_SNIFF_BYTES = 64
 
 
 def strip_comments(text):
@@ -55,29 +53,6 @@ def load_json(path):
         return json.loads(strip_comments(f.read()))
 
 
-def looks_like_json(path):
-    with open(path, "rb") as f:
-        head = f.read(JSON_SNIFF_BYTES)
-    head = head.removeprefix(b"\xef\xbb\xbf").lstrip()
-    return head.startswith(b"{") or head.startswith(b"//") or head.startswith(b"/*")
-
-
-def asset_type(path):
-    """Returns the "__type" of an asset file, or None for a plain file."""
-    if not looks_like_json(path):
-        return None
-    try:
-        data = load_json(path)
-    except (ValueError, UnicodeDecodeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    t = data.get("__type")
-    if t is not None and not isinstance(t, str):
-        raise ValueError(f'{path}: "__type" must be a string')
-    return t
-
-
 def escape_path(path):
     return path.replace("$", "$$").replace(" ", "$ ").replace(":", "$:")
 
@@ -98,7 +73,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--source", required=True, help="assets folder")
     parser.add_argument("--build-dir", required=True, help="where the manifest is written and assets are built")
-    parser.add_argument("--config", required=True, help="asset type -> tool config (JSON)")
+    parser.add_argument("--config", required=True, help="extension -> tool config (JSON)")
     parser.add_argument("--tool", action="append", default=[], metavar="NAME=PATH", help="path of a tool named in the config")
     parser.add_argument("--cmake", required=True, help="cmake executable, used to copy files")
     args = parser.parse_args()
@@ -116,10 +91,16 @@ def main():
         tools[name] = posix(Path(path).resolve())
 
     config = load_json(config_path)
-    types = config.get("types", {})
-    for type_name, t in types.items():
-        if t["tool"] not in tools:
-            sys.exit(f"gen.py: type {type_name} needs tool {t['tool']}, pass it with --tool {t['tool']}=<path>")
+    tool_configs = config.get("tools", {})
+    by_extension = {}
+    for name, t in tool_configs.items():
+        if name not in tools:
+            sys.exit(f"gen.py: config names tool {name}, pass it with --tool {name}=<path>")
+        for ext, output in t["extensions"].items():
+            ext = ext.lower()
+            if ext in by_extension:
+                sys.exit(f"gen.py: {ext} is compiled by both {by_extension[ext][0]} and {name}")
+            by_extension[ext] = (name, output)
 
     # Absolute paths: ninja runs this from the build folder.
     regen_command = [posix(sys.executable), posix(Path(__file__).resolve()),
@@ -144,12 +125,12 @@ def main():
         "",
     ]
 
-    for type_name, t in sorted(types.items()):
-        command = " ".join([escape_value(quote(tools[t["tool"]]))] + t.get("args", ["$in", "$out"]))
-        lines += [f"rule compile_{type_name}", f"  command = {command}"]
+    for name, t in sorted(tool_configs.items()):
+        command = " ".join([escape_value(quote(tools[name]))] + t.get("args", ["$in", "$out"]))
+        lines += [f"rule compile_{name}", f"  command = {command}"]
         if "depfile" in t:
             lines += [f"  depfile = {t['depfile']}", "  deps = gcc"]
-        lines += [f"  description = {t.get('description', 'Compiling ' + type_name)} $name", ""]
+        lines += [f"  description = {t.get('description', name)} $name", ""]
 
     regen_inputs = [posix(Path(__file__).resolve()), posix(config_path)]
     outputs = {}
@@ -161,13 +142,12 @@ def main():
         for filename in sorted(filenames):
             path = Path(dirpath) / filename
             rel = posix(path.relative_to(source))
-            if looks_like_json(path):
-                regen_inputs.append(posix(path))
-            t = asset_type(path)
+            compiled = by_extension.get(path.suffix.lower())
 
-            if t in types:
-                out = f"{out_root}/{posix(Path(rel).with_suffix(types[t]['output']))}"
-                edge = (f"compile_{t}", out, [tools[types[t]["tool"]]])
+            if compiled:
+                name, output = compiled
+                out = f"{out_root}/{posix(Path(rel).with_suffix(output))}"
+                edge = (f"compile_{name}", out, [tools[name]])
             else:
                 out = f"{out_root}/{rel}"
                 edge = ("copy", out, [])

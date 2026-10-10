@@ -26,7 +26,7 @@ namespace ailo {
 
 namespace {
 
-constexpr auto kToonMatpack = "materials/toon.matpack";
+constexpr auto kToonMatpack = "assets/materials/toon.matpack";
 
 // Replaces every renderable's material instances with instances of `material`, keeping the values of the
 // parameters both materials share (e.g. the imported base color textures). Shared instances stay shared.

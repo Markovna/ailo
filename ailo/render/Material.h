@@ -10,8 +10,8 @@
 namespace ailo {
 
 namespace materials {
-constexpr auto kLit = "materials/lit.matpack";
-constexpr auto kSkybox = "materials/skybox.matpack";
+constexpr auto kLit = "assets/materials/lit.matpack";
+constexpr auto kSkybox = "assets/materials/skybox.matpack";
 }
 
 class Material {

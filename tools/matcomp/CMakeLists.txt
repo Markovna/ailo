@@ -16,6 +16,9 @@ add_executable(matcomp
         src/ShaderCompiler.h
 )
 
+# The engine's shader templates, searched after any -I.
+target_compile_definitions(matcomp PRIVATE MATCOMP_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
+
 # glslang, built from the submodule with the same toolchain as matcomp. Added here rather than in the root so it
 # picks up the optimized flags above. Only GLSL -> SPIR-V is needed: no spirv-opt, HLSL or standalone tools.
 set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
