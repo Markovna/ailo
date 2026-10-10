@@ -6,7 +6,7 @@
 #include <variant>
 #include <vector>
 
-namespace matcomp::json {
+namespace ailo::json {
 
 struct Value;
 

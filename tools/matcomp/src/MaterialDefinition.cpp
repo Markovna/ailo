@@ -10,6 +10,7 @@
 #include "Json.h"
 
 using namespace ailo::material;
+namespace json = ailo::json;
 
 namespace matcomp {
 

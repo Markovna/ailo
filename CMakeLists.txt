@@ -61,6 +61,7 @@ add_library(ailo_texture STATIC
 target_include_directories(ailo_texture PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 target_link_libraries(ailo_texture PRIVATE stb_image)
 
+add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 
 # Add executable
@@ -382,9 +383,9 @@ add_shader(ailo shaders/imgui.frag)
 add_shader(ailo shaders/hdr.vert)
 add_shader(ailo shaders/hdr.frag)
 
-add_material(ailo materials/lit.mat)
-add_material(ailo materials/toon.mat)
-add_material(ailo materials/skybox.mat)
+add_material(ailo assets/materials/lit.mat)
+add_material(ailo assets/materials/toon.mat)
+add_material(ailo assets/materials/skybox.mat)
 
 
 # Add executable

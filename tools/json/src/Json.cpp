@@ -2,7 +2,7 @@
 
 #include <charconv>
 
-namespace matcomp::json {
+namespace ailo::json {
 
 const char* Value::typeName() const {
     switch (data.index()) {
