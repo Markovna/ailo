@@ -26,7 +26,7 @@ namespace ailo {
 
 namespace {
 
-constexpr auto kToonMatpack = "assets/materials/toon.matpack";
+constexpr auto kToonMaterial = "assets/materials/toon";
 
 // Replaces every renderable's material instances with instances of `material`, keeping the values of the
 // parameters both materials share (e.g. the imported base color textures). Shared instances stay shared.
@@ -60,7 +60,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
         Camera { },
         OrbitCamera { .distance = 10.0f },
         Skybox {
-            .cubemap = server.load<Texture>("assets/textures/yokohama/yokohama.tex"),
+            .cubemap = server.load<Texture>("assets/textures/yokohama/yokohama"),
         },
         SceneLighting {
             .prefilteredEnvMap = iblPrefilter,
@@ -101,7 +101,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
         }, MotionType::Dynamic);
     }
 
-    // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMatpack));
+    // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMaterial));
 }
 
 void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances,

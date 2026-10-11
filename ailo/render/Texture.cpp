@@ -147,26 +147,21 @@ TextureType toTextureType(texture::TextureType type) {
 
 void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
     auto first = key.find_first_of('@');
-    std::filesystem::path path = key.substr(0, first);
-    if (path.extension() == ".tex") {
+    std::filesystem::path packagePath = key.substr(0, first) + ".texpack";
+    if (std::filesystem::exists(packagePath)) {
         if (first != std::string::npos) {
-            throw std::runtime_error("texture '" + key + "': tags are not supported for .tex textures, set the options in the .tex file");
+            throw std::runtime_error("texture '" + key + "': tags are not supported for texture packages, set the options in the .tex file");
         }
-        loadPackage(path, ctx);
+        loadPackage(packagePath, ctx);
     } else {
         loadImage(key, ctx);
     }
 }
 
-// texc packs <dir>/<name>.tex into <dir>/<name>.texpack in the build folder.
-void TextureLoader::loadPackage(const std::filesystem::path& texPath, LoadContext<Texture>& ctx) {
-    auto packagePath = texPath;
-    packagePath.replace_extension(".texpack");
-
+void TextureLoader::loadPackage(const std::filesystem::path& packagePath, LoadContext<Texture>& ctx) {
     std::string data;
     if (!fileio::readFile(packagePath, data)) {
-        throw std::runtime_error("texture '" + packagePath.generic_string() + "': cannot read file (is " +
-                                 texPath.generic_string() + " not built by the asset build?)");
+        throw std::runtime_error("texture '" + packagePath.generic_string() + "': cannot read file");
     }
 
     std::string error;

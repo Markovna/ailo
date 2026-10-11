@@ -32,11 +32,11 @@ public:
     TextureLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
 
 protected:
-    // "<path>.tex" loads the texture package texc built from it; any other key decodes the image at <path>.
+    // Loads "<key>.texpack" (texc builds it from "<key>.tex") if it exists, otherwise decodes the image at <key>.
     void load(const std::string& key, LoadContext<Texture>& ctx) override;
 
 private:
-    void loadPackage(const std::filesystem::path& texPath, LoadContext<Texture>& ctx);
+    void loadPackage(const std::filesystem::path& packagePath, LoadContext<Texture>& ctx);
     void loadImage(const std::string& key, LoadContext<Texture>& ctx);
 
     RenderAPI* m_renderApi;

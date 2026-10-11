@@ -256,7 +256,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.2f);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 3.0f);
   m_perViewUniformBufferData.lightDirection = lightDir;
   m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
   const Texture& iblSpecular = sceneLighting && sceneLighting->prefilteredEnvMap

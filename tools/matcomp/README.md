@@ -133,7 +133,7 @@ Identical SPIR-V is stored once in the package.
 ## Using a material in the engine
 
 ```cpp
-auto lit = assets.load<Material>(materials::kLit);                  // "assets/materials/lit.matpack"
+auto lit = assets.load<Material>(materials::kLit);                  // reads "assets/materials/lit.matpack"
 auto instance = MaterialInstance::create(assets, api, lit);
 instance->setParameter("baseColorMap", texture);                    // samplers by name
 instance->setParameter("roughnessFactor", 0.5f);                    // uniforms by name, type-checked

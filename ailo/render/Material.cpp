@@ -101,11 +101,12 @@ ProgramHandle Material::getProgram(material::Variant variant) const {
 }
 
 void MaterialLoader::load(const std::string& key, LoadContext<Material>& ctx) {
-    auto data = os::readFile(key);
+    auto path = key + ".matpack";
+    auto data = os::readFile(path);
     std::string error;
     auto package = material::MaterialPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
     if (!package) {
-        throw std::runtime_error(key + ": " + error);
+        throw std::runtime_error(path + ": " + error);
     }
     ctx.construct(m_renderApi, std::move(*package));
 }
