@@ -6,6 +6,8 @@
 
 namespace ailo {
 
+namespace texture { struct TexturePackage; }
+
 class Texture {
 public:
     Texture(RenderAPI*, TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
@@ -18,9 +20,8 @@ public:
     uint32_t getLevels() const { return m_levels; }
 
     static AssetPtr<Texture> loadCubemap(AssetStorage<Texture>&, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
-    // Embedded textures are stored under a unique key derived from `key`.
-    static AssetPtr<Texture> fromEmbedded(AssetStorage<Texture>&, RenderAPI*, const void* data, size_t dataSize, vk::Format format, uint32_t width, uint32_t height, uint8_t levels = 1);
-    static AssetPtr<Texture> fromEmbeddedCompressed(AssetStorage<Texture>&, RenderAPI*, const void* data, size_t dataSize, vk::Format format);
+    // An unnamed texture, e.g. one embedded in a model package.
+    static AssetPtr<Texture> fromPackage(AssetStorage<Texture>&, RenderAPI*, const texture::TexturePackage&);
 
 private:
     Unique<gpu::Texture> m_handle;
@@ -32,7 +33,6 @@ public:
     TextureLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
 
 protected:
-    // Loads "<key>.texpack" (texc builds it from "<key>.tex") if it exists, otherwise decodes the image at <key>.
     void load(const std::string& key, LoadContext<Texture>& ctx) override;
 
 private:

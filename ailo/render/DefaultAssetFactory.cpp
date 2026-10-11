@@ -31,7 +31,7 @@ AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& tex
     return texture;
 }
 
-// Same layout as the non-skinned vertices of ModelImporter, which the PBR shader reads.
+// Same layout as model::StaticVertex (render/model/ModelPackage.h), which the PBR shader reads.
 struct PbrVertex {
     glm::vec3 pos;
     glm::vec3 color;
@@ -126,7 +126,7 @@ AssetPtr<Mesh> createUnitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi)
                 .color = glm::vec3(1.0f),
                 .texCoord = { 0.5f + 0.5f * corner.x, 0.5f - 0.5f * corner.y },   // V points down, as imported (FlipUVs)
                 .normal = n,
-                // Handedness as ModelImporter computes it: dot(n x t, direction of +V) = dot(b, -b).
+                // Handedness as modelc computes it: dot(n x t, direction of +V) = dot(b, -b).
                 .tangent = glm::vec4(t, -1.0f),
             };
         }

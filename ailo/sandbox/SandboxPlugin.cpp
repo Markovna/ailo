@@ -64,7 +64,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
         },
         SceneLighting {
             .prefilteredEnvMap = iblPrefilter,
-            .lightDirection = glm::normalize(glm::vec3(0.1, 1.4, 0.1)),
+            .lightDirection = glm::normalize(glm::vec3(0.0, 1.4, -0.3)),
         });
 
     auto pointLight = scene.addEntity();
@@ -85,7 +85,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
     auto characterTransform =glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/sponza.gltf"));
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/Sponza.gltf"));
     scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.

@@ -52,7 +52,7 @@ void RenderPlugin::build(App& app) {
 
     server.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
     server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
-    server.registerLoader<Model>(std::make_unique<ModelImporter>(&api, &server, ModelImporter::Storages {
+    server.registerLoader<Model>(std::make_unique<ModelLoader>(&api, &server, ModelLoader::Storages {
         .textures = &textureStorage,
         .meshes = &meshStorage,
         .materialInstances = &materialInstances,

@@ -11,6 +11,11 @@
             "extensions": { ".mat": ".matpack" },
             "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
+        },
+        "modelc": {
+            "extensions": { ".model": ".modelpack" },
+            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "depfile": "$out.d"
         }
     }
 }

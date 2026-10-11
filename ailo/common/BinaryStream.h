@@ -19,6 +19,8 @@ class Writer {
 public:
     void u8(uint8_t v) { m_data.push_back(v); }
     void u32(uint32_t v) { bytes(&v, sizeof(v)); }
+    void i32(int32_t v) { bytes(&v, sizeof(v)); }
+    void f32(float v) { bytes(&v, sizeof(v)); }
     void boolean(bool v) { u8(v ? 1 : 0); }
     void string(const std::string& s) { u32(uint32_t(s.size())); bytes(s.data(), s.size()); }
     void bytes(const void* p, size_t n) {
@@ -52,6 +54,8 @@ public:
 
     uint8_t u8() { uint8_t v = 0; bytes(&v, 1); return v; }
     uint32_t u32() { uint32_t v = 0; bytes(&v, sizeof(v)); return v; }
+    int32_t i32() { int32_t v = 0; bytes(&v, sizeof(v)); return v; }
+    float f32() { float v = 0; bytes(&v, sizeof(v)); return v; }
     bool boolean() { return u8() != 0; }
     std::string string() {
         uint32_t n = u32();

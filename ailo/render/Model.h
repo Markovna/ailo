@@ -23,7 +23,7 @@ struct Model {
     std::vector<AssetPtr<AnimationClip>> clips;
 };
 
-class ModelImporter : public AssetLoader<Model> {
+class ModelLoader : public AssetLoader<Model> {
 public:
     struct Storages {
         AssetStorage<Texture>* textures;
@@ -33,11 +33,11 @@ public:
         AssetStorage<AnimationClip>* clips;
     };
 
-    ModelImporter(RenderAPI* renderApi, AssetServer* server, const Storages& storages)
+    ModelLoader(RenderAPI* renderApi, AssetServer* server, const Storages& storages)
         : m_renderApi(renderApi), m_server(server), m_storages(storages) {}
 
 protected:
-    void load(const std::string& path, LoadContext<Model>& ctx) override;
+    void load(const std::string& key, LoadContext<Model>& ctx) override;
 
 private:
     RenderAPI* m_renderApi;

@@ -102,32 +102,6 @@ AssetPtr<Texture> Texture::loadCubemap(AssetStorage<Texture>& storage, RenderAPI
     return tex;
 }
 
-AssetPtr<Texture> Texture::fromEmbedded(AssetStorage<Texture>& storage, RenderAPI* renderApi, const void* data, size_t dataSize, vk::Format format, uint32_t width,
-    uint32_t height, uint8_t levels) {
-    auto texture = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, width, height, levels);
-    texture->updateImage(renderApi, data, dataSize, width, height, 0, 0, 0, 1);
-
-    if (levels > 1) {
-        texture->generateMipmaps(renderApi);
-    }
-    return texture;
-}
-
-AssetPtr<Texture> Texture::fromEmbeddedCompressed(AssetStorage<Texture>& storage, RenderAPI* renderApi, const void* data, size_t dataSize, vk::Format format) {
-    int texChannels;
-    int texWidth, texHeight;
-    int desiredChannels = STBI_rgb_alpha;
-
-    unsigned char* pixels = stbi_load_from_memory(static_cast<stbi_uc const*>(data), dataSize, &texWidth, &texHeight, &texChannels, desiredChannels);
-    auto byteSize = texWidth * texHeight * desiredChannels * sizeof(uint8_t);
-
-    auto texture = storage.emplace(noname_t{}, renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight);
-    texture->updateImage(renderApi, pixels, byteSize, texWidth, texHeight, 0, 0, 0, 1);
-
-    stbi_image_free(pixels);
-    return texture;
-}
-
 namespace {
 
 vk::Format toVkFormat(texture::TextureFormat format) {
@@ -143,15 +117,31 @@ TextureType toTextureType(texture::TextureType type) {
     return type == texture::TextureType::Cubemap ? TextureType::TEXTURE_CUBEMAP : TextureType::TEXTURE_2D;
 }
 
+void upload(Texture& tex, RenderAPI* renderApi, const texture::TexturePackage& pkg) {
+    // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
+    for (uint32_t level = 0; level < pkg.levels; level++) {
+        auto image = pkg.image(level, 0);
+        tex.updateImage(renderApi, image.data(), image.size() * pkg.layers(), pkg.levelWidth(level),
+                        pkg.levelHeight(level), 0, 0, 0, pkg.layers(), level);
+    }
+
+    if (pkg.generateMipmaps) {
+        tex.generateMipmaps(renderApi);
+    }
+}
+
+}
+
+AssetPtr<Texture> Texture::fromPackage(AssetStorage<Texture>& storage, RenderAPI* renderApi, const texture::TexturePackage& pkg) {
+    auto tex = storage.emplace(noname_t{}, renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled,
+                               pkg.width, pkg.height, pkg.allocatedLevels());
+    upload(*tex, renderApi, pkg);
+    return tex;
 }
 
 void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
-    auto first = key.find_first_of('@');
-    std::filesystem::path packagePath = key.substr(0, first) + ".texpack";
+    std::filesystem::path packagePath = key + ".texpack";
     if (std::filesystem::exists(packagePath)) {
-        if (first != std::string::npos) {
-            throw std::runtime_error("texture '" + key + "': tags are not supported for texture packages, set the options in the .tex file");
-        }
         loadPackage(packagePath, ctx);
     } else {
         loadImage(key, ctx);
@@ -172,39 +162,17 @@ void TextureLoader::loadPackage(const std::filesystem::path& packagePath, LoadCo
 
     Texture& tex = ctx.construct(m_renderApi, toTextureType(pkg->type), toVkFormat(pkg->format), TextureUsage::Sampled,
                                  pkg->width, pkg->height, pkg->allocatedLevels());
-
-    // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
-    for (uint32_t level = 0; level < pkg->levels; level++) {
-        auto image = pkg->image(level, 0);
-        tex.updateImage(m_renderApi, image.data(), image.size() * pkg->layers(), pkg->levelWidth(level),
-                        pkg->levelHeight(level), 0, 0, 0, pkg->layers(), level);
-    }
-
-    if (pkg->generateMipmaps) {
-        tex.generateMipmaps(m_renderApi);
-    }
+    upload(tex, m_renderApi, *pkg);
 }
 
+// Without a package there are no options: 8-bit images are sRGB color. Data textures (normal, metallic/roughness)
+// need a .tex file with "srgb": false.
 void TextureLoader::loadImage(const std::string& key, LoadContext<Texture>& ctx) {
     const bool mipmaps = true;
-    std::set<std::string> tags;
-    auto first = key.find_first_of('@');
-    if (first != std::string::npos) {
-        size_t start = first, end;
-        while ((end = key.find('@', start)) != std::string::npos) {
-            tags.insert(key.substr(start, end - start));
-            start = end + 1;
-        }
-        tags.insert(key.substr(start));
-    }
-
-    auto path = key.substr(0, first);
+    const std::string& path = key;
     bool isHdr = stbi_is_hdr(path.c_str());
 
     vk::Format format = isHdr ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR8G8B8A8Srgb;
-    if (tags.contains("norm")) {
-        format = vk::Format::eR8G8B8A8Unorm;
-    }
 
     Texture* tex;
     if (!isHdr) {

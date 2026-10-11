@@ -19,7 +19,8 @@ add_subdirectory(third_party/vkmemalloc)
 add_subdirectory(third_party/entt)
 add_subdirectory(third_party/imgui)
 
-set(BUILD_SHARED_LIBS ON)
+# Only the offline model compiler (tools/modelc) links it.
+set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(third_party/assimp)
 unset(BUILD_SHARED_LIBS)
 
@@ -63,9 +64,18 @@ add_library(ailo_texture STATIC
 target_include_directories(ailo_texture PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 target_link_libraries(ailo_texture PRIVATE stb_image)
 
+# Model package format, shared by the engine and the offline model compiler.
+add_library(ailo_model STATIC
+    ailo/render/model/ModelPackage.cpp
+    ailo/render/model/ModelPackage.h
+)
+target_include_directories(ailo_model PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
+target_link_libraries(ailo_model PUBLIC glm::glm ailo_texture)
+
 add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 add_subdirectory(tools/texc)
+add_subdirectory(tools/modelc)
 
 # Add executable
 add_executable(ailo
@@ -192,9 +202,9 @@ target_link_libraries(ailo
         GPUOpen::VulkanMemoryAllocator
         EnTT::EnTT
         imgui
-        assimp::assimp
         Jolt
         ailo_material
+        ailo_model
         ailo_texture
         ailo_fileio
 )
@@ -217,14 +227,6 @@ target_compile_definitions(ailo PRIVATE VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_S
 
 # VK_KHR_portability_subset (MoltenVK) is declared in vulkan_beta.h
 target_compile_definitions(ailo PRIVATE VK_ENABLE_BETA_EXTENSIONS)
-
-# Copy linked DLLs next to the executable
-if(WIN32)
-    add_custom_command(TARGET ailo POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:ailo> $<TARGET_FILE_DIR:ailo>
-        COMMAND_EXPAND_LISTS
-    )
-endif()
 
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
@@ -356,6 +358,7 @@ add_custom_command(
                 --cmake ${CMAKE_COMMAND}
                 --tool texc=$<TARGET_FILE:texc>
                 --tool matcomp=$<TARGET_FILE:matcomp>
+                --tool modelc=$<TARGET_FILE:modelc>
         DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
         COMMENT "Generating build_assets.ninja"
 )
@@ -369,7 +372,7 @@ add_custom_target(ailo_assets ALL
         COMMENT "Building assets"
         USES_TERMINAL
 )
-add_dependencies(ailo_assets texc matcomp)
+add_dependencies(ailo_assets texc matcomp modelc)
 add_dependencies(ailo ailo_assets)
 
 # Add shaders
@@ -400,6 +403,9 @@ target_include_directories(assetservertest PRIVATE ${CMAKE_SOURCE_DIR}/ailo)
 
 add_executable(texturetest ailo/render/texture/texture_tests.cpp)
 target_link_libraries(texturetest ailo_texture stb_image)
+
+add_executable(modeltest ailo/render/model/model_tests.cpp)
+target_link_libraries(modeltest ailo_model)
 
 add_executable(transformtest
         ailo/ecs/transform_tests.cpp

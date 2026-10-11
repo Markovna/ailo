@@ -41,6 +41,11 @@ Strict JSON with `//` and `/* */` comments.
             "extensions": { ".mat": ".matpack" },
             "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
+        },
+        "modelc": {
+            "extensions": { ".model": ".modelpack" },
+            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "depfile": "$out.d"
         }
     }
 }
@@ -70,7 +75,7 @@ Negation (`!`) and `**` are not supported. Editing the file regenerates the mani
 ## Adding an asset kind
 
 - **To an existing tool:** teach the tool the new extension, then add it to the tool's `extensions`, e.g.
-  `{ ".tex": ".texpack", ".model": ".modelpack" }`.
+  `{ ".tex": ".texpack", ".cube": ".texpack" }`.
 - **With a new tool:** write it. It takes one asset file and writes one output, plus a depfile if it reads other files.
   Add it to `tools` in `config.json`, add `--tool <name>=$<TARGET_FILE:<name>>` to the `gen.py` command in
   `CMakeLists.txt`, and add `add_dependencies(ailo_assets <name>)`.
