@@ -47,14 +47,8 @@ void useMaterial(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& m
     }
 }
 
-void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textures, AssetStorage<Mesh>& meshes,
+void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
                 AssetStorage<MaterialInstance>& materialInstances, RenderAPI& api) {
-    auto iblPrefilter = Texture::loadCubemap(
-        textures, &api,
-        "assets/textures/rogland_clear_night_4k/rogland_clear_night_4k.hdr",
-        vk::Format::eR32G32B32A32Sfloat,
-        true);
-
     scene::spawn(scene,
         TransformComponent { },
         Camera { },
@@ -63,7 +57,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Texture>& textur
             .cubemap = server.load<Texture>("assets/textures/yokohama/yokohama"),
         },
         SceneLighting {
-            .prefilteredEnvMap = iblPrefilter,
+            .prefilteredEnvMap = server.load<Texture>("assets/textures/rogland_clear_night_4k"),
             .lightDirection = glm::normalize(glm::vec3(0.0, 1.4, -0.3)),
         });
 

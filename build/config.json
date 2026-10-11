@@ -16,6 +16,11 @@
             "extensions": { ".model": ".modelpack" },
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
+        },
+        "lightc": {
+            "extensions": { ".light": ".texpack" },
+            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
+            "depfile": "$out.d"
         }
     }
 }

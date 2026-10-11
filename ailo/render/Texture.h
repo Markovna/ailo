@@ -19,7 +19,6 @@ public:
     TextureHandle getHandle() const { return m_handle; }
     uint32_t getLevels() const { return m_levels; }
 
-    static AssetPtr<Texture> loadCubemap(AssetStorage<Texture>&, RenderAPI*, const std::string& paths, vk::Format format, bool loadMipmaps = false);
     // An unnamed texture, e.g. one embedded in a model package.
     static AssetPtr<Texture> fromPackage(AssetStorage<Texture>&, RenderAPI*, const texture::TexturePackage&);
 

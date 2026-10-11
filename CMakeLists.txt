@@ -43,8 +43,6 @@ add_subdirectory(third_party/JoltPhysics/Build)
 
 add_subdirectory(libs/fileio)
 
-add_subdirectory(tools/resgen)
-
 add_library(ailo_material STATIC
     ailo/render/material/MaterialEnums.cpp
     ailo/render/material/MaterialEnums.h
@@ -76,6 +74,7 @@ add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 add_subdirectory(tools/texc)
 add_subdirectory(tools/modelc)
+add_subdirectory(tools/lightc)
 
 # Add executable
 add_executable(ailo
@@ -286,57 +285,16 @@ function(add_shader TARGET SHADER)
     target_sources(${TARGET} PRIVATE ${SPIRV})
 endfunction()
 
-# Generate DFG LUT texture using resgen tool
-set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/assets/textures/dfg_lut.hdr)
+# The DFG LUT depends on no asset, so lightc generates it here instead of in the asset build.
+set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/assets/textures/dfg_lut.texpack)
 add_custom_command(
         OUTPUT ${DFG_LUT_OUTPUT}
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/assets/textures/"
-        COMMAND $<TARGET_FILE:resgen> ibl-dfg ${DFG_LUT_OUTPUT}
-        DEPENDS resgen
+        COMMAND $<TARGET_FILE:lightc> --dfg -o ${DFG_LUT_OUTPUT}
+        DEPENDS lightc
         COMMENT "Generating DFG LUT texture"
 )
 target_sources(ailo PRIVATE ${DFG_LUT_OUTPUT})
-
-# Radiance map generation function
-function(add_radiance_map TARGET INPUT_HDR)
-    set(oneValueArgs NAME SIZE SAMPLES)
-    cmake_parse_arguments(RADIANCE "" "${oneValueArgs}" "" ${ARGN})
-
-    get_filename_component(FILE_NAME ${INPUT_HDR} NAME_WE)
-
-    if(RADIANCE_NAME)
-        set(OUTPUT_NAME ${RADIANCE_NAME})
-    else()
-        set(OUTPUT_NAME ${FILE_NAME})
-    endif()
-
-    set(OPTIONAL_ARGS "")
-    if(RADIANCE_SIZE)
-        list(APPEND OPTIONAL_ARGS ${RADIANCE_SIZE})
-        if(RADIANCE_SAMPLES)
-            list(APPEND OPTIONAL_ARGS ${RADIANCE_SAMPLES})
-        endif()
-    endif()
-
-    set(OUTPUT_DIR ${CMAKE_BINARY_DIR}/assets/textures/${OUTPUT_NAME})
-    set(OUTPUT_BASE ${OUTPUT_DIR}/${OUTPUT_NAME}.hdr)
-
-    set(STAMP ${OUTPUT_DIR}/${OUTPUT_NAME}.stamp)
-
-    add_custom_command(
-            OUTPUT ${STAMP}
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${OUTPUT_DIR}"
-            COMMAND $<TARGET_FILE:resgen> ibl-prefilter ${CMAKE_SOURCE_DIR}/${INPUT_HDR} ${OUTPUT_BASE} ${OPTIONAL_ARGS}
-            COMMAND ${CMAKE_COMMAND} -E touch ${STAMP}
-            DEPENDS resgen ${CMAKE_SOURCE_DIR}/${INPUT_HDR}
-            COMMENT "Generating radiance map from ${INPUT_HDR}"
-            USES_TERMINAL
-    )
-
-    target_sources(${TARGET} PRIVATE ${STAMP})
-endfunction()
-
-add_radiance_map(ailo assets/textures/rogland_clear_night_4k.hdr)
 
 # Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
 # assets/ with the tool its extension maps to in config.json and copies everything else. CMake only generates the
@@ -359,6 +317,7 @@ add_custom_command(
                 --tool texc=$<TARGET_FILE:texc>
                 --tool matcomp=$<TARGET_FILE:matcomp>
                 --tool modelc=$<TARGET_FILE:modelc>
+                --tool lightc=$<TARGET_FILE:lightc>
         DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
         COMMENT "Generating build_assets.ninja"
 )
@@ -373,7 +332,7 @@ add_custom_target(ailo_assets ALL
         COMMENT "Building assets"
         USES_TERMINAL
 )
-add_dependencies(ailo_assets texc matcomp modelc)
+add_dependencies(ailo_assets texc matcomp modelc lightc)
 add_dependencies(ailo ailo_assets)
 
 # Add shaders

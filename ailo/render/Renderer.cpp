@@ -53,7 +53,6 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   : m_settings(settings), m_renderAPI(renderApi) {
   m_defaultIblSpecular = server.load<Texture>(textures::kBlackCube);
 
-  // vk::Format::eR32G32B32A32Sfloat
   m_iblDfgLut = server.load<Texture>(m_settings.dfgLutPath);
 
   auto backend = m_renderAPI;
