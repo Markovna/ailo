@@ -1,23 +1,25 @@
 # lightc
 
-Bakes image-based lighting data into texture packages (`.texpack`, `ailo/render/texture/TexturePackage.h`):
+Bakes image-based lighting data:
 
-- a light definition (`.light`) naming an equirectangular HDR environment becomes its prefiltered specular radiance
-  cubemap;
-- `--dfg` writes the DFG LUT of the split-sum approximation. It has no source, so CMake runs it, not the asset build.
+- a light definition (`.light`) naming an equirectangular HDR environment becomes a lighting package (`.lightpack`,
+  `ailo/render/lighting/LightingPackage.h`): its prefiltered specular radiance cubemap and the spherical harmonics of
+  its diffuse irradiance;
+- `--dfg` writes the DFG LUT of the split-sum approximation as a texture package (`.texpack`). It has no source, so
+  CMake runs it, not the asset build.
 
 ```
-lightc -o <output.texpack> [--depfile <file>] [--root <assets folder>] <input.light>
+lightc -o <output.lightpack> [--depfile <file>] [--root <assets folder>] <input.light>
 lightc --dfg -o <output.texpack>
 ```
 
 - `--root` is the assets folder that paths starting with `/` are relative to. The asset build passes it.
 - `--depfile` lists the `.light` file and its source image, so editing either rebakes it.
-- `texc --dump <package.texpack>` prints the header of either output.
+- `texc --dump <package.texpack>` prints the header of the DFG LUT.
 
 It is run by the asset build (`build/README.md`): every `.light` file in `assets/` (`assets/<dir>/<name>.light`) is
-baked into `<build>/assets/<dir>/<name>.texpack`, loaded with `server.load<Texture>("assets/<dir>/<name>")`. The DFG LUT
-is built by CMake into `<build>/assets/textures/dfg_lut.texpack` (key `assets/textures/dfg_lut`).
+baked into `<build>/assets/<dir>/<name>.lightpack`, loaded with `server.load<IndirectLight>("assets/<dir>/<name>")`.
+The DFG LUT is built by CMake into `<build>/assets/textures/dfg_lut.texpack` (key `assets/textures/dfg_lut`).
 
 ## Outputs
 
@@ -25,6 +27,14 @@ is built by CMake into `<build>/assets/textures/dfg_lut.texpack` (key `assets/te
 filtered with the GGX lobe of perceptual roughness `r` where `lod = i / (n - 1) = r * (2 - r)`, the mapping the shader
 inverts (`iblSpecularMaxLod` is `n - 1`). Level 0 is the unfiltered environment. Each GGX sample reads a mip of the
 source whose texels cover its solid angle (filtered importance sampling), so few samples don't alias.
+
+**Irradiance SH:** 9 RGB coefficients (L2). Level 0 of the prefiltered cubemap (the unfiltered environment) is
+projected onto the real SH basis, each texel weighted by its solid angle, so the SH use the same directions as the
+cubemap the shader samples. The coefficients are convolved with the clamped cosine (`A_l` = pi, 2pi/3, pi/4), divided
+by pi and multiplied by their basis constant, so the shader evaluates `max(sum(sh[i] * poly_i(n)), 0)` and gets the
+radiance a white Lambertian surface with normal `n` reflects. `poly` is, in order:
+`1, y, z, x, y*x, y*z, 3*z*z - 1, z*x, x*x - y*y`. The shader (`irradianceSH` in `shaders/surface/surface_shading_lit.fs`)
+must use the same order.
 
 **DFG LUT:** a 256x256 `rgba32f` 2D texture without mips. `x` is NoV, `y` is perceptual roughness, both at texel centers;
 `rg` hold the multiscatter DFG terms.

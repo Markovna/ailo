@@ -2,6 +2,7 @@
 
 #include "DefaultAssetFactory.h"
 #include "DefaultAssets.h"
+#include "IndirectLight.h"
 #include "Material.h"
 #include "Model.h"
 #include "RenderAPI.h"
@@ -50,9 +51,11 @@ void RenderPlugin::build(App& app) {
     auto& clips = addAssetType<AnimationClip>(app);
     auto& materialInstances = addAssetType<MaterialInstance>(app);
     addAssetType<Model>(app);
+    auto& indirectLights = addAssetType<IndirectLight>(app);
 
     server.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
     server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
+    server.registerLoader<IndirectLight>(std::make_unique<IndirectLightLoader>(&api, &textureStorage));
     server.registerLoader<Model>(std::make_unique<ModelLoader>(&api, &server, ModelLoader::Storages {
         .textures = &textureStorage,
         .meshes = &meshStorage,

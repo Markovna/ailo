@@ -323,9 +323,13 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, sceneLighting ? sceneLighting->sunIntensity : 1.0f);
   m_perViewUniformBufferData.iblIntensity = sceneLighting ? sceneLighting->iblIntensity : 1.0f;
   m_perViewUniformBufferData.lightDirection = lightDir;
-  const Texture& iblSpecular = sceneLighting && sceneLighting->prefilteredEnvMap
-      ? *sceneLighting->prefilteredEnvMap : *m_defaultIblSpecular;
+  const IndirectLight* indirectLight = sceneLighting && sceneLighting->indirectLight
+      ? &*sceneLighting->indirectLight : nullptr;
+  const Texture& iblSpecular = indirectLight ? *indirectLight->reflections : *m_defaultIblSpecular;
   m_perViewUniformBufferData.iblSpecularMaxLod = static_cast<float>(iblSpecular.getLevels() - 1);
+  for (size_t i = 0; i < lighting::kIrradianceSHCount; i++) {
+    m_perViewUniformBufferData.iblSH[i] = glm::vec4(indirectLight ? indirectLight->irradianceSH[i] : glm::vec3(0.0f), 0.0f);
+  }
   m_perViewUniformBufferData.lightViewProjection = lightVP;
 
   uint32_t lightCount = 0;

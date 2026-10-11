@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 
+#include "Cubemap.h"
 #include "stb_image/stb_image.h"
 
 namespace lightc {
@@ -26,15 +27,6 @@ constexpr float INV_TWO_PI = 0.5f / PI;
 constexpr uint32_t kMinPrefilterSize = 16;
 constexpr uint32_t kDfgSize = 256;
 constexpr uint32_t kDfgSamples = 1024;
-
-enum CubeFace {
-    FACE_POS_X = 0,
-    FACE_NEG_X = 1,
-    FACE_POS_Y = 2,
-    FACE_NEG_Y = 3,
-    FACE_POS_Z = 4,
-    FACE_NEG_Z = 5
-};
 
 inline float visibility(float NoV, float NoL, float a) {
     // Heitz 2014, "Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs"
@@ -80,24 +72,6 @@ inline glm::vec2 directionToEquirectUV(const glm::vec3& dir) {
     float theta = std::acos(glm::clamp(dir.y, -1.0f, 1.0f));
     float phi = std::atan2(dir.x, dir.z);
     return glm::vec2((phi + PI) * INV_TWO_PI, theta * INV_PI);
-}
-
-// Direction through (u, v) of a cubemap face, OpenGL convention.
-inline glm::vec3 cubemapToDirection(int face, float u, float v) {
-    float uc = 2.0f * u - 1.0f;
-    float vc = 2.0f * v - 1.0f;
-
-    glm::vec3 dir;
-    switch (face) {
-        case FACE_POS_X: dir = glm::vec3( 1.0f,   -vc,   -uc); break;
-        case FACE_NEG_X: dir = glm::vec3(-1.0f,   -vc,    uc); break;
-        case FACE_POS_Y: dir = glm::vec3(   uc,  1.0f,    vc); break;
-        case FACE_NEG_Y: dir = glm::vec3(   uc, -1.0f,   -vc); break;
-        case FACE_POS_Z: dir = glm::vec3(   uc,   -vc,  1.0f); break;
-        case FACE_NEG_Z: dir = glm::vec3(  -uc,   -vc, -1.0f); break;
-        default: dir = glm::vec3(0.0f, 0.0f, 1.0f); break;
-    }
-    return glm::normalize(dir);
 }
 
 // Bilinear sample of an RGB equirect image, wrapping horizontally.

@@ -70,6 +70,14 @@ add_library(ailo_model STATIC
 target_include_directories(ailo_model PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
 target_link_libraries(ailo_model PUBLIC glm::glm ailo_texture)
 
+# Lighting package format (IBL baked by lightc), shared by the engine and lightc.
+add_library(ailo_lighting STATIC
+    ailo/render/lighting/LightingPackage.cpp
+    ailo/render/lighting/LightingPackage.h
+)
+target_include_directories(ailo_lighting PUBLIC ${CMAKE_SOURCE_DIR}/ailo)
+target_link_libraries(ailo_lighting PUBLIC glm::glm ailo_texture)
+
 add_subdirectory(tools/json)
 add_subdirectory(tools/matcomp)
 add_subdirectory(tools/texc)
@@ -107,6 +115,8 @@ add_executable(ailo
     ailo/render/Mesh.h
     ailo/render/Model.cpp
     ailo/render/Model.h
+    ailo/render/IndirectLight.cpp
+    ailo/render/IndirectLight.h
     ailo/ecs/Transform.h
     ailo/ecs/Transform.cpp
     ailo/ecs/Hierarchy.h
@@ -202,6 +212,7 @@ target_link_libraries(ailo
         Jolt
         ailo_material
         ailo_model
+        ailo_lighting
         ailo_texture
         ailo_fileio
 )
@@ -362,6 +373,14 @@ target_link_libraries(texturetest ailo_texture stb_image)
 
 add_executable(modeltest ailo/render/model/model_tests.cpp)
 target_link_libraries(modeltest ailo_model)
+
+# Also checks lightc's SH projection, whose output the package format defines.
+add_executable(lightingtest
+        ailo/render/lighting/lighting_tests.cpp
+        tools/lightc/src/SphericalHarmonics.cpp
+)
+target_link_libraries(lightingtest ailo_lighting)
+target_include_directories(lightingtest PRIVATE ${CMAKE_SOURCE_DIR}/tools/lightc/src)
 
 add_executable(transformtest
         ailo/ecs/transform_tests.cpp

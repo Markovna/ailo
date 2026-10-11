@@ -9,6 +9,7 @@ struct ViewUniform {
    uint lightCount; // number of used slots in lights[]
    float iblIntensity;
    mat4 lightViewProjection;
+   vec4 iblSH[9]; // irradiance SH, see LightingPackage.h
 };
 
 struct LightUniform {

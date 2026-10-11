@@ -2,12 +2,16 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "FileIO.h"
 #include "Ibl.h"
 #include "LightDefinition.h"
+#include "SphericalHarmonics.h"
+#include "render/lighting/LightingPackage.h"
 
 namespace fs = std::filesystem;
+using namespace ailo::lighting;
 using namespace ailo::texture;
 using namespace ailo::fileio;
 using namespace lightc;
@@ -16,7 +20,7 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: lightc -o <output.texpack> [--depfile <file>] [--root <assets folder>] <input.light>\n"
+        "usage: lightc -o <output.lightpack> [--depfile <file>] [--root <assets folder>] <input.light>\n"
         "       lightc --dfg -o <output.texpack>\n";
 }
 
@@ -37,8 +41,7 @@ std::string escapeDepfilePath(const fs::path& path) {
     return out;
 }
 
-bool writePackage(const fs::path& output, const TexturePackage& pkg) {
-    auto data = pkg.serialize();
+bool writeData(const fs::path& output, const std::vector<uint8_t>& data) {
     if (!writeFile(output, data.data(), data.size())) {
         std::cerr << output.generic_string() << ": error: cannot write file\n";
         return false;
@@ -78,7 +81,7 @@ int main(int argc, char** argv) {
     }
 
     if (dfg) {
-        return writePackage(output, dfgLut()) ? 0 : 1;
+        return writeData(output, dfgLut().serialize()) ? 0 : 1;
     }
 
     const std::string sourceName = input.generic_string();
@@ -108,13 +111,21 @@ int main(int argc, char** argv) {
     }
 
     std::string error;
-    std::optional<TexturePackage> pkg = prefilterEnvironment(def.source, def.prefilter, error);
-    if (!pkg) {
+    std::optional<TexturePackage> reflections = prefilterEnvironment(def.source, def.prefilter, error);
+    if (!reflections) {
         std::cerr << sourceName << ": error: " << error << "\n";
         return 1;
     }
 
-    if (!writePackage(output, *pkg)) return 1;
+    LightingPackage pkg;
+    pkg.irradianceSH = projectIrradianceSH(*reflections);
+    pkg.reflections = std::move(*reflections);
+    if (error = pkg.validate(); !error.empty()) {
+        std::cerr << sourceName << ": error: " << error << "\n";
+        return 1;
+    }
+
+    if (!writeData(output, pkg.serialize())) return 1;
 
     if (!depfile.empty()) {
         std::string deps = escapeDepfilePath(output) + ": " + escapeDepfilePath(fs::weakly_canonical(input)) + " " +

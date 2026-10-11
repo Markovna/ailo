@@ -57,7 +57,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
             .cubemap = server.load<Texture>("assets/textures/rogland_clear_night_skybox"),
         },
         SceneLighting {
-            .prefilteredEnvMap = server.load<Texture>("assets/textures/rogland_clear_night_4k"),
+            .indirectLight = server.load<IndirectLight>("assets/textures/rogland_clear_night_4k"),
             .lightDirection = glm::normalize(glm::vec3(0.2, 1.1, -0.2)),
             .sunIntensity = 3.0f,
             .iblIntensity = 0.5f,

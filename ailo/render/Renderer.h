@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Renderable.h"
+#include "render/lighting/LightingPackage.h"
 
 namespace ailo {
 
@@ -23,6 +24,8 @@ struct PerViewUniforms {
   float iblIntensity;
   float __padding1;
   alignas(16) glm::mat4 lightViewProjection;
+  // Irradiance SH (IndirectLight::irradianceSH); vec4 because std140 pads vec3 array elements to 16 bytes.
+  glm::vec4 iblSH[lighting::kIrradianceSHCount];
 };
 
 struct LightUniform {

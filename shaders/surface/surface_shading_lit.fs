@@ -29,6 +29,22 @@ vec3 sampleDFG(float NoV, float perceptualRoughness) {
     return textureLod(iblDFG, uv, 0.0).rgb;
 }
 
+// Diffuse irradiance / pi in direction n, from the L2 SH baked by lightc. The basis order and constants must match
+// tools/lightc/src/SphericalHarmonics.cpp. Clamped because a truncated SH of a high-contrast environment rings negative.
+vec3 irradianceSH(vec3 n) {
+    return max(
+          view.iblSH[0].rgb
+        + view.iblSH[1].rgb * n.y
+        + view.iblSH[2].rgb * n.z
+        + view.iblSH[3].rgb * n.x
+        + view.iblSH[4].rgb * (n.y * n.x)
+        + view.iblSH[5].rgb * (n.y * n.z)
+        + view.iblSH[6].rgb * (3.0 * n.z * n.z - 1.0)
+        + view.iblSH[7].rgb * (n.z * n.x)
+        + view.iblSH[8].rgb * (n.x * n.x - n.y * n.y),
+        0.0);
+}
+
 void getPixel(const MaterialInputs material, out Pixel pixel) {
     vec4 baseColor = material.baseColor;
     float metallic = material.metallic;
@@ -254,7 +270,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 prefilteredRadiance = textureLod(iblSpecular, reflected, radianceLod).rgb;
     vec3 Fr = E * prefilteredRadiance;
 
-    vec3 diffuseIrradiance = textureLod(iblSpecular, shading_normal, view.iblSpecularMaxLod).rgb;
+    vec3 diffuseIrradiance = irradianceSH(shading_normal);
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
 
     color.rgb += ambientLuminance * (Fd + Fr);

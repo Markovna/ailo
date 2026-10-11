@@ -6,14 +6,18 @@ set(CMAKE_CXX_STANDARD 23)
 # always build optimized, even in Debug configs
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_RELEASE}")
 
-# The package code and stb_image are compiled into lightc instead of linking ailo_texture and stb_image, which are
-# built with the engine's flags (see tools/texc).
+# The package code and stb_image are compiled into lightc instead of linking ailo_lighting, ailo_texture and
+# stb_image, which are built with the engine's flags (see tools/texc).
 add_executable(lightc
         src/main.cpp
         src/Ibl.cpp
         src/Ibl.h
         src/LightDefinition.cpp
         src/LightDefinition.h
+        src/SphericalHarmonics.cpp
+        src/SphericalHarmonics.h
+        src/Cubemap.h
+        ${CMAKE_SOURCE_DIR}/ailo/render/lighting/LightingPackage.cpp
         ${CMAKE_SOURCE_DIR}/ailo/render/texture/TexturePackage.cpp
         ${CMAKE_SOURCE_DIR}/third_party/stb_image/src/stb_image.cpp
 )

@@ -48,7 +48,7 @@ Strict JSON with `//` and `/* */` comments.
             "depfile": "$out.d"
         },
         "lightc": {
-            "extensions": { ".light": ".texpack" },
+            "extensions": { ".light": ".lightpack" },
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         }
