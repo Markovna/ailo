@@ -7,6 +7,8 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
 - **Config** (`config.json`): maps each tool to the extensions it compiles and the extension of each one's output. A
   file whose extension is not listed is copied.
 - **Generator** (`gen.py`): scans `assets/` and writes `<build>/build_assets.ninja`, one edge per file.
+- **Ignore file** (`assets/.assetignore`): files and folders the generator skips, e.g. source images that are only
+  read by a tool.
 - **Ninja** compares timestamps and runs only what is out of date, on all cores. Its log and deps live in
   `<build>/asset_build/`, apart from CMake's.
 - **Tools** (e.g. `texc`) compile a single asset and can write a depfile with the extra inputs they read (source
@@ -51,6 +53,19 @@ Strict JSON with `//` and `/* */` comments.
 | `tools.<name>.args`        | Tool arguments, the same for every extension: the tool decides what to compile from `$in`'s extension. Ninja variables: `$in` is the asset file (absolute), `$out` is the output (relative to the build folder). Default: `["$in", "$out"]`. |
 | `tools.<name>.depfile`     | Optional. The Makefile-style depfile the tool writes. Its target must be `$out` as passed. |
 | `tools.<name>.description` | Optional. Printed before the asset's path. Default: the tool name. |
+
+## Ignore file
+
+`assets/.assetignore` uses a subset of `.gitignore` syntax. One pattern per line; blank lines and lines starting with
+`#` are skipped. Matching is case-insensitive, and an ignored folder is not scanned at all.
+
+| Pattern                 | Ignores |
+|-------------------------|---------|
+| `*.hdr`                 | Every file or folder with that name, at any depth (`*`, `?` and `[...]` are glob wildcards). |
+| `sources/`              | A trailing `/` matches folders only. |
+| `textures/sky.hdr`      | A pattern containing `/` (other than a trailing one) is matched against the whole path relative to `assets/`. A leading `/` is allowed. |
+
+Negation (`!`) and `**` are not supported. Editing the file regenerates the manifest.
 
 ## Adding an asset kind
 

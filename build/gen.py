@@ -2,16 +2,18 @@
 """Writes build_assets.ninja: one edge per file in the assets folder, compiling it or copying it into the build folder.
 
 The config maps file extensions to the tool that compiles them and the extension of the output; every other file is
-copied. The manifest regenerates itself when a file is added to or removed from the assets folder. See README.md.
+copied. Files and folders matched by the assets folder's .assetignore are skipped. The manifest regenerates itself when a file is added to or removed from the assets folder. See README.md.
 """
 
 import argparse
+import fnmatch
 import json
 import os
 import sys
 from pathlib import Path
 
 MANIFEST = "build_assets.ninja"
+IGNORE_FILE = ".assetignore"
 
 
 def strip_comments(text):
@@ -51,6 +53,34 @@ def strip_comments(text):
 def load_json(path):
     with open(path, encoding="utf-8-sig") as f:
         return json.loads(strip_comments(f.read()))
+
+
+def load_ignore(path):
+    """Parses a .gitignore-like file into (pattern, dir_only, anchored) tuples. See README.md."""
+    patterns = []
+    if not path.is_file():
+        return patterns
+    with open(path, encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            dir_only = line.endswith("/")
+            line = line.rstrip("/")
+            anchored = "/" in line
+            patterns.append((line.lstrip("/").lower(), dir_only, anchored))
+    return patterns
+
+
+def is_ignored(patterns, rel, is_dir):
+    rel = rel.lower()
+    name = rel.rpartition("/")[2]
+    for pattern, dir_only, anchored in patterns:
+        if dir_only and not is_dir:
+            continue
+        if fnmatch.fnmatchcase(rel if anchored else name, pattern):
+            return True
+    return False
 
 
 def escape_path(path):
@@ -132,16 +162,23 @@ def main():
             lines += [f"  depfile = {t['depfile']}", "  deps = gcc"]
         lines += [f"  description = {t.get('description', name)} $name", ""]
 
+    ignore_path = source / IGNORE_FILE
+    ignore = load_ignore(ignore_path)
     regen_inputs = [posix(Path(__file__).resolve()), posix(config_path)]
+    if ignore_path.is_file():
+        regen_inputs.append(posix(ignore_path))
     outputs = {}
     edges = []
 
     for dirpath, dirnames, filenames in os.walk(source):
-        dirnames.sort()
+        rel_dir = Path(dirpath).relative_to(source)
+        dirnames[:] = sorted(d for d in dirnames if not is_ignored(ignore, posix(rel_dir / d), True))
         regen_inputs.append(posix(dirpath))
         for filename in sorted(filenames):
             path = Path(dirpath) / filename
             rel = posix(path.relative_to(source))
+            if rel == IGNORE_FILE or is_ignored(ignore, rel, False):
+                continue
             compiled = by_extension.get(path.suffix.lower())
 
             if compiled:
