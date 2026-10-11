@@ -12,7 +12,8 @@ modelc --dump <package.modelpack>
 - `--root` is the assets folder that a `source` starting with `/` is relative to. The asset build passes it.
 - `--depfile` lists the `.model` file and every file assimp opened (the source, `.bin` buffers, `.mtl` libraries,
   ...).
-- `--dump` prints the package's meshes, materials with their parameters, instances, skeleton, clips and embedded
+- `--dump` prints the package's meshes (with meshoptimizer's ACMR and ATVR for a 16-entry cache, overfetch and
+  overdraw), materials with their parameters, instances, skeleton, clips and embedded
   textures.
 
 It is run by the asset build (`build/README.md`): `assets/<dir>/<name>.model` builds
@@ -39,6 +40,7 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `source`    | string | Required. The model file, relative to the `.model` file, or to the assets folder if it starts with `/` (`"/models/sponza/Sponza.gltf"`). |
 | `material`  | string | Required. Asset key of the material every mesh uses. |
 | `materials` | object | Optional. Source material name -> material key, overriding `material`. Naming a material the source doesn't have is an error. |
+| `optimize`  | bool   | Optional, default `true`. Optimizes the meshes with meshoptimizer (see [Geometry](#geometry)); `false` keeps assimp's vertex and triangle order. |
 
 modelc never reads the materials: it writes their keys, and the runtime loads them. It writes these parameters when
 the source has them, and the runtime skips (with a warning) the ones the material doesn't declare:
@@ -66,6 +68,9 @@ the source has them, and the runtime skips (with a warning) the ones the materia
 
 Meshes are triangulated and split to at most 65535 vertices (indices are 16-bit). Points and lines are dropped.
 Vertices are stored in the engine's layout (`model::StaticVertex`, or `model::SkinnedVertex` with up to 4 bone weights
-for skinned meshes); identical vertices are merged. The node hierarchy is flattened into mesh instances with their
+for skinned meshes); identical vertices are merged. Unless `"optimize": false`, each mesh is then optimized with
+[meshoptimizer](https://github.com/zeux/meshoptimizer): vertices identical in the engine's layout are merged again,
+triangles are reordered for the post-transform vertex cache and then for overdraw (accepting up to 5% worse cache
+efficiency), and vertices are reordered by first use for vertex fetch. The node hierarchy is flattened into mesh instances with their
 transforms relative to the root. A skeleton (bones and their ancestors) and animation clips are written if any mesh is
 skinned.

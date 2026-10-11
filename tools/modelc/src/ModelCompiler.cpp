@@ -5,9 +5,11 @@
 #include <assimp/material.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <meshoptimizer.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstring>
 #include <functional>
 #include <map>
@@ -29,6 +31,11 @@ namespace {
 constexpr const char* kDefaultMetallicRoughness = "builtin://textures/default_metallic_roughness";
 
 constexpr unsigned kMaxVertices = 65535;
+
+// meshopt_optimizeOverdraw may make the vertex cache this much worse to reduce overdraw (its recommended value).
+constexpr float kOverdrawThreshold = 1.05f;
+
+static_assert(offsetof(StaticVertex, position) == 0 && offsetof(SkinnedVertex, position) == 0);
 
 fs::path fromUtf8(const std::string& s) {
     return fs::path(std::u8string(s.begin(), s.end()));
@@ -124,6 +131,9 @@ public:
         buildSkeleton();
         buildMaterials();
         buildMeshes();
+        if (m_def.optimize) {
+            for (Mesh& mesh : m_pkg.meshes) optimizeMesh(mesh);
+        }
         buildClips();
         buildInstances(m_scene->mRootNode, glm::mat4(1.0f));
     }
@@ -352,6 +362,30 @@ private:
             }
             storeVertices(mesh, vertices);
         }
+    }
+
+    // Merges vertices that are identical in the engine's layout (assimp compares its own attributes, some of which are
+    // dropped or defaulted here), then orders triangles for the post-transform cache and overdraw, and vertices by
+    // first use. Overdraw reads positions at offset 0 of the vertex (asserted at the top).
+    static void optimizeMesh(Mesh& mesh) {
+        const size_t stride = vertexStride(mesh.layout);
+        const size_t indexCount = mesh.indices.size();
+
+        std::vector<unsigned> remap(mesh.vertexCount);
+        const size_t vertexCount = meshopt_generateVertexRemap(remap.data(), mesh.indices.data(), indexCount,
+                                                               mesh.vertices.data(), mesh.vertexCount, stride);
+        std::vector<uint8_t> vertices(vertexCount * stride);
+        meshopt_remapVertexBuffer(vertices.data(), mesh.vertices.data(), mesh.vertexCount, stride, remap.data());
+        meshopt_remapIndexBuffer(mesh.indices.data(), mesh.indices.data(), indexCount, remap.data());
+
+        meshopt_optimizeVertexCache(mesh.indices.data(), mesh.indices.data(), indexCount, vertexCount);
+        meshopt_optimizeOverdraw(mesh.indices.data(), mesh.indices.data(), indexCount,
+                                 reinterpret_cast<const float*>(vertices.data()), vertexCount, stride, kOverdrawThreshold);
+
+        mesh.vertices.resize(vertexCount * stride);
+        mesh.vertexCount = uint32_t(meshopt_optimizeVertexFetch(mesh.vertices.data(), mesh.indices.data(), indexCount,
+                                                                vertices.data(), vertexCount, stride));
+        mesh.vertices.resize(size_t(mesh.vertexCount) * stride);
     }
 
     void buildClips() {

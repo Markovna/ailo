@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 
+#include <meshoptimizer.h>
+
 #include "FileIO.h"
 #include "ModelCompiler.h"
 #include "ModelDefinition.h"
@@ -13,6 +15,9 @@ using namespace ailo::fileio;
 using namespace modelc;
 
 namespace {
+
+// FIFO cache size used for the ACMR/ATVR stats in --dump.
+constexpr unsigned kCacheSize = 16;
 
 void printUsage() {
     std::cerr <<
@@ -62,8 +67,17 @@ int dump(const fs::path& path) {
     std::cout << "meshes: " << pkg->meshes.size() << "\n";
     for (size_t i = 0; i < pkg->meshes.size(); i++) {
         const auto& mesh = pkg->meshes[i];
+        const size_t stride = vertexStride(mesh.layout);
+        auto cache = meshopt_analyzeVertexCache(mesh.indices.data(), mesh.indices.size(), mesh.vertexCount,
+                                                kCacheSize, 0, 0);
+        auto fetch = meshopt_analyzeVertexFetch(mesh.indices.data(), mesh.indices.size(), mesh.vertexCount, stride);
+        auto overdraw = meshopt_analyzeOverdraw(mesh.indices.data(), mesh.indices.size(),
+                                                reinterpret_cast<const float*>(mesh.vertices.data()), mesh.vertexCount,
+                                                stride);
         std::cout << "  " << i << ": " << (mesh.layout == VertexLayout::Skinned ? "skinned" : "static") << ", "
-                  << mesh.vertexCount << " vertices, " << mesh.indices.size() / 3 << " triangles\n";
+                  << mesh.vertexCount << " vertices, " << mesh.indices.size() / 3 << " triangles, acmr "
+                  << cache.acmr << ", atvr " << cache.atvr << ", overfetch " << fetch.overfetch << ", overdraw "
+                  << overdraw.overdraw << "\n";
     }
 
     std::cout << "materials: " << pkg->materials.size() << "\n";
