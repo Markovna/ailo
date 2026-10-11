@@ -54,7 +54,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         Camera { },
         OrbitCamera { .distance = 10.0f },
         Skybox {
-            .cubemap = server.load<Texture>("assets/textures/yokohama/yokohama"),
+            .cubemap = server.load<Texture>("assets/textures/rogland_clear_night_skybox"),
         },
         SceneLighting {
             .prefilteredEnvMap = server.load<Texture>("assets/textures/rogland_clear_night_4k"),
@@ -76,7 +76,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         .outerAngle = glm::radians(66.0f),
     });
 
-    auto characterTransform =glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
+    auto characterTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/Sponza.gltf"));

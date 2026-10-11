@@ -1,9 +1,12 @@
 #include "TexturePacker.h"
 
+#include <algorithm>
 #include <climits>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <numbers>
 #include <utility>
 
 #include "stb_image/stb_image.h"
@@ -83,6 +86,33 @@ TexturePackage makePackage(TextureType type, const Image& first, const TextureIm
     pkg.levels = 1;
     pkg.generateMipmaps = options.mipmaps && mipLevelCount(first.width, first.height) > 1;
     return pkg;
+}
+
+// Bilinear sample at (u, v) in [0, 1], wrapping horizontally and clamping vertically.
+void sampleEquirect(const Image& image, float u, float v, float out[4]) {
+    const float fx = (u - std::floor(u)) * float(image.width) - 0.5f;
+    const float fy = std::clamp(v, 0.0f, 1.0f) * float(image.height) - 0.5f;
+    const float x0f = std::floor(fx), y0f = std::floor(fy);
+    const float tx = fx - x0f, ty = fy - y0f;
+
+    const int w = int(image.width), h = int(image.height);
+    const int xs[2] = { ((int(x0f) % w) + w) % w, ((int(x0f) + 1) % w + w) % w };
+    const int ys[2] = { std::clamp(int(y0f), 0, h - 1), std::clamp(int(y0f) + 1, 0, h - 1) };
+    const float weights[2][2] = { { (1 - tx) * (1 - ty), tx * (1 - ty) }, { (1 - tx) * ty, tx * ty } };
+
+    const bool hdr = image.format == TextureFormat::RGBA32F;
+    std::fill(out, out + 4, 0.0f);
+    for (int j = 0; j < 2; j++) {
+        for (int i = 0; i < 2; i++) {
+            const size_t index = (size_t(ys[j]) * image.width + xs[i]) * 4;
+            for (int c = 0; c < 4; c++) {
+                float value;
+                if (hdr) std::memcpy(&value, image.data.data() + (index + c) * sizeof(float), sizeof(float));
+                else value = image.data[index + c];
+                out[c] += value * weights[j][i];
+            }
+        }
+    }
 }
 
 std::optional<TexturePackage> finish(TexturePackage pkg, std::string& error) {
@@ -167,6 +197,78 @@ std::optional<TexturePackage> packCubemap(std::span<const fs::path, 6> faces, co
         pkg.data.insert(pkg.data.end(), face.data.begin(), face.data.end());
     }
     return finish(std::move(pkg), error);
+}
+
+std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, uint32_t faceSize,
+                                                      const TextureImportOptions& options, std::string& error) {
+    std::vector<uint8_t> encoded;
+    if (!readFile(source, encoded, error)) return std::nullopt;
+
+    Image image;
+    if (!decode(encoded, options, image, error)) {
+        error = describe(source, error);
+        return std::nullopt;
+    }
+
+    const uint32_t size = faceSize ? faceSize : std::max(image.width / 4, 1u);
+    TexturePackage pkg = makePackage(TextureType::Cubemap, Image { .width = size, .height = size, .format = image.format },
+                                     options);
+    pkg.data.resize(pkg.expectedDataSize());
+
+    // Each face texel averages a 4x4 grid of bilinear samples: towards the poles it covers many equirect texels
+    // horizontally, which a single sample would alias.
+    constexpr int kGrid = 4;
+    constexpr float pi = std::numbers::pi_v<float>;
+    const bool hdr = image.format == TextureFormat::RGBA32F;
+    const uint32_t pixelSize = bytesPerPixel(image.format);
+
+    for (uint32_t face = 0; face < 6; face++) {
+        uint8_t* faceData = pkg.data.data() + pkg.imageSize(0) * face;
+        for (uint32_t y = 0; y < size; y++) {
+            for (uint32_t x = 0; x < size; x++) {
+                float sum[4] = {};
+                for (int sy = 0; sy < kGrid; sy++) {
+                    for (int sx = 0; sx < kGrid; sx++) {
+                        // Direction through the face, as Vulkan selects cube faces: +x -x +y -y +z -z.
+                        const float uc = 2.0f * (float(x) + (float(sx) + 0.5f) / kGrid) / float(size) - 1.0f;
+                        const float vc = 2.0f * (float(y) + (float(sy) + 0.5f) / kGrid) / float(size) - 1.0f;
+                        float d[3];
+                        switch (face) {
+                            case 0:  d[0] = 1;   d[1] = -vc; d[2] = -uc; break;
+                            case 1:  d[0] = -1;  d[1] = -vc; d[2] = uc;  break;
+                            case 2:  d[0] = uc;  d[1] = 1;   d[2] = vc;  break;
+                            case 3:  d[0] = uc;  d[1] = -1;  d[2] = -vc; break;
+                            case 4:  d[0] = uc;  d[1] = -vc; d[2] = 1;   break;
+                            default: d[0] = -uc; d[1] = -vc; d[2] = -1;  break;
+                        }
+                        const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+                        // The mapping lightc prefilters with, so the sky matches its reflections.
+                        const float u = (std::atan2(d[0], d[2]) + pi) / (2.0f * pi);
+                        const float v = std::acos(std::clamp(d[1] / length, -1.0f, 1.0f)) / pi;
+
+                        float sample[4];
+                        sampleEquirect(image, u, v, sample);
+                        for (int c = 0; c < 4; c++) sum[c] += sample[c];
+                    }
+                }
+
+                uint8_t* pixel = faceData + (size_t(y) * size + x) * pixelSize;
+                for (int c = 0; c < 4; c++) {
+                    const float value = sum[c] / (kGrid * kGrid);
+                    if (hdr) {
+                        std::memcpy(pixel + c * sizeof(float), &value, sizeof(float));
+                    } else {
+                        pixel[c] = uint8_t(std::clamp(std::lround(value), 0l, 255l));
+                    }
+                }
+            }
+        }
+    }
+
+    auto result = finish(std::move(pkg), error);
+    if (!result) error = describe(source, error);
+    return result;
 }
 
 std::array<fs::path, 6> cubemapFacePaths(const fs::path& path) {

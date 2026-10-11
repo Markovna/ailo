@@ -30,6 +30,10 @@ std::optional<TexturePackage> packTextureFromPixels(const void* pixels, uint32_t
 std::optional<TexturePackage> packCubemap(std::span<const std::filesystem::path, 6> faces, const TextureImportOptions&,
                                           std::string& error);
 
+// Resamples an equirectangular image into a cubemap with faces of faceSize (0: a quarter of the image's width).
+std::optional<TexturePackage> packCubemapFromEquirect(const std::filesystem::path& source, uint32_t faceSize,
+                                                      const TextureImportOptions&, std::string& error);
+
 std::array<std::filesystem::path, 6> cubemapFacePaths(const std::filesystem::path& path);
 
 }

@@ -121,9 +121,14 @@ int main(int argc, char** argv) {
     }
 
     std::string error;
-    std::optional<TexturePackage> pkg = def.type == TextureType::Cubemap
-        ? packCubemap(std::span<const fs::path, 6>(def.sources.data(), 6), def.options, error)
-        : packTexture(def.sources[0], def.options, error);
+    std::optional<TexturePackage> pkg;
+    if (def.equirectangular) {
+        pkg = packCubemapFromEquirect(def.sources[0], def.faceSize, def.options, error);
+    } else if (def.type == TextureType::Cubemap) {
+        pkg = packCubemap(std::span<const fs::path, 6>(def.sources.data(), 6), def.options, error);
+    } else {
+        pkg = packTexture(def.sources[0], def.options, error);
+    }
     if (!pkg) {
         std::cerr << sourceName << ": error: " << error << "\n";
         return 1;

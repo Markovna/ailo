@@ -316,6 +316,49 @@ void testPackCubemap() {
     fs::remove_all(dir);
 }
 
+void testPackCubemapFromEquirect() {
+    auto dir = scratchDir();
+    auto path = dir / "sky.hdr";
+
+    // Upper half red, lower half blue.
+    std::vector<float> rgb;
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 16; x++) {
+            rgb.insert(rgb.end(), { y < 4 ? 1.0f : 0.0f, 0.0f, y < 4 ? 0.0f : 1.0f });
+        }
+    }
+    writeFile(path, encodeHdr(16, 8, rgb));
+
+    std::string error;
+    auto pkg = packCubemapFromEquirect(path, 0, { .mipmaps = false }, error);
+    assert(pkg);
+    assert(pkg->type == TextureType::Cubemap);
+    assert(pkg->format == TextureFormat::RGBA32F);
+    assert(pkg->width == 4 && pkg->height == 4 && pkg->levels == 1);
+    assert(!pkg->generateMipmaps);
+
+    auto texel = [&](uint32_t face, uint32_t x, uint32_t y) {
+        std::array<float, 4> out;
+        std::memcpy(out.data(), pkg->image(0, face).data() + (y * 4 + x) * 16, sizeof(out));
+        return out;
+    };
+    // +y is all sky, -y all ground; the side faces have the horizon across the middle (row 0 is up).
+    assert(texel(2, 1, 1)[0] == 1.0f && texel(2, 1, 1)[2] == 0.0f);
+    assert(texel(3, 2, 2)[0] == 0.0f && texel(3, 2, 2)[2] == 1.0f);
+    for (uint32_t face : { 0u, 1u, 4u, 5u }) {
+        assert(texel(face, 1, 0)[0] == 1.0f && texel(face, 1, 3)[2] == 1.0f);
+        assert(texel(face, 1, 0)[3] == 1.0f);
+    }
+
+    pkg = packCubemapFromEquirect(path, 8, {}, error);
+    assert(pkg && pkg->width == 8 && pkg->generateMipmaps);
+
+    assert(!packCubemapFromEquirect(dir / "missing.hdr", 0, {}, error));
+    assert(contains(error, "missing.hdr") && contains(error, "cannot read"));
+
+    fs::remove_all(dir);
+}
+
 }
 
 int main() {
@@ -329,6 +372,7 @@ int main() {
     testPackFile();
     testCubemapFacePaths();
     testPackCubemap();
+    testPackCubemapFromEquirect();
 
     std::cout << "All texture tests passed" << std::endl;
     return 0;

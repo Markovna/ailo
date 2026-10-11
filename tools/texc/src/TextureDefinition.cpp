@@ -1,5 +1,7 @@
 #include "TextureDefinition.h"
 
+#include <cmath>
+
 #include "Json.h"
 
 using namespace ailo::texture;
@@ -34,6 +36,15 @@ fs::path getPath(const json::Value& v, const std::string& what) {
     return fs::path(s);
 }
 
+uint32_t getSize(const json::Value& v) {
+    expect(v, v.isNumber(), "a number", "size");
+    const double n = v.asNumber();
+    if (n < 1 || n > 65536 || n != std::floor(n)) {
+        fail(v.line, "size must be an integer in [1, 65536], got " + std::to_string(n));
+    }
+    return uint32_t(n);
+}
+
 TextureType getType(const json::Value& v) {
     const auto& s = getString(v, "type");
     if (s == "2d") return TextureType::Texture2D;
@@ -55,6 +66,8 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
     TextureDefinition def;
     const json::Value* sourceValue = nullptr;
     const json::Value* facesValue = nullptr;
+    const json::Value* layoutValue = nullptr;
+    const json::Value* sizeValue = nullptr;
 
     for (const auto& [key, v] : root.asObject()) {
         if (key == "source") sourceValue = &v;
@@ -62,10 +75,24 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
         else if (key == "type") def.type = getType(v);
         else if (key == "srgb") def.options.srgb = getBool(v, "srgb");
         else if (key == "mipmaps") def.options.mipmaps = getBool(v, "mipmaps");
-        else fail(v.line, "unknown texture property \"" + key + "\" (expected source, faces, type, srgb, mipmaps)");
+        else if (key == "layout") layoutValue = &v;
+        else if (key == "size") sizeValue = &v;
+        else fail(v.line, "unknown texture property \"" + key + "\" (expected source, faces, type, layout, size, srgb, mipmaps)");
     }
 
     if (sourceValue && facesValue) fail(facesValue->line, "\"source\" and \"faces\" are mutually exclusive");
+
+    if (layoutValue) {
+        const auto& layout = getString(*layoutValue, "layout");
+        if (layout == "equirectangular") def.equirectangular = true;
+        else if (layout != "faces") fail(layoutValue->line, "unknown layout \"" + layout + "\" (expected faces or equirectangular)");
+        if (def.type != TextureType::Cubemap) fail(layoutValue->line, "\"layout\" requires \"type\": \"cubemap\"");
+        if (def.equirectangular && facesValue) fail(facesValue->line, "an equirectangular cubemap has one \"source\", not \"faces\"");
+    }
+    if (sizeValue) {
+        if (!def.equirectangular) fail(sizeValue->line, "\"size\" requires \"layout\": \"equirectangular\"");
+        def.faceSize = getSize(*sizeValue);
+    }
 
     if (facesValue) {
         if (def.type != TextureType::Cubemap) fail(facesValue->line, "\"faces\" requires \"type\": \"cubemap\"");
@@ -77,7 +104,7 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
         for (const auto& face : faces) def.sources.push_back(getPath(face, "cubemap face"));
     } else if (sourceValue) {
         fs::path path = getPath(*sourceValue, "source");
-        if (def.type == TextureType::Cubemap) {
+        if (def.type == TextureType::Cubemap && !def.equirectangular) {
             auto faces = cubemapFacePaths(path);
             def.sources.assign(faces.begin(), faces.end());
         } else {

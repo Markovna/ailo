@@ -19,6 +19,9 @@ struct TextureDefinition {
     ailo::texture::TextureType type = ailo::texture::TextureType::Texture2D;
     // One image for a 2d texture, six faces (+x -x +y -y +z -z) for a cubemap; relative to the .tex file.
     std::vector<std::filesystem::path> sources;
+    // Cubemap only: sources[0] is one equirectangular image, resampled into faces of faceSize (0: its width / 4).
+    bool equirectangular = false;
+    uint32_t faceSize = 0;
     ailo::texture::TextureImportOptions options;
 };
 

@@ -36,6 +36,8 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `source`  | string           |         | Image path, relative to the `.tex` file, or to the assets folder if it starts with `/` (`"/textures/yokohama/yokohama.jpg"`). For a cubemap, the base path of the six faces: `sky.jpg` reads `sky_px.jpg`, `sky_nx.jpg`, `sky_py.jpg`, `sky_ny.jpg`, `sky_pz.jpg`, `sky_nz.jpg`. |
 | `faces`   | array of 6 strings |       | Cubemap only, instead of `source`: the faces in the order +x, -x, +y, -y, +z, -z. Paths as for `source`. |
 | `type`    | `"2d"` \| `"cubemap"` | `"2d"` | Cubemap faces must be square and all the same size and format. |
+| `layout`  | `"faces"` \| `"equirectangular"` | `"faces"` | Cubemap only. `equirectangular`: `source` is one equirectangular (latitude/longitude) image, resampled into the six faces with the mapping `lightc` prefilters with, so a skybox matches the reflections baked from the same image. |
+| `size`    | int              | width / 4 | Equirectangular only: the face size. |
 | `srgb`    | bool             | `true`  | 8-bit images are stored as `rgba8_srgb`, or `rgba8` when false (normal, roughness/metallic, data maps). |
 | `mipmaps` | bool             | `true`  | Only level 0 is stored; the engine generates the mip chain at load time. |
 
