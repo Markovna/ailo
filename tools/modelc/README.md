@@ -10,8 +10,8 @@ modelc --dump <package.modelpack>
 ```
 
 - `--root` is the assets folder that a `source` starting with `/` is relative to. The asset build passes it.
-- `--depfile` lists the `.model` file, every file assimp opened (the source, `.bin` buffers, `.mtl` libraries, ...)
-  and the `.tex` file of every texture referenced by URI.
+- `--depfile` lists the `.model` file and every file assimp opened (the source, `.bin` buffers, `.mtl` libraries,
+  ...).
 - `--dump` prints the package's meshes, materials with their parameters, instances, skeleton, clips and embedded
   textures.
 
@@ -54,13 +54,13 @@ the source has them, and the runtime skips (with a warning) the ones the materia
 ## Textures
 
 - **Embedded** textures are packed into the model package, sRGB for base color and linear for the other maps.
-- **Referenced by URI**, the texture must have a `.tex` file (`tools/texc/README.md`) at the URI relative to the
-  `.model` file, not to the source model: the source folder's layout is mirrored next to the `.model` file. With
-  `"source": ".source/Sponza.gltf"`, `white.png` is the image `.source/white.png` and needs `white.png.tex` next to
-  the `.model` file (with `"source": ".source/white.png"`). The package stores the URI as written in the source
-  (percent-decoded for glTF), and the runtime loads it as `<model key's folder>/<uri>`, which reads
-  `white.png.texpack`. modelc warns
-  when the `.tex` file's `srgb` flag doesn't match the texture's use. Absolute paths are errors.
+- **Referenced by URI**, the package stores a reference that the runtime resolves: the URI (percent-decoded for
+  glTF) relative to the source model, written relative to the `.model` file, and loaded as
+  `<model key's folder>/<reference>`. modelc doesn't look at the texture and adds no build dependency on it. With
+  `"source": "Sponza.gltf"`, `white.png` is stored as `white.png`, and the runtime reads `white.png.texpack`, built
+  from a `white.png.tex` file next to the `.model` file (`tools/texc/README.md`), and otherwise decodes `white.png`
+  as an sRGB color image, so data textures (normal, metallic/roughness) need a `.tex` file with `"srgb": false`.
+  Absolute paths are errors.
 
 ## Geometry
 

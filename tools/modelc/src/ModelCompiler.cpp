@@ -15,8 +15,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "FileIO.h"
-#include "Json.h"
 #include "render/texture/TexturePacker.h"
 
 namespace fs = std::filesystem;
@@ -90,22 +88,6 @@ std::string percentDecode(const std::string& s) {
         }
     }
     return out;
-}
-
-// The "srgb" flag of a .tex file, true if absent; nullopt if the file can't be parsed (texc reports that).
-std::optional<bool> readTextureSrgb(const fs::path& texFile) {
-    std::string text;
-    if (!fileio::readFile(texFile, text)) return std::nullopt;
-    try {
-        auto root = json::parse(text);
-        if (!root.isObject()) return std::nullopt;
-        for (const auto& [key, v] : root.asObject()) {
-            if (key == "srgb" && v.isBool()) return v.asBool();
-        }
-        return true;
-    } catch (const json::ParseError&) {
-        return std::nullopt;
-    }
 }
 
 class Compiler {
@@ -270,20 +252,6 @@ private:
 
         // Relative to the .model file, which the runtime resolves against the model's asset key.
         fs::path relative = (m_def.source.parent_path() / uri).lexically_normal();
-        fs::path texFile = m_definitionDir / relative;
-        texFile += ".tex";
-        if (!fs::exists(texFile)) {
-            throw CompileError(what + ": " + toUtf8(texFile.filename()) + " not found next to it (textures referenced "
-                               "by a model are loaded from texture packages, see tools/texc/README.md)");
-        }
-        m_out.dependencies.push_back(fs::weakly_canonical(texFile));
-
-        if (auto texSrgb = readTextureSrgb(texFile); texSrgb && *texSrgb != srgb) {
-            m_out.warnings.push_back(what + ": " + toUtf8(texFile.filename()) + " has \"srgb\": " +
-                                     (*texSrgb ? "true" : "false") + ", but the texture holds " +
-                                     (srgb ? "color (expected true)" : "data (expected false)"));
-        }
-
         return TextureRef { TextureSource::Uri, toUtf8(relative), 0 };
     }
 
