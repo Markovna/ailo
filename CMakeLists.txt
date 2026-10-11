@@ -363,10 +363,11 @@ add_custom_command(
         COMMENT "Generating build_assets.ninja"
 )
 
-# cleandead removes the outputs of assets that no longer exist.
+# cleandead removes the outputs of assets that no longer exist. -f takes the manifest's path relative to the build
+# folder: ninja regenerates it only if the path matches its build edge (build_assets.ninja) exactly.
 add_custom_target(ailo_assets ALL
-        COMMAND ${AILO_NINJA} -f ${AILO_ASSET_MANIFEST}
-        COMMAND ${AILO_NINJA} -f ${AILO_ASSET_MANIFEST} -t cleandead
+        COMMAND ${AILO_NINJA} -f build_assets.ninja
+        COMMAND ${AILO_NINJA} -f build_assets.ninja -t cleandead
         DEPENDS ${AILO_ASSET_MANIFEST}
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Building assets"

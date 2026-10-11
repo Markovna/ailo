@@ -5,10 +5,11 @@ engine loads without importing anything. The source model (glTF, FBX, OBJ, anyth
 assimp, which only modelc links.
 
 ```
-modelc -o <output.modelpack> [--depfile <file>] <input.model>
+modelc -o <output.modelpack> [--depfile <file>] [--root <assets folder>] <input.model>
 modelc --dump <package.modelpack>
 ```
 
+- `--root` is the assets folder that a `source` starting with `/` is relative to. The asset build passes it.
 - `--depfile` lists the `.model` file, every file assimp opened (the source, `.bin` buffers, `.mtl` libraries, ...)
   and the `.tex` file of every texture referenced by URI.
 - `--dump` prints the package's meshes, materials with their parameters, instances, skeleton, clips and embedded
@@ -35,7 +36,7 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 
 | Property    | Type   | Meaning |
 |-------------|--------|---------|
-| `source`    | string | Required. The model file, relative to the `.model` file. |
+| `source`    | string | Required. The model file, relative to the `.model` file, or to the assets folder if it starts with `/` (`"/models/sponza/Sponza.gltf"`). |
 | `material`  | string | Required. Asset key of the material every mesh uses. |
 | `materials` | object | Optional. Source material name -> material key, overriding `material`. Naming a material the source doesn't have is an error. |
 
@@ -53,9 +54,12 @@ the source has them, and the runtime skips (with a warning) the ones the materia
 ## Textures
 
 - **Embedded** textures are packed into the model package, sRGB for base color and linear for the other maps.
-- **Referenced by URI**, the texture must have a `.tex` file next to it (`tools/texc/README.md`): `white.png` needs
-  `white.png.tex`. The package stores the URI as written in the source (percent-decoded for glTF), relative to the
-  `.model` file, and the runtime loads it as `<model key's folder>/<uri>`, which reads `white.png.texpack`. modelc warns
+- **Referenced by URI**, the texture must have a `.tex` file (`tools/texc/README.md`) at the URI relative to the
+  `.model` file, not to the source model: the source folder's layout is mirrored next to the `.model` file. With
+  `"source": ".source/Sponza.gltf"`, `white.png` is the image `.source/white.png` and needs `white.png.tex` next to
+  the `.model` file (with `"source": ".source/white.png"`). The package stores the URI as written in the source
+  (percent-decoded for glTF), and the runtime loads it as `<model key's folder>/<uri>`, which reads
+  `white.png.texpack`. modelc warns
   when the `.tex` file's `srgb` flag doesn't match the texture's use. Absolute paths are errors.
 
 ## Geometry

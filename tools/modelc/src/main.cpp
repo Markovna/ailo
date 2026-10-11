@@ -16,8 +16,14 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: modelc -o <output.modelpack> [--depfile <file>] <input.model>\n"
+        "usage: modelc -o <output.modelpack> [--depfile <file>] [--root <assets folder>] <input.model>\n"
         "       modelc --dump <package.modelpack>\n";
+}
+
+// "/x/y.gltf" is relative to the assets folder (root), anything else to the .model file's folder. On Windows "/x" has
+// a root directory but no root name, so it can't be joined with operator/ (that would keep only root's drive).
+bool isRootRelative(const fs::path& path) {
+    return path.has_root_directory() && !path.has_root_name();
 }
 
 // Make-style escaping, as Ninja and CMake's DEPFILE expect.
@@ -99,7 +105,7 @@ int dump(const fs::path& path) {
 }
 
 int main(int argc, char** argv) {
-    fs::path input, output, depfile;
+    fs::path input, output, depfile, root;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -114,6 +120,7 @@ int main(int argc, char** argv) {
         if (arg == "--dump") return dump(value());
         if (arg == "-o") output = value();
         else if (arg == "--depfile") depfile = value();
+        else if (arg == "--root") root = value();
         else if (arg == "-h" || arg == "--help") { printUsage(); return 0; }
         else if (arg.starts_with("-")) { std::cerr << "modelc: unknown option " << arg << "\n"; printUsage(); return 2; }
         else if (input.empty()) input = arg;
@@ -139,6 +146,24 @@ int main(int argc, char** argv) {
     } catch (const DefinitionError& e) {
         std::cerr << sourceName << ":" << e.line << ": error: " << e.what() << "\n";
         return 1;
+    }
+
+    // The compiler and the package's texture URIs work relative to the .model file, so a root-relative source is
+    // rewritten as one (e.g. ../../models/x/y.gltf).
+    if (isRootRelative(def.source)) {
+        if (root.empty()) {
+            std::cerr << sourceName << ": error: " << def.source.generic_string() << " is relative to the assets "
+                      << "folder, which modelc needs as --root\n";
+            return 1;
+        }
+        fs::path absoluteSource = (fs::absolute(root) / def.source.relative_path()).lexically_normal();
+        fs::path relative = absoluteSource.lexically_relative(fs::absolute(input).parent_path().lexically_normal());
+        if (relative.empty()) {
+            std::cerr << sourceName << ": error: " << absoluteSource.generic_string() << " is not reachable from "
+                      << "the .model file's folder\n";
+            return 1;
+        }
+        def.source = relative;
     }
 
     CompileOutput result;

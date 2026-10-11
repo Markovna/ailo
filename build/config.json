@@ -4,7 +4,7 @@
     "tools": {
         "texc": {
             "extensions": { ".tex": ".texpack" },
-            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "matcomp": {
@@ -14,7 +14,7 @@
         },
         "modelc": {
             "extensions": { ".model": ".modelpack" },
-            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         }
     }

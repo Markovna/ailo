@@ -18,8 +18,14 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: texc -o <output.texpack> [--depfile <file>] <input.tex>\n"
+        "usage: texc -o <output.texpack> [--depfile <file>] [--root <assets folder>] <input.tex>\n"
         "       texc --dump <package.texpack>\n";
+}
+
+// "/x/y.png" is relative to the assets folder (root), anything else to the .tex file's folder. On Windows "/x" has a
+// root directory but no root name, so it can't be joined with operator/ (that would keep only root's drive).
+bool isRootRelative(const fs::path& path) {
+    return path.has_root_directory() && !path.has_root_name();
 }
 
 // Make-style escaping, as Ninja and CMake's DEPFILE expect.
@@ -59,7 +65,7 @@ int dump(const fs::path& path) {
 }
 
 int main(int argc, char** argv) {
-    fs::path input, output, depfile;
+    fs::path input, output, depfile, root;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -74,6 +80,7 @@ int main(int argc, char** argv) {
         if (arg == "--dump") return dump(value());
         if (arg == "-o") output = value();
         else if (arg == "--depfile") depfile = value();
+        else if (arg == "--root") root = value();
         else if (arg == "-h" || arg == "--help") { printUsage(); return 0; }
         else if (arg.starts_with("-")) { std::cerr << "texc: unknown option " << arg << "\n"; printUsage(); return 2; }
         else if (input.empty()) input = arg;
@@ -102,7 +109,15 @@ int main(int argc, char** argv) {
     }
 
     for (auto& path : def.sources) {
-        path = input.parent_path() / path;
+        if (!isRootRelative(path)) {
+            path = input.parent_path() / path;
+        } else if (!root.empty()) {
+            path = root / path.relative_path();
+        } else {
+            std::cerr << sourceName << ": error: " << path.generic_string() << " is relative to the assets folder, "
+                      << "which texc needs as --root\n";
+            return 1;
+        }
     }
 
     std::string error;

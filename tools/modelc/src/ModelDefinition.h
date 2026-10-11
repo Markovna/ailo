@@ -14,7 +14,7 @@ struct DefinitionError : std::runtime_error {
 };
 
 struct ModelDefinition {
-    std::filesystem::path source;                   // relative to the .model file
+    std::filesystem::path source;                   // relative to the .model file, or to the assets folder if it starts with /
     std::string material;                           // asset key of the material every mesh uses by default
     std::map<std::string, std::string> materials;   // source material name -> asset key, overrides `material`
 };

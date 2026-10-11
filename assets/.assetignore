@@ -1,5 +1,7 @@
 # Not built into <build>/assets/. Syntax: build/README.md.
 textures/rogland_clear_night_4k.hdr
+# Source files, read by the tools through the asset files next to the folder.
+.source/
 # Model sources, read by modelc through their .model files.
 *.gltf
 *.glb
