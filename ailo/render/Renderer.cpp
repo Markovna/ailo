@@ -6,6 +6,7 @@
 #include "app/System.h"
 
 #include "DefaultAssetFactory.h"
+#include "OS.h"
 #include "Mesh.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
@@ -25,6 +26,11 @@ static constexpr SamplerParams kClampToEdgeSampler {
   .wrapS = SamplerWrapMode::CLAMP_TO_EDGE,
   .wrapT = SamplerWrapMode::CLAMP_TO_EDGE,
   .wrapR = SamplerWrapMode::CLAMP_TO_EDGE,
+};
+
+struct TonemapUniforms {
+  float exposure;
+  float padding[3];
 };
 
 // Hardware depth comparison; linear filtering blends the four nearest comparison results (2x2 PCF).
@@ -78,6 +84,25 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   m_skyboxMesh = server.load<Mesh>(meshes::kSkyboxCube);
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
+
+  const std::vector<DescriptorSetLayoutBinding> tonemapLayout {
+    { .binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .stageFlags = vk::ShaderStageFlagBits::eFragment },
+    { .binding = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .stageFlags = vk::ShaderStageFlagBits::eFragment },
+  };
+  m_tonemapDescriptorSetLayout = backend->createDescriptorSetLayout(tonemapLayout);
+  m_tonemapDescriptorSet = backend->createDescriptorSet(m_tonemapDescriptorSetLayout);
+  m_tonemapUniformBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(TonemapUniforms));
+  backend->updateDescriptorSetBuffer(m_tonemapDescriptorSet, m_tonemapUniformBuffer, 1);
+  m_tonemapProgram = backend->createProgram(ShaderDescription {
+    .vertexShader = os::readFile("shaders/tonemap.vert.spv"),
+    .fragmentShader = os::readFile("shaders/tonemap.frag.spv"),
+    .raster = RasterDescription {
+      .cullingMode = CullingMode::NONE,
+      .depthWriteEnable = false,
+      .depthCompareOp = CompareOp::ALWAYS,
+    },
+    .layout = { tonemapLayout },
+  });
 }
 
 Renderer::~Renderer() = default;
@@ -90,6 +115,7 @@ void Renderer::render(Scene& scene, Query<Renderable> renderables, const ViewPro
   prepare(scene, renderables, camera);
   shadowPass();
   colorPass();
+  tonemapPass();
 
   for (auto& pass : m_overlayPasses) {
     pass();
@@ -161,8 +187,10 @@ void Renderer::colorPass() {
   renderPass.color[0] = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eStore };
   renderPass.depth = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eDontCare };
 
+  updateHdrTarget();
   const auto& clearColor = m_settings.clearColor;
-  backend->beginRenderPass(renderPass, vk::ClearColorValue(clearColor.r, clearColor.g, clearColor.b, clearColor.a));
+  backend->beginRenderPass(m_hdrRenderTarget, renderPass,
+    vk::ClearColorValue(clearColor.r, clearColor.g, clearColor.b, clearColor.a));
 
   PipelineState pipelineState {};
 
@@ -192,6 +220,43 @@ void Renderer::colorPass() {
   drawSkybox();
 
   backend->endRenderPass();
+}
+
+void Renderer::tonemapPass() {
+  RenderAPI* backend = m_renderAPI;
+
+  // Every pixel is written, so the swapchain image isn't cleared.
+  RenderPassDescription renderPass {};
+  renderPass.color[0] = { .load = vk::AttachmentLoadOp::eDontCare, .store = vk::AttachmentStoreOp::eStore };
+  backend->beginRenderPass(renderPass);
+
+  backend->bindPipeline(PipelineState { .program = m_tonemapProgram });
+  backend->bindDescriptorSet(m_tonemapDescriptorSet, 0);
+  backend->draw(3);
+
+  backend->endRenderPass();
+}
+
+void Renderer::updateHdrTarget() {
+  RenderAPI* backend = m_renderAPI;
+
+  const vk::Extent2D extent = backend->getSwapchainExtent();
+  if (m_hdrRenderTarget && extent == m_hdrExtent) {
+    return;
+  }
+  m_hdrExtent = extent;
+
+  m_hdrColor = backend->createTexture(TextureType::TEXTURE_2D, vk::Format::eR16G16B16A16Sfloat,
+    TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.width, extent.height);
+  m_hdrDepth = backend->createTexture(TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
+    TextureUsage::DepthStencilAttachment, extent.width, extent.height);
+
+  PerColorAttachment<TextureHandle> colors {};
+  colors[0] = m_hdrColor;
+  m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.width, extent.height,
+    vk::SampleCountFlagBits::e1);
+
+  backend->updateDescriptorSetTexture(m_tonemapDescriptorSet, m_hdrColor, 0, kClampToEdgeSampler);
 }
 
 void Renderer::drawSkybox() {
@@ -255,9 +320,9 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
   m_perViewUniformBufferData.projection = camera.projection;
   m_perViewUniformBufferData.view = camera.view;
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
-  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 3.0f);
+  m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, sceneLighting ? sceneLighting->sunIntensity : 1.0f);
+  m_perViewUniformBufferData.iblIntensity = sceneLighting ? sceneLighting->iblIntensity : 1.0f;
   m_perViewUniformBufferData.lightDirection = lightDir;
-  m_perViewUniformBufferData.ambientLightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 0.01f);
   const Texture& iblSpecular = sceneLighting && sceneLighting->prefilteredEnvMap
       ? *sceneLighting->prefilteredEnvMap : *m_defaultIblSpecular;
   m_perViewUniformBufferData.iblSpecularMaxLod = static_cast<float>(iblSpecular.getLevels() - 1);
@@ -403,6 +468,8 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
 
   backend.updateBuffer(m_shadowViewUniformBufferHandle, &m_shadowViewUniformBufferData, sizeof(m_shadowViewUniformBufferData));
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
+  const TonemapUniforms tonemapUniforms { .exposure = camera.exposure };
+  backend.updateBuffer(m_tonemapUniformBuffer, &tonemapUniforms, sizeof(tonemapUniforms));
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   if (objectIndex > 0) {
     backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), objectIndex * sizeof(PerObjectUniforms));

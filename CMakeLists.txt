@@ -95,8 +95,6 @@ add_executable(ailo
     ailo/ecs/Scene.cpp
     ailo/ecs/Scene.h
     ailo/utils/Utils.h
-    ailo/render/Shader.cpp
-    ailo/render/Shader.h
     ailo/OS.cpp
     ailo/OS.h
     ailo/render/Material.cpp
@@ -336,12 +334,10 @@ add_dependencies(ailo_assets texc matcomp modelc lightc)
 add_dependencies(ailo ailo_assets)
 
 # Add shaders
-add_shader(ailo shaders/shader.vert)
-add_shader(ailo shaders/shader.frag)
 add_shader(ailo shaders/imgui.vert)
 add_shader(ailo shaders/imgui.frag)
-add_shader(ailo shaders/hdr.vert)
-add_shader(ailo shaders/hdr.frag)
+add_shader(ailo shaders/tonemap.vert)
+add_shader(ailo shaders/tonemap.frag)
 
 # Add executable
 add_executable(ditest ailo/di/di_tests.cpp)

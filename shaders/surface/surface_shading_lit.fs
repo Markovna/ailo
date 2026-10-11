@@ -245,7 +245,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
 #endif
     }
 
-    const float ambientLuminance = 0.5;
+    const float ambientLuminance = view.iblIntensity;
 
     vec3 E = mix(pixel.dfg.xxx, pixel.dfg.yyy, pixel.f0);
 
@@ -258,9 +258,6 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
 
     color.rgb += ambientLuminance * (Fd + Fr);
-
-    // HDR tonemapping
-    color = color / (color + vec3(1.0));
 
     return vec4(color, pixel.baseColor.a);
 }

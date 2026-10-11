@@ -215,37 +215,54 @@ std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, ui
                                      options);
     pkg.data.resize(pkg.expectedDataSize());
 
-    // Each face texel averages a 4x4 grid of bilinear samples: towards the poles it covers many equirect texels
-    // horizontally, which a single sample would alias.
-    constexpr int kGrid = 4;
     constexpr float pi = std::numbers::pi_v<float>;
     const bool hdr = image.format == TextureFormat::RGBA32F;
     const uint32_t pixelSize = bytesPerPixel(image.format);
+
+    // Unnormalized direction through (uc, vc) in [-1, 1] of a face, as Vulkan selects cube faces: +x -x +y -y +z -z.
+    auto faceDirection = [](uint32_t face, float uc, float vc, float d[3]) {
+        switch (face) {
+            case 0:  d[0] = 1;   d[1] = -vc; d[2] = -uc; break;
+            case 1:  d[0] = -1;  d[1] = -vc; d[2] = uc;  break;
+            case 2:  d[0] = uc;  d[1] = 1;   d[2] = vc;  break;
+            case 3:  d[0] = uc;  d[1] = -1;  d[2] = -vc; break;
+            case 4:  d[0] = uc;  d[1] = -vc; d[2] = 1;   break;
+            default: d[0] = -uc; d[1] = -vc; d[2] = -1;  break;
+        }
+        return std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    };
+
+    const float sourceTexelHeight = pi / float(image.height);
+    const float sourceTexelWidth = 2.0f * pi / float(image.width);
+    const float minSinTheta = std::sin(0.5f * sourceTexelHeight);
+    constexpr int kMaxGrid = 16;
 
     for (uint32_t face = 0; face < 6; face++) {
         uint8_t* faceData = pkg.data.data() + pkg.imageSize(0) * face;
         for (uint32_t y = 0; y < size; y++) {
             for (uint32_t x = 0; x < size; x++) {
+                // Average n x n bilinear samples, n = how many source texels the face texel spans: one over most of
+                // the sky, keeping the source's detail, more towards the poles, where source texels narrow by
+                // sin(theta). Rounded, not ceiled: face centers are only ~1.27x minified, and averaging there blurs.
+                float d[3];
+                const float length = faceDirection(face, 2.0f * (float(x) + 0.5f) / float(size) - 1.0f,
+                                                   2.0f * (float(y) + 0.5f) / float(size) - 1.0f, d);
+                const float texelAngle = 2.0f / (float(size) * length);
+                const float sinTheta = std::max(std::sqrt(std::max(1.0f - d[1] * d[1] / (length * length), 0.0f)),
+                                                minSinTheta);
+                const float sourceTexel = std::min(sourceTexelHeight, sourceTexelWidth * sinTheta);
+                const int grid = std::clamp(int(std::lround(texelAngle / sourceTexel)), 1, kMaxGrid);
+
                 float sum[4] = {};
-                for (int sy = 0; sy < kGrid; sy++) {
-                    for (int sx = 0; sx < kGrid; sx++) {
-                        // Direction through the face, as Vulkan selects cube faces: +x -x +y -y +z -z.
-                        const float uc = 2.0f * (float(x) + (float(sx) + 0.5f) / kGrid) / float(size) - 1.0f;
-                        const float vc = 2.0f * (float(y) + (float(sy) + 0.5f) / kGrid) / float(size) - 1.0f;
-                        float d[3];
-                        switch (face) {
-                            case 0:  d[0] = 1;   d[1] = -vc; d[2] = -uc; break;
-                            case 1:  d[0] = -1;  d[1] = -vc; d[2] = uc;  break;
-                            case 2:  d[0] = uc;  d[1] = 1;   d[2] = vc;  break;
-                            case 3:  d[0] = uc;  d[1] = -1;  d[2] = -vc; break;
-                            case 4:  d[0] = uc;  d[1] = -vc; d[2] = 1;   break;
-                            default: d[0] = -uc; d[1] = -vc; d[2] = -1;  break;
-                        }
-                        const float length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                for (int sy = 0; sy < grid; sy++) {
+                    for (int sx = 0; sx < grid; sx++) {
+                        const float uc = 2.0f * (float(x) + (float(sx) + 0.5f) / float(grid)) / float(size) - 1.0f;
+                        const float vc = 2.0f * (float(y) + (float(sy) + 0.5f) / float(grid)) / float(size) - 1.0f;
+                        const float sampleLength = faceDirection(face, uc, vc, d);
 
                         // The mapping lightc prefilters with, so the sky matches its reflections.
                         const float u = (std::atan2(d[0], d[2]) + pi) / (2.0f * pi);
-                        const float v = std::acos(std::clamp(d[1] / length, -1.0f, 1.0f)) / pi;
+                        const float v = std::acos(std::clamp(d[1] / sampleLength, -1.0f, 1.0f)) / pi;
 
                         float sample[4];
                         sampleEquirect(image, u, v, sample);
@@ -255,7 +272,7 @@ std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, ui
 
                 uint8_t* pixel = faceData + (size_t(y) * size + x) * pixelSize;
                 for (int c = 0; c < 4; c++) {
-                    const float value = sum[c] / (kGrid * kGrid);
+                    const float value = sum[c] / float(grid * grid);
                     if (hdr) {
                         std::memcpy(pixel + c * sizeof(float), &value, sizeof(float));
                     } else {

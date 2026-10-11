@@ -83,6 +83,7 @@ public:
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
     void handleWindowResize();
+    vk::Extent2D getSwapchainExtent() const;
 
 private:
     using Buffer = gpu::Buffer;

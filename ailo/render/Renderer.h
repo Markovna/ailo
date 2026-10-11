@@ -17,11 +17,11 @@ struct PerViewUniforms {
   glm::vec3 lightDirection;
   float __padding0;
   glm::vec4 lightColorIntensity;
-  glm::vec4 ambientLightColorIntensity;
 
   float iblSpecularMaxLod;
   uint32_t lightCount;
-  float __padding1[2];
+  float iblIntensity;
+  float __padding1;
   alignas(16) glm::mat4 lightViewProjection;
 };
 
@@ -62,6 +62,7 @@ struct SceneLighting;
 struct ViewProjection {
   glm::mat4 projection = glm::mat4(1.0f);
   glm::mat4 view = glm::mat4(1.0f);
+  float exposure = 1.0f;
   const Skybox* skybox = nullptr;
   const SceneLighting* lighting = nullptr;
 };
@@ -163,13 +164,10 @@ class Renderer {
 public:
   using OverlayPass = std::move_only_function<void()>;
 
-  // Requires the DefaultAssets to be alive. The storage receives the skybox material instance.
   Renderer(RenderAPI*, AssetServer&, AssetStorage<MaterialInstance>&,
            const RendererSettings& settings = {});
   ~Renderer();
 
-  // Records a full frame: beginFrame, shadow pass, color pass, overlay passes, endFrame.
-  // Skips the frame if the swapchain image could not be acquired (e.g. during resize).
   void render(Scene& scene, Query<Renderable> renderables, const ViewProjection& camera);
 
   // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
@@ -179,6 +177,7 @@ public:
   void prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera);
   void shadowPass();
   void colorPass();
+  void tonemapPass();
   void endFrame();
 
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
@@ -187,6 +186,7 @@ private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
   void drawSkybox();
+  void updateHdrTarget();
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
@@ -210,6 +210,16 @@ private:
   // Shadow mapping
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
+
+  // HDR color pass target, resolved into the swapchain by the tonemap pass. Recreated when the swapchain resizes.
+  Unique<gpu::Texture> m_hdrColor;
+  Unique<gpu::Texture> m_hdrDepth;
+  Unique<gpu::RenderTarget> m_hdrRenderTarget;
+  vk::Extent2D m_hdrExtent;
+  Unique<gpu::DescriptorSetLayout> m_tonemapDescriptorSetLayout;
+  Unique<gpu::DescriptorSet> m_tonemapDescriptorSet;
+  Unique<gpu::Buffer> m_tonemapUniformBuffer;
+  Unique<gpu::Program> m_tonemapProgram;
 
   AssetPtr<MaterialInstance> m_skyboxMaterial;
   AssetPtr<Mesh> m_skyboxMesh;

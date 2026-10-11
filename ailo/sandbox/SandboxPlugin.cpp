@@ -51,14 +51,16 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
                 AssetStorage<MaterialInstance>& materialInstances, RenderAPI& api) {
     scene::spawn(scene,
         TransformComponent { },
-        Camera { },
+        Camera { .exposure = 1.2 },
         OrbitCamera { .distance = 10.0f },
         Skybox {
             .cubemap = server.load<Texture>("assets/textures/rogland_clear_night_skybox"),
         },
         SceneLighting {
             .prefilteredEnvMap = server.load<Texture>("assets/textures/rogland_clear_night_4k"),
-            .lightDirection = glm::normalize(glm::vec3(0.0, 1.4, -0.3)),
+            .lightDirection = glm::normalize(glm::vec3(0.2, 1.1, -0.2)),
+            .sunIntensity = 3.0f,
+            .iblIntensity = 0.5f,
         });
 
     auto pointLight = scene.addEntity();
@@ -81,6 +83,11 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
 
     scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/Sponza.gltf"));
     scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
+
+    auto helmetTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+    helmetTransform = glm::translate(helmetTransform, glm::vec3(2.0f, 5.0f, 0.0f));
+    helmetTransform = glm::rotate(helmetTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/DamagedHelmet.glb"), helmetTransform);
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
     scene::spawnCube(scene, api, materialInstances, server,

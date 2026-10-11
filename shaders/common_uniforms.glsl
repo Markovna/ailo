@@ -4,10 +4,10 @@ struct ViewUniform {
    mat4 viewInverse;
    vec3 lightDirection;
    vec4 lightColorIntensity;
-   vec4 ambientLightColorIntensity;
 
    float iblSpecularMaxLod;
    uint lightCount; // number of used slots in lights[]
+   float iblIntensity;
    mat4 lightViewProjection;
 };
 

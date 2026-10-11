@@ -23,6 +23,7 @@ void render(Renderer& renderer, World& world, Query<Renderable> renderables, Que
     ViewProjection viewProjection;
     for (auto&& [entity, camera, transform] : cameras.each()) {
         viewProjection.view = glm::inverse(transform.world().toMatrix());
+        viewProjection.exposure = camera.exposure;
         if (float aspect = window.aspect(); aspect > 0.0f) {
             viewProjection.projection = camera.projection(aspect);
         }

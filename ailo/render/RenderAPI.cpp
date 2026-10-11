@@ -564,7 +564,7 @@ void RenderAPI::endRenderPass() {
 
     if (auto renderTarget = m_currentRenderPassState.renderTarget) {
         for (size_t i = 0; i < renderTarget->colors.size(); i++) {
-            if (renderTarget->colors[i] && renderTarget->colors[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
+            if (renderTarget->colors[i] && (renderTarget->colors[i]->getUsage() & vk::ImageUsageFlagBits::eSampled)) {
                 renderTarget->colors[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
 
@@ -587,6 +587,8 @@ void RenderAPI::bindPipeline(const PipelineState& state) {
     if (state.vertexBufferLayout) {
         auto& vertexLayout = m_vertexBufferLayouts.get(state.vertexBufferLayout);
         m_pipelineCache.bindVertexLayout(vertexLayout);
+    } else {
+        m_pipelineCache.bindVertexLayout({});
     }
 }
 
@@ -644,6 +646,11 @@ void RenderAPI::setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height
 
 void RenderAPI::handleWindowResize() {
     m_framebufferResized = true;
+}
+
+vk::Extent2D RenderAPI::getSwapchainExtent() const {
+    const auto& rt = m_swapChain->getCurrentRenderTarget();
+    return { rt->width, rt->height };
 }
 
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
