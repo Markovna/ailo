@@ -23,6 +23,14 @@ add_subdirectory(third_party/imgui)
 set(BUILD_SHARED_LIBS OFF)
 add_subdirectory(third_party/assimp)
 unset(BUILD_SHARED_LIBS)
+# On MinGW assimp forces "-static-libstdc++ -Wl,-Bstatic -lstdc++ -lwinpthread" onto its consumers. The static
+# libwinpthread.a in CLion's msvcrt toolchain references the UCRT-only __intrinsic_setjmpex, so linking modelc fails.
+# Drop those flags and link the runtime like every other target.
+if (MINGW)
+    get_target_property(_assimp_link_libs assimp INTERFACE_LINK_LIBRARIES)
+    list(FILTER _assimp_link_libs EXCLUDE REGEX "-static-lib|-Wl,-Bstatic|-lstdc\\+\\+|-lwinpthread")
+    set_target_properties(assimp PROPERTIES INTERFACE_LINK_LIBRARIES "${_assimp_link_libs}")
+endif ()
 
 # Jolt Physics. Its config defines (JPH_DEBUG_RENDERER, JPH_PROFILE_ENABLED, JPH_FLOATING_POINT_EXCEPTIONS_ENABLED, ...)
 # are PUBLIC on the Jolt target and must match between the library and our code: never define them by hand.
