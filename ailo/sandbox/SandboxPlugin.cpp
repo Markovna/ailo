@@ -26,27 +26,6 @@ namespace ailo {
 
 namespace {
 
-constexpr auto kToonMaterial = "assets/materials/toon";
-
-// Replaces every renderable's material instances with instances of `material`, keeping the values of the
-// parameters both materials share (e.g. the imported base color textures). Shared instances stay shared.
-void useMaterial(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances, AssetServer& server,
-                 const AssetPtr<Material>& material) {
-    std::unordered_map<const MaterialInstance*, AssetPtr<MaterialInstance>> replacements;
-    for (auto&& [entity, renderable] : scene.view<Renderable>().each()) {
-        for (auto& instance : renderable.materials) {
-            if (&instance->getMaterial() == material.get()) continue;
-
-            auto& replacement = replacements[instance.get()];
-            if (!replacement) {
-                replacement = MaterialInstance::create(materialInstances, server, api, material);
-                replacement->copyParametersFrom(*instance);
-            }
-            instance = replacement;
-        }
-    }
-}
-
 void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
                 AssetStorage<MaterialInstance>& materialInstances, RenderAPI& api) {
     scene::spawn(scene,

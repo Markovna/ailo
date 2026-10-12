@@ -89,6 +89,11 @@ void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
     for (const auto& src : pkg->materials) {
         auto& material = loadedMaterials[src.material];
         if (!material) material = ctx.load<Material>(src.material);
+        if (!material) {
+            std::cerr << "Failed to load material '" << src.material << "'" << std::endl;
+            materials.emplace_back();
+            continue;
+        }
 
         auto instance = MaterialInstance::create(*m_storages.materialInstances, *m_server, *renderApi, material);
         for (const auto& p : src.floats) {

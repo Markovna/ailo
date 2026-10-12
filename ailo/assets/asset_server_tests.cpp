@@ -96,6 +96,14 @@ public:
     void load(const std::string&, LoadContext<T>&) override {}
 };
 
+class CountingNoConstructLoader : public AssetLoader<Texture> {
+public:
+    explicit CountingNoConstructLoader(int* calls) : m_calls(calls) {}
+    void load(const std::string&, LoadContext<Texture>&) override { ++*m_calls; }
+private:
+    int* m_calls;
+};
+
 template<class T>
 class ThrowAfterConstructLoader : public AssetLoader<T> {
 public:
@@ -459,7 +467,7 @@ void testServerWithoutStorageThrows() {
     assert(calls == 0);
 }
 
-void testUnregisteredDependencyStorageThrows() {
+void testUnregisteredDependencyStorageFailsLoad() {
     g_log.clear();
     int calls = 0;
     AssetStorage<Material> materials;
@@ -468,7 +476,7 @@ void testUnregisteredDependencyStorageThrows() {
     registerTextureLoader(server, &calls);
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
 
-    assert((throws<std::runtime_error>([&] { server.load<Material>("brick"); })));
+    assert(!server.load<Material>("brick"));
     assert(calls == 0);
     assert(materials.empty());
     assert(g_log.empty());
@@ -508,12 +516,13 @@ void testRegisteringLoaderTwiceThrows() {
     assert(first == 1 && second == 0);
 }
 
-void testLoaderThatDoesNotConstructThrows() {
+void testLoaderThatDoesNotConstructReturnsNull() {
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<NoConstructLoader<Texture>>());
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
+    assert(!server.load<Texture>("a"));
+    assert(textures.empty());
 }
 
 void testLoaderThrowingAfterConstructDoesNotLeak() {
@@ -522,20 +531,50 @@ void testLoaderThrowingAfterConstructDoesNotLeak() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
+    assert(!server.load<Texture>("a"));
     assert(g_log == std::vector<std::string>{ "~Texture a" });
     assert(textures.empty());
 }
 
-void testDoubleConstructThrows() {
+void testDoubleConstructFailsLoad() {
     g_log.clear();
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<DoubleConstructLoader<Texture>>());
-    assert((throws<std::logic_error>([&] { server.load<Texture>("a"); })));
+    assert(!server.load<Texture>("a"));
     assert(g_log == std::vector<std::string>{ "~Texture a" });
     assert(textures.empty());
+}
+
+void testFailedLoadIsRetried() {
+    int calls = 0;
+    AssetStorage<Texture> textures;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerLoader<Texture>(std::make_unique<CountingNoConstructLoader>(&calls));
+    assert(!server.load<Texture>("a"));
+    assert(!server.load<Texture>("a"));
+    assert(calls == 2);
+}
+
+void testFailedDependencyDoesNotPropagate() {
+    g_log.clear();
+    AssetStorage<Texture> textures;
+    AssetStorage<Material> materials;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerStorage(&materials);
+    server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
+    {
+        auto material = server.load<Material>("brick");
+        assert(material && material->name == "brick");
+        assert(!material->texture);
+        assert(textures.empty());
+    }
+    assert((g_log == std::vector<std::string>{ "~Texture brick.tex", "~Material brick" }));
+    assert(materials.empty());
 }
 
 }
@@ -564,13 +603,15 @@ int main() {
     testLoaderWithDependencyAndSubAsset();
     testServerReturnsAssetsAlreadyInStorage();
     testServerWithoutStorageThrows();
-    testUnregisteredDependencyStorageThrows();
+    testUnregisteredDependencyStorageFailsLoad();
     testUnregisterStorage();
     testServerWithoutLoaderThrows();
     testRegisteringLoaderTwiceThrows();
-    testLoaderThatDoesNotConstructThrows();
+    testLoaderThatDoesNotConstructReturnsNull();
     testLoaderThrowingAfterConstructDoesNotLeak();
-    testDoubleConstructThrows();
+    testDoubleConstructFailsLoad();
+    testFailedLoadIsRetried();
+    testFailedDependencyDoesNotPropagate();
 
     std::cout << "All asset server tests passed" << std::endl;
     return 0;

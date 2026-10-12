@@ -196,11 +196,22 @@ public:
             LoadContext<T> context {this, storage, key};
 
             auto& loader = getLoader<T>();
-            loader.load(key, context);
+            try {
+                loader.load(key, context);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Failed to load asset '" << key << "': " << e.what() << std::endl;
+                return {};
+            }
+            catch (...) {
+                std::cerr << "Failed to load asset '" << key << "'" << std::endl;
+                return {};
+            }
 
             ptr = storage.get(key);
             if (!ptr) {
-                throw std::runtime_error("asset loader did not construct asset '" + key + "'");
+                std::cerr << "Asset loader did not construct asset '" << key << "'" << std::endl;
+                return {};
             }
         }
         return ptr.value();

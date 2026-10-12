@@ -405,6 +405,10 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
     for(size_t i = 0; i < mesh->faces.size(); i++) {
       auto& [indexOffset, indexCount] = mesh->faces[i];
       auto& instance = renderable.materials[i];
+      if (!instance) {
+        std::cerr << "Renderable " << entt::to_integral(entity) << ": face " << i << " has no material instance, skipped" << std::endl;
+        continue;
+      }
       instance->commit(backend);
 
       const Material& material = instance->getMaterial();
