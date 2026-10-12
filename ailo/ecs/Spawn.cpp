@@ -17,7 +17,10 @@ AssetPtr<MaterialInstance> whiteMaterial(RenderAPI& api, AssetStorage<MaterialIn
     constexpr auto kPath = "builtin://materials/white";
     if (auto instance = materialInstances.get(kPath)) return *instance;
 
-    auto instance = materialInstances.emplace(kPath, &api, server, server.load<Material>(materials::kLit));
+    auto material = server.load<Material>(materials::kLit);
+    if (!material) return {};
+
+    auto instance = materialInstances.emplace(kPath, &api, server, std::move(material));
     instance->setParameter("metallicRoughnessMap", server.load<Texture>(textures::kDefaultMetallicRoughness));
     return instance;
 }

@@ -148,6 +148,8 @@ void MaterialInstance::bind(RenderAPI& renderApi) const {
 
 AssetPtr<MaterialInstance> MaterialInstance::create(AssetStorage<MaterialInstance>& storage, AssetServer& server,
                                                     RenderAPI& renderApi, const AssetPtr<Material>& material) {
+    if (!material) return {};
+
     return storage.emplace(noname_t{}, &renderApi, server, material);
 }
 
