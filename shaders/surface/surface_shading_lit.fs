@@ -160,12 +160,12 @@ float sampleShadow(vec2 uv, float depth) {
 // Small constant bias in light NDC depth; the normal offset handles the slope-dependent part.
 #define SHADOW_DEPTH_BIAS 0.0005
 
-float calculateShadow(vec3 worldPos, vec3 geometricNormal, float NoL) {
+float calculateShadow(int shadowIndex, vec3 worldPos, vec3 geometricNormal, float NoL) {
     vec2 size = vec2(textureSize(shadowMap, 0));
     vec2 texelSize = 1.0 / size;
 
     // Orthographic light projection: NDC x scale is 1 / half-extent, so one texel spans 2 / (size * scale) world units.
-    mat4 lvp = view.lightViewProjection;
+    mat4 lvp = shadows[shadowIndex].lightFromWorldMatrix;
     float ndcScale = length(vec3(lvp[0][0], lvp[1][0], lvp[2][0]));
     float texelWorldSize = 2.0 / (size.x * ndcScale);
     worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * (1.0 - NoL));
@@ -236,12 +236,12 @@ vec4 evaluateMaterial(const MaterialInputs material) {
 #if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
     float visibility = 0.0;
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
-        visibility = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
+        visibility = calculateShadow(0, fragPosWorld, geometricNormal, geometricNoL);
     }
     color += customSurfaceShading(material, pixel, directionalLight, visibility);
 #else
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
-        float shadow = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
+        float shadow = calculateShadow(0, fragPosWorld, geometricNormal, geometricNoL);
         color += surfaceShading(pixel, directionalLight, shadow);
     }
 #endif

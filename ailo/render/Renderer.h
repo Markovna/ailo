@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Renderable.h"
+#include "ShadowMapManager.h"
 #include "render/lighting/LightingPackage.h"
 
 namespace ailo {
@@ -23,9 +24,11 @@ struct PerViewUniforms {
   uint32_t lightCount;
   float iblIntensity;
   float __padding1;
-  alignas(16) glm::mat4 lightViewProjection;
-  // Irradiance SH (IndirectLight::irradianceSH); vec4 because std140 pads vec3 array elements to 16 bytes.
   glm::vec4 iblSH[lighting::kIrradianceSHCount];
+};
+
+struct ShadowUniform {
+  alignas(16) glm::mat4 lightViewProjection;
 };
 
 struct LightUniform {
@@ -84,10 +87,11 @@ enum class DescriptorSetBindingPoints : uint8_t {
 
 enum class PerViewDescriptorBindings {
   FRAME_UNIFORMS = 0,
-  LIGHTS = 1,
-  IBL_SPECULAR_MAP = 2,
-  IBL_DFG_LUT = 3,
-  SHADOW_MAP = 4
+  SHADOWS = 1,
+  LIGHTS = 2,
+  IBL_SPECULAR_MAP = 3,
+  IBL_DFG_LUT = 4,
+  SHADOW_MAP = 5
 };
 
 enum class PerObjectDescriptorBindings {
@@ -101,6 +105,11 @@ public:
     static std::vector<DescriptorSetLayoutBinding> bindings {
       {
         .binding = std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS),
+        .descriptorType = vk::DescriptorType::eUniformBuffer,
+        .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
+      },
+    {
+        .binding = std::to_underlying(PerViewDescriptorBindings::SHADOWS),
         .descriptorType = vk::DescriptorType::eUniformBuffer,
         .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment
       },
@@ -178,6 +187,7 @@ public:
 
   bool beginFrame();
   void prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera);
+  void prepareShadows(Scene& scene, const ViewProjection& camera, const SceneLighting* sceneLighting);
   void shadowPass();
   void colorPass();
   void tonemapPass();
@@ -195,11 +205,13 @@ private:
   PerViewUniforms m_perViewUniformBufferData {};
   PerViewUniforms m_shadowViewUniformBufferData {};
   std::array<LightUniform, kLightUniformArraySize> m_lightUniformsBufferData {};
+  std::array<ShadowUniform, kMaxShadowCascades> m_shadowsUniformsBufferData {};
 
   Unique<gpu::Buffer> m_objectsUniformBufferHandle;
   Unique<gpu::Buffer> m_viewUniformBufferHandle;
   Unique<gpu::Buffer> m_shadowViewUniformBufferHandle;
   Unique<gpu::Buffer> m_lightsUniformBufferHandle;
+  Unique<gpu::Buffer> m_shadowsUniformBufferHandle;
   Unique<gpu::DescriptorSetLayout> m_viewDescriptorSetLayout;
   Unique<gpu::DescriptorSetLayout> m_objectDescriptorSetLayout;
   Unique<gpu::DescriptorSet> m_viewDescriptorSet;

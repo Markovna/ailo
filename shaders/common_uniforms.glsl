@@ -8,8 +8,11 @@ struct ViewUniform {
    float iblSpecularMaxLod;
    uint lightCount; // number of used slots in lights[]
    float iblIntensity;
-   mat4 lightViewProjection;
    vec4 iblSH[9]; // irradiance SH, see LightingPackage.h
+};
+
+struct ShadowData {
+    mat4 lightFromWorldMatrix;
 };
 
 struct LightUniform {
@@ -32,6 +35,7 @@ struct BoneUniform {
 };
 
 #define DYNAMIC_LIGHTS_COUNT 2
+#define MAX_SHADOWS_COUNT 5
 #define MAX_BONES_COUNT 256
 
 const int POINT_LIGHT_TYPE = 0;
@@ -43,17 +47,22 @@ uniform perFrame_view {
 };
 
 layout (set = 0, binding = 1, std140)
+uniform perFrame_shadows {
+    ShadowData shadows[MAX_SHADOWS_COUNT];
+};
+
+layout (set = 0, binding = 2, std140)
 uniform perFrame_lights {
     LightUniform lights[DYNAMIC_LIGHTS_COUNT];
 };
 
-layout (set = 0, binding = 2)
+layout (set = 0, binding = 3)
 uniform samplerCube iblSpecular;
 
-layout (set = 0, binding = 3)
+layout (set = 0, binding = 4)
 uniform sampler2D iblDFG;
 
-layout (set = 0, binding = 4)
+layout (set = 0, binding = 5)
 uniform sampler2DShadow shadowMap;
 
 layout (set = 1, binding = 0, std140)
