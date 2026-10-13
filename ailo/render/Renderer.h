@@ -65,9 +65,11 @@ struct BonesUniform {
 struct Skybox;
 struct SceneLighting;
 
-struct ViewProjection {
+struct ViewInfo {
   glm::mat4 projection = glm::mat4(1.0f);
   glm::mat4 view = glm::mat4(1.0f);
+  float nearPlane = 0.1f;
+  float farPlane = 1000.0f;
   float exposure = 1.0f;
   const Skybox* skybox = nullptr;
   const SceneLighting* lighting = nullptr;
@@ -180,14 +182,14 @@ public:
            const RendererSettings& settings = {});
   ~Renderer();
 
-  void render(Scene& scene, Query<Renderable> renderables, const ViewProjection& camera);
+  void render(Scene& scene, Query<Renderable> renderables, const ViewInfo& camera);
 
   // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
   void addOverlayPass(OverlayPass pass);
 
   bool beginFrame();
-  void prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera);
-  void prepareShadows(Scene& scene, const ViewProjection& camera, const SceneLighting* sceneLighting);
+  void prepare(Scene& scene, Query<Renderable>& renderables, const ViewInfo& camera);
+  void prepareShadows(Scene& scene, const ViewInfo& camera, const SceneLighting* sceneLighting);
   void shadowPass();
   void colorPass();
   void tonemapPass();

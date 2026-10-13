@@ -21,9 +21,11 @@ namespace {
 
 void render(Renderer& renderer, World& world, Query<Renderable> renderables, Query<Camera, TransformComponent> cameras,
             const Window& window) {
-    ViewProjection viewProjection;
+    ViewInfo viewProjection;
     for (auto&& [entity, camera, transform] : cameras.each()) {
         viewProjection.view = glm::inverse(transform.world().toMatrix());
+        viewProjection.nearPlane = camera.nearPlane;
+        viewProjection.farPlane = camera.farPlane;
         viewProjection.exposure = camera.exposure;
         if (float aspect = window.aspect(); aspect > 0.0f) {
             viewProjection.projection = camera.projection(aspect);

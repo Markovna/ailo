@@ -111,7 +111,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
 
 Renderer::~Renderer() = default;
 
-void Renderer::render(Scene& scene, Query<Renderable> renderables, const ViewProjection& camera) {
+void Renderer::render(Scene& scene, Query<Renderable> renderables, const ViewInfo& camera) {
   if (!beginFrame()) {
     return;
   }
@@ -292,7 +292,7 @@ void Renderer::endFrame() {
   m_renderAPI->endFrame();
 }
 
-void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewProjection& camera) {
+void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewInfo& camera) {
   auto& backend = *m_renderAPI;
 
   const SceneLighting* sceneLighting = camera.lighting;
@@ -476,7 +476,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewP
   }
 }
 
-void Renderer::prepareShadows(Scene& scene, const ViewProjection& camera, const SceneLighting* sceneLighting) {
+void Renderer::prepareShadows(Scene& scene, const ViewInfo& camera, const SceneLighting* sceneLighting) {
   const auto& lightDir = sceneLighting->lightDirection;
 
   // Compute light view-projection matrix
@@ -496,13 +496,14 @@ void Renderer::prepareShadows(Scene& scene, const ViewProjection& camera, const 
 
   glm::mat4 lightVP = lightProjection * lightView;
 
+  auto cascadeSplits = ShadowMapManager::computeSplits(4, camera.nearPlane, camera.farPlane);
+
   m_shadowViewUniformBufferData.projection = lightProjection;
   m_shadowViewUniformBufferData.view = lightView;
   m_shadowViewUniformBufferData.viewInverse = inverse(lightView);
   m_shadowViewUniformBufferData.lightDirection = lightDir;
 
   m_shadowsUniformsBufferData[0].lightViewProjection = lightVP;
-  // auto cascadeSplits = ShadowMapManager::computeSplits(4, camera.);
 }
 
 }
