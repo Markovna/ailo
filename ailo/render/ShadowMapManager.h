@@ -1,16 +1,30 @@
 #pragma once
 
 #include <array>
+#include <vector>
 #include <cmath>
 #include <algorithm>
 #include <cstdint>
 
+#include "glm/fwd.hpp"
+
 namespace ailo {
+
+struct ViewInfo;
+struct SceneLighting;
 
 static constexpr uint8_t kMaxShadowCascades = 5;
 
+class ShadowMap {
+
+};
+
 class ShadowMapManager {
 public:
+    ShadowMapManager() = default;
+
+    void updateCascadeShadows(const ViewInfo& camera, const SceneLighting* sceneLighting);
+
     static std::array<float, kMaxShadowCascades + 1> computeSplits(uint8_t cascadeCount, float zNear, float zFar, float lambda = 0.75f) {
         cascadeCount = std::clamp(cascadeCount, static_cast<uint8_t>(1), kMaxShadowCascades);
 
@@ -25,6 +39,11 @@ public:
         }
         return splits;
     }
+
+    static void updateProjection(glm::mat4* projection, float nearPlane, float farPlane);
+
+private:
+    std::vector<ShadowMap> m_cascadeShadows;
 };
 
 }

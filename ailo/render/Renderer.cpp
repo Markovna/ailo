@@ -57,7 +57,7 @@ static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
 }
 
 Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances, const RendererSettings& settings)
-  : m_settings(settings), m_renderAPI(renderApi) {
+  : m_settings(settings), m_shadowMapManager(), m_renderAPI(renderApi) {
   m_defaultIblSpecular = server.load<Texture>(textures::kBlackCube);
 
   m_iblDfgLut = server.load<Texture>(m_settings.dfgLutPath);
@@ -308,7 +308,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, sceneLighting->sunIntensity);
   m_perViewUniformBufferData.iblIntensity = sceneLighting->iblIntensity;
-  m_perViewUniformBufferData.lightDirection = lightDir;
+  m_perViewUniformBufferData.lightDirection = -lightDir;
   const IndirectLight* indirectLight = sceneLighting->indirectLight ? &*sceneLighting->indirectLight : nullptr;
   const Texture& iblSpecular = indirectLight ? *indirectLight->reflections : *m_defaultIblSpecular;
   m_perViewUniformBufferData.iblSpecularMaxLod = static_cast<float>(iblSpecular.getLevels() - 1);
@@ -476,34 +476,32 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
   }
 }
 
+
 void Renderer::prepareShadows(Scene& scene, const ViewInfo& camera, const SceneLighting* sceneLighting) {
-  const auto& lightDir = sceneLighting->lightDirection;
+  // m_shadowMapManager.updateCascadeShadows(camera, sceneLighting);
 
   // Compute light view-projection matrix
-  float extent = 22;
-  float nearPlane = 0.1f;
-  float farPlane = 32.0f;
-  glm::vec3 center = glm::vec3(0.0f);
-  glm::vec3 lightPos = center + lightDir * 18.0f;
+  const float extent = 22;
+  const float nearPlane = 0.1f;
+  const float farPlane = 32.0f;
+  const glm::vec3 lightPos = glm::vec3 {0, 18, 0};
 
+  const auto& lightDir = sceneLighting->lightDirection;
   // lookAt degenerates when the light direction is parallel to up.
   glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
-      ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
-  glm::mat4 lightView = glm::lookAt(lightPos, center, up);
+                   ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+
+  glm::mat4 lightView = glm::lookAt(lightPos, lightPos + lightDir, up);
   glm::mat4 lightProjection = glm::ortho(-extent, extent, -extent, extent, nearPlane, farPlane);
-  // Flip Y for Vulkan
   lightProjection[1][1] *= -1.0f;
 
   glm::mat4 lightVP = lightProjection * lightView;
 
-  auto cascadeSplits = ShadowMapManager::computeSplits(4, camera.nearPlane, camera.farPlane);
-
   m_shadowViewUniformBufferData.projection = lightProjection;
   m_shadowViewUniformBufferData.view = lightView;
   m_shadowViewUniformBufferData.viewInverse = inverse(lightView);
-  m_shadowViewUniformBufferData.lightDirection = lightDir;
+  m_shadowViewUniformBufferData.lightDirection = -lightDir;
 
   m_shadowsUniformsBufferData[0].lightViewProjection = lightVP;
 }
-
 }

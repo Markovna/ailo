@@ -37,7 +37,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         },
         SceneLighting {
             .indirectLight = server.load<IndirectLight>("assets/textures/rogland_clear_night_4k"),
-            .lightDirection = glm::normalize(glm::vec3(0.2, 1.1, -0.2)),
+            .lightDirection = glm::normalize(glm::vec3(0.2, -1.1, -0.2)),
             .sunIntensity = 3.0f,
             .iblIntensity = 0.5f,
         });

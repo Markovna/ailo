@@ -250,6 +250,7 @@ private:
   Unique<gpu::Buffer> m_dummyBonesBuffer;
 
   std::vector<RenderData> m_renderData;
+  ShadowMapManager m_shadowMapManager;
   RenderAPI* m_renderAPI;
 };
 

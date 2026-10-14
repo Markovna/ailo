@@ -208,6 +208,7 @@ add_executable(ailo
         ailo/render/DefaultAssetFactory.h
         ailo/render/ShadowMapManager.cpp
         ailo/render/ShadowMapManager.h
+        ailo/common/AABB.h
 )
 
 # Link libraries
