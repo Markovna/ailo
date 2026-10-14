@@ -27,9 +27,27 @@ struct PerViewUniforms {
   glm::vec4 iblSH[lighting::kIrradianceSHCount];
 };
 
-struct ShadowUniform {
-  alignas(16) glm::mat4 lightViewProjection;
+struct ShadowCascadeUniform {
+  alignas(16) glm::mat4 lightFromWorld;
+  // Cascade tile in the atlas: uv * xy + zw.
+  glm::vec4 atlasScaleOffset;
 };
+
+enum class ShadowFlags : uint32_t {
+  None = 0,
+  VisualizeCascades = 1 << 0
+};
+
+struct ShadowUniforms {
+  ShadowCascadeUniform cascades[kMaxShadowCascades];
+  // View-space distance where each cascade ends.
+  glm::vec4 cascadeSplits;
+  uint32_t cascadeCount;
+  float cascadeBlend;
+  uint32_t flags;
+  float __padding0;
+};
+static_assert(kMaxShadowCascades <= 4, "cascadeSplits holds one split per vec4 component");
 
 struct LightUniform {
   glm::vec4 lightPositionFalloff;
@@ -76,7 +94,9 @@ struct ViewInfo {
 };
 
 struct RendererSettings {
+  // Resolution of one cascade; the atlas is kShadowAtlasTiles times larger on each side.
   uint32_t shadowMapSize = 1024;
+  ShadowSettings shadows;
   glm::vec4 clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
   std::string dfgLutPath = "assets/textures/dfg_lut";
 };
@@ -189,13 +209,15 @@ public:
 
   bool beginFrame();
   void prepare(Scene& scene, Query<Renderable>& renderables, const ViewInfo& camera);
-  void prepareShadows(Scene& scene, const ViewInfo& camera, const SceneLighting* sceneLighting);
+  void prepareShadows(const ViewInfo& camera, const glm::vec3& lightDirection);
   void shadowPass();
   void colorPass();
   void tonemapPass();
   void endFrame();
 
   TextureHandle getShadowMapTexture() const { return m_shadowMapTexture; }
+  // Read every frame, so it can be tweaked at runtime.
+  ShadowSettings& shadowSettings() { return m_settings.shadows; }
 
 private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
@@ -205,19 +227,19 @@ private:
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};
-  PerViewUniforms m_shadowViewUniformBufferData {};
+  std::array<PerViewUniforms, kMaxShadowCascades> m_shadowViewUniformBufferData {};
   std::array<LightUniform, kLightUniformArraySize> m_lightUniformsBufferData {};
-  std::array<ShadowUniform, kMaxShadowCascades> m_shadowsUniformsBufferData {};
+  ShadowUniforms m_shadowsUniformsBufferData {};
 
   Unique<gpu::Buffer> m_objectsUniformBufferHandle;
   Unique<gpu::Buffer> m_viewUniformBufferHandle;
-  Unique<gpu::Buffer> m_shadowViewUniformBufferHandle;
+  std::array<Unique<gpu::Buffer>, kMaxShadowCascades> m_shadowViewUniformBufferHandles;
   Unique<gpu::Buffer> m_lightsUniformBufferHandle;
   Unique<gpu::Buffer> m_shadowsUniformBufferHandle;
   Unique<gpu::DescriptorSetLayout> m_viewDescriptorSetLayout;
   Unique<gpu::DescriptorSetLayout> m_objectDescriptorSetLayout;
   Unique<gpu::DescriptorSet> m_viewDescriptorSet;
-  Unique<gpu::DescriptorSet> m_shadowViewDescriptorSet;
+  std::array<Unique<gpu::DescriptorSet>, kMaxShadowCascades> m_shadowViewDescriptorSets;
   Unique<gpu::DescriptorSet> m_objectDescriptorSet;
   bool m_objectDescriptorSetDirty = true;
   AssetPtr<Texture> m_iblDfgLut;

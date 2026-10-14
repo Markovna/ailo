@@ -150,7 +150,9 @@ Light getDirectionalLight() {
 }
 
 #if defined(VARIANT_HAS_SHADOWING)
-float sampleShadow(vec2 uv, float depth) {
+float sampleShadow(vec2 uv, float depth, vec4 tileRect) {
+    // Keeps the 2x2 footprint of the comparison filter inside the cascade's atlas tile.
+    uv = clamp(uv, tileRect.xy, tileRect.zw);
     // Explicit LOD: the shadow map has no mips, and this avoids implicit derivatives in non-uniform control flow.
     return textureLod(shadowMap, vec3(uv, depth), 0.0);
 }
@@ -160,14 +162,16 @@ float sampleShadow(vec2 uv, float depth) {
 // Small constant bias in light NDC depth; the normal offset handles the slope-dependent part.
 #define SHADOW_DEPTH_BIAS 0.0005
 
-float calculateShadow(int shadowIndex, vec3 worldPos, vec3 geometricNormal, float NoL) {
-    vec2 size = vec2(textureSize(shadowMap, 0));
-    vec2 texelSize = 1.0 / size;
+float sampleCascade(int cascade, vec3 worldPos, vec3 geometricNormal, float NoL) {
+    vec2 atlasSize = vec2(textureSize(shadowMap, 0));
+    vec2 texelSize = 1.0 / atlasSize;
+    vec4 scaleOffset = shadows.cascades[cascade].atlasScaleOffset;
+    float tileSize = atlasSize.x * scaleOffset.x;
 
     // Orthographic light projection: NDC x scale is 1 / half-extent, so one texel spans 2 / (size * scale) world units.
-    mat4 lvp = shadows[shadowIndex].lightFromWorldMatrix;
+    mat4 lvp = shadows.cascades[cascade].lightFromWorldMatrix;
     float ndcScale = length(vec3(lvp[0][0], lvp[1][0], lvp[2][0]));
-    float texelWorldSize = 2.0 / (size.x * ndcScale);
+    float texelWorldSize = 2.0 / (tileSize * ndcScale);
     worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * (1.0 - NoL));
 
     vec4 lightSpacePos = lvp * vec4(worldPos, 1.0);
@@ -181,7 +185,10 @@ float calculateShadow(int shadowIndex, vec3 worldPos, vec3 geometricNormal, floa
 
     float depth = projCoords.z - SHADOW_DEPTH_BIAS;
 
-    vec2 uv = shadowUV * size + 0.5;
+    vec2 atlasUV = shadowUV * scaleOffset.xy + scaleOffset.zw;
+    vec4 tileRect = vec4(scaleOffset.zw + 0.5 * texelSize, scaleOffset.zw + scaleOffset.xy - 0.5 * texelSize);
+
+    vec2 uv = atlasUV * atlasSize + 0.5;
     vec2 base = (floor(uv) - 0.5) * texelSize;
     vec2 st = fract(uv);
 
@@ -192,11 +199,53 @@ float calculateShadow(int shadowIndex, vec3 worldPos, vec3 geometricNormal, floa
     vec2 v = vec2((2.0 - st.y) / vw.x - 1.0, st.y / vw.y + 1.0) * texelSize.y;
 
     float shadow = 0.0;
-    shadow += uw.x * vw.x * sampleShadow(base + vec2(u.x, v.x), depth);
-    shadow += uw.y * vw.x * sampleShadow(base + vec2(u.y, v.x), depth);
-    shadow += uw.x * vw.y * sampleShadow(base + vec2(u.x, v.y), depth);
-    shadow += uw.y * vw.y * sampleShadow(base + vec2(u.y, v.y), depth);
+    shadow += uw.x * vw.x * sampleShadow(base + vec2(u.x, v.x), depth, tileRect);
+    shadow += uw.y * vw.x * sampleShadow(base + vec2(u.y, v.x), depth, tileRect);
+    shadow += uw.x * vw.y * sampleShadow(base + vec2(u.x, v.y), depth, tileRect);
+    shadow += uw.y * vw.y * sampleShadow(base + vec2(u.y, v.y), depth, tileRect);
     return shadow * (1.0 / 16.0);
+}
+
+float getViewDepth(vec3 worldPos) {
+    return -(view.view * vec4(worldPos, 1.0)).z;
+}
+
+// Returns cascadeCount past the last cascade.
+int getShadowCascade(float viewDepth) {
+    int count = int(shadows.cascadeCount);
+    for (int i = 0; i < count; i++) {
+        if (viewDepth < shadows.cascadeSplits[i]) {
+            return i;
+        }
+    }
+    return count;
+}
+
+float calculateShadow(vec3 worldPos, vec3 geometricNormal, float NoL) {
+    float viewDepth = getViewDepth(worldPos);
+    int cascade = getShadowCascade(viewDepth);
+    int count = int(shadows.cascadeCount);
+    if (cascade >= count) {
+        return 1.0;
+    }
+
+    float visibility = sampleCascade(cascade, worldPos, geometricNormal, NoL);
+
+    // Cross-fade into the next cascade (or out of shadow after the last one) to hide the seam.
+    float splitNear = cascade == 0 ? 0.0 : shadows.cascadeSplits[cascade - 1];
+    float splitFar = shadows.cascadeSplits[cascade];
+    float blendStart = splitFar - (splitFar - splitNear) * shadows.cascadeBlend;
+    if (viewDepth > blendStart) {
+        float next = cascade + 1 < count ? sampleCascade(cascade + 1, worldPos, geometricNormal, NoL) : 1.0;
+        visibility = mix(visibility, next, smoothstep(blendStart, splitFar, viewDepth));
+    }
+    return visibility;
+}
+
+vec3 getCascadeDebugColor(int cascade) {
+    const vec3 colors[MAX_SHADOW_CASCADES + 1] = vec3[](
+        vec3(1.0, 0.3, 0.3), vec3(0.3, 1.0, 0.3), vec3(0.3, 0.3, 1.0), vec3(1.0, 1.0, 0.3), vec3(1.0));
+    return colors[cascade];
 }
 #endif
 
@@ -236,12 +285,12 @@ vec4 evaluateMaterial(const MaterialInputs material) {
 #if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
     float visibility = 0.0;
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
-        visibility = calculateShadow(0, fragPosWorld, geometricNormal, geometricNoL);
+        visibility = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
     }
     color += customSurfaceShading(material, pixel, directionalLight, visibility);
 #else
     if (geometricNoL > 0.0 && directionalLight.NoL > 0.0) {
-        float shadow = calculateShadow(0, fragPosWorld, geometricNormal, geometricNoL);
+        float shadow = calculateShadow(fragPosWorld, geometricNormal, geometricNoL);
         color += surfaceShading(pixel, directionalLight, shadow);
     }
 #endif
@@ -274,6 +323,12 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
 
     color.rgb += ambientLuminance * (Fd + Fr);
+
+#if defined(VARIANT_HAS_SHADOWING)
+    if ((shadows.shadowFlags & SHADOW_FLAG_VISUALIZE_CASCADES) != 0u) {
+        color.rgb *= getCascadeDebugColor(getShadowCascade(getViewDepth(fragPosWorld)));
+    }
+#endif
 
     return vec4(color, pixel.baseColor.a);
 }

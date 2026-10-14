@@ -17,6 +17,7 @@
 #include "render/Model.h"
 #include "render/RenderAPI.h"
 #include "render/Renderable.h"
+#include "render/Renderer.h"
 #include "render/Skybox.h"
 #include "render/Texture.h"
 #include "ui/ImGuiPlugin.h"
@@ -37,7 +38,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         },
         SceneLighting {
             .indirectLight = server.load<IndirectLight>("assets/textures/rogland_clear_night_4k"),
-            .lightDirection = glm::normalize(glm::vec3(0.2, -1.1, -0.2)),
+            .lightDirection = glm::normalize(glm::vec3(0.2, -1.1, 0.15)),
             .sunIntensity = 3.0f,
             .iblIntensity = 0.5f,
         });
@@ -85,7 +86,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
 }
 
 void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances,
-                 RenderAPI& api, const PhysicsWorld* physics) {
+                 RenderAPI& api, Renderer& renderer, const PhysicsWorld* physics) {
     ImGui::Begin("Console");
     ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
     if (physics) {
@@ -100,6 +101,18 @@ void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstanc
                 .scale = glm::vec3(0.25f),
             }, MotionType::Dynamic);
         }
+    }
+    if (ImGui::CollapsingHeader("Shadows")) {
+        ShadowSettings& shadows = renderer.shadowSettings();
+        int cascadeCount = shadows.cascadeCount;
+        if (ImGui::SliderInt("Cascades", &cascadeCount, 1, kMaxShadowCascades)) {
+            shadows.cascadeCount = static_cast<uint8_t>(cascadeCount);
+        }
+        ImGui::SliderFloat("Distance", &shadows.distance, 5.0f, 200.0f);
+        ImGui::SliderFloat("Split lambda", &shadows.splitLambda, 0.0f, 1.0f);
+        ImGui::SliderFloat("Blend", &shadows.blendFraction, 0.0f, 0.5f);
+        ImGui::SliderFloat("Caster distance", &shadows.casterDistance, 0.0f, 100.0f);
+        ImGui::Checkbox("Visualize cascades", &shadows.visualizeCascades);
     }
     ImGui::End();
 }

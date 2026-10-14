@@ -78,11 +78,15 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   m_iblSpecularMap = m_defaultIblSpecular->getHandle();
   backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_iblSpecularMap, std::to_underlying(PerViewDescriptorBindings::IBL_SPECULAR_MAP));
 
-  m_shadowViewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_shadowViewUniformBufferData));
-  m_shadowViewDescriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
-  backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_shadowViewUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
-  backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_shadowsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::SHADOWS));
-  backend->updateDescriptorSetBuffer(m_shadowViewDescriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
+  for (size_t i = 0; i < kMaxShadowCascades; i++) {
+    auto& buffer = m_shadowViewUniformBufferHandles[i];
+    auto& descriptorSet = m_shadowViewDescriptorSets[i];
+    buffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(PerViewUniforms));
+    descriptorSet = backend->createDescriptorSet(m_viewDescriptorSetLayout);
+    backend->updateDescriptorSetBuffer(descriptorSet, buffer, std::to_underlying(PerViewDescriptorBindings::FRAME_UNIFORMS));
+    backend->updateDescriptorSetBuffer(descriptorSet, m_shadowsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::SHADOWS));
+    backend->updateDescriptorSetBuffer(descriptorSet, m_lightsUniformBufferHandle, std::to_underlying(PerViewDescriptorBindings::LIGHTS));
+  }
 
   m_skyboxMaterial = MaterialInstance::create(materialInstances, server, *m_renderAPI, server.load<Material>(materials::kSkybox));
   m_skyboxMesh = server.load<Mesh>(meshes::kSkyboxCube);
@@ -139,18 +143,21 @@ bool Renderer::beginFrame() {
 void Renderer::shadowPass() {
   RenderAPI* backend = m_renderAPI;
 
+  const uint32_t tileSize = m_settings.shadowMapSize;
+  const uint32_t atlasSize = tileSize * kShadowAtlasTiles;
+
   if (!m_shadowMapTexture) {
     m_shadowMapTexture = backend->createTexture(
         TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
-        m_settings.shadowMapSize, m_settings.shadowMapSize);
+        atlasSize, atlasSize);
 
     backend->updateDescriptorSetTexture(m_viewDescriptorSet, m_shadowMapTexture, std::to_underlying(PerViewDescriptorBindings::SHADOW_MAP), kShadowSampler);
   }
 
   if (!m_shadowMapRenderTarget) {
     m_shadowMapRenderTarget = backend->createRenderTarget(
-        {}, m_shadowMapTexture, m_settings.shadowMapSize, m_settings.shadowMapSize, vk::SampleCountFlagBits::e1);
+        {}, m_shadowMapTexture, atlasSize, atlasSize, vk::SampleCountFlagBits::e1);
   }
 
   RenderPassDescription shadowPassDesc {};
@@ -160,25 +167,32 @@ void Renderer::shadowPass() {
 
   PipelineState pipelineState {};
 
-  for(const RenderData& renderData : m_renderData) {
-    if (!renderData.depthProgram) {
-      continue;
+  for (uint32_t cascade = 0; cascade < m_shadowsUniformsBufferData.cascadeCount; cascade++) {
+    const int32_t x = static_cast<int32_t>(cascade % kShadowAtlasTiles * tileSize);
+    const int32_t y = static_cast<int32_t>(cascade / kShadowAtlasTiles * tileSize);
+    backend->setViewport(static_cast<float>(x), static_cast<float>(y), static_cast<float>(tileSize), static_cast<float>(tileSize));
+    backend->setScissor(x, y, tileSize, tileSize);
+
+    for (const RenderData& renderData : m_renderData) {
+      if (!renderData.depthProgram) {
+        continue;
+      }
+
+      pipelineState.program = renderData.depthProgram;
+      pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
+      backend->bindPipeline(pipelineState);
+
+      backend->bindDescriptorSet(m_shadowViewDescriptorSets[cascade], std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+      backend->bindDescriptorSet(
+        renderData.objectDescriptorSet,
+        std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
+        { renderData.objectBufferOffset, 0 });
+
+      backend->bindIndexBuffer(renderData.indexBuffer);
+      backend->bindVertexBuffer(renderData.vertexBuffer);
+
+      backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
     }
-
-    pipelineState.program = renderData.depthProgram;
-    pipelineState.vertexBufferLayout = renderData.vertexBufferLayout;
-    backend->bindPipeline(pipelineState);
-
-    backend->bindDescriptorSet(m_shadowViewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
-    backend->bindDescriptorSet(
-      renderData.objectDescriptorSet,
-      std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
-      { renderData.objectBufferOffset, 0 });
-
-    backend->bindIndexBuffer(renderData.indexBuffer);
-    backend->bindVertexBuffer(renderData.vertexBuffer);
-
-    backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
   }
 
   backend->endRenderPass();
@@ -316,7 +330,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
     m_perViewUniformBufferData.iblSH[i] = glm::vec4(indirectLight ? indirectLight->irradianceSH[i] : glm::vec3(0.0f), 0.0f);
   }
 
-  prepareShadows(scene, camera, sceneLighting);
+  prepareShadows(camera, lightDir);
 
   uint32_t lightCount = 0;
 
@@ -460,11 +474,13 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
     m_skyboxMaterial->commit(backend);
   }
 
-  backend.updateBuffer(m_shadowViewUniformBufferHandle, &m_shadowViewUniformBufferData, sizeof(m_shadowViewUniformBufferData));
+  for (uint32_t i = 0; i < m_shadowsUniformsBufferData.cascadeCount; i++) {
+    backend.updateBuffer(m_shadowViewUniformBufferHandles[i], &m_shadowViewUniformBufferData[i], sizeof(PerViewUniforms));
+  }
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
   const TonemapUniforms tonemapUniforms { .exposure = camera.exposure };
   backend.updateBuffer(m_tonemapUniformBuffer, &tonemapUniforms, sizeof(tonemapUniforms));
-  backend.updateBuffer(m_shadowsUniformBufferHandle, m_shadowsUniformsBufferData.data(), sizeof(m_shadowsUniformsBufferData));
+  backend.updateBuffer(m_shadowsUniformBufferHandle, &m_shadowsUniformsBufferData, sizeof(m_shadowsUniformsBufferData));
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   if (objectIndex > 0) {
     backend.updateBuffer(m_objectsUniformBufferHandle, m_perObjectUniformBufferData.data(), objectIndex * sizeof(PerObjectUniforms));
@@ -477,31 +493,32 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
 }
 
 
-void Renderer::prepareShadows(Scene& scene, const ViewInfo& camera, const SceneLighting* sceneLighting) {
-  // m_shadowMapManager.updateCascadeShadows(camera, sceneLighting);
+void Renderer::prepareShadows(const ViewInfo& camera, const glm::vec3& lightDirection) {
+  const ShadowSettings& settings = m_settings.shadows;
+  m_shadowMapManager.update(camera, lightDirection, settings, m_settings.shadowMapSize);
+  const auto cascades = m_shadowMapManager.cascades();
 
-  // Compute light view-projection matrix
-  const float extent = 22;
-  const float nearPlane = 0.1f;
-  const float farPlane = 32.0f;
-  const glm::vec3 lightPos = glm::vec3 {0, 18, 0};
+  auto& uniforms = m_shadowsUniformsBufferData;
+  uniforms.cascadeCount = static_cast<uint32_t>(cascades.size());
+  uniforms.cascadeBlend = std::clamp(settings.blendFraction, 0.0f, 1.0f);
+  uniforms.flags = settings.visualizeCascades ? std::to_underlying(ShadowFlags::VisualizeCascades) : 0u;
+  uniforms.cascadeSplits = glm::vec4(0.0f);
 
-  const auto& lightDir = sceneLighting->lightDirection;
-  // lookAt degenerates when the light direction is parallel to up.
-  glm::vec3 up = glm::abs(glm::dot(lightDir, glm::vec3(0, 1, 0))) > 0.99f
-                   ? glm::vec3(0, 0, 1) : glm::vec3(0, 1, 0);
+  constexpr float kTileScale = 1.0f / kShadowAtlasTiles;
+  for (size_t i = 0; i < cascades.size(); i++) {
+    const ShadowCascade& cascade = cascades[i];
+    uniforms.cascadeSplits[static_cast<glm::length_t>(i)] = cascade.splitFar;
+    uniforms.cascades[i].lightFromWorld = cascade.viewProjection;
+    uniforms.cascades[i].atlasScaleOffset = glm::vec4(
+      kTileScale, kTileScale,
+      static_cast<float>(i % kShadowAtlasTiles) * kTileScale,
+      static_cast<float>(i / kShadowAtlasTiles) * kTileScale);
 
-  glm::mat4 lightView = glm::lookAt(lightPos, lightPos + lightDir, up);
-  glm::mat4 lightProjection = glm::ortho(-extent, extent, -extent, extent, nearPlane, farPlane);
-  lightProjection[1][1] *= -1.0f;
-
-  glm::mat4 lightVP = lightProjection * lightView;
-
-  m_shadowViewUniformBufferData.projection = lightProjection;
-  m_shadowViewUniformBufferData.view = lightView;
-  m_shadowViewUniformBufferData.viewInverse = inverse(lightView);
-  m_shadowViewUniformBufferData.lightDirection = -lightDir;
-
-  m_shadowsUniformsBufferData[0].lightViewProjection = lightVP;
+    PerViewUniforms& view = m_shadowViewUniformBufferData[i];
+    view.projection = cascade.projection;
+    view.view = cascade.view;
+    view.viewInverse = inverse(cascade.view);
+    view.lightDirection = -lightDirection;
+  }
 }
 }

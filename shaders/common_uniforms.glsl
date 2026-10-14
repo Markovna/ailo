@@ -11,8 +11,9 @@ struct ViewUniform {
    vec4 iblSH[9]; // irradiance SH, see LightingPackage.h
 };
 
-struct ShadowData {
+struct ShadowCascade {
     mat4 lightFromWorldMatrix;
+    vec4 atlasScaleOffset; // cascade tile in the shadow atlas: uv * xy + zw
 };
 
 struct LightUniform {
@@ -35,7 +36,8 @@ struct BoneUniform {
 };
 
 #define DYNAMIC_LIGHTS_COUNT 2
-#define MAX_SHADOWS_COUNT 5
+#define MAX_SHADOW_CASCADES 4
+#define SHADOW_FLAG_VISUALIZE_CASCADES 1u
 #define MAX_BONES_COUNT 256
 
 const int POINT_LIGHT_TYPE = 0;
@@ -48,8 +50,12 @@ uniform perFrame_view {
 
 layout (set = 0, binding = 1, std140)
 uniform perFrame_shadows {
-    ShadowData shadows[MAX_SHADOWS_COUNT];
-};
+    ShadowCascade cascades[MAX_SHADOW_CASCADES];
+    vec4 cascadeSplits; // view-space distance where each cascade ends
+    uint cascadeCount;
+    float cascadeBlend; // fraction of each cascade cross-faded into the next
+    uint shadowFlags;
+} shadows;
 
 layout (set = 0, binding = 2, std140)
 uniform perFrame_lights {
