@@ -159,8 +159,8 @@ float sampleShadow(vec2 uv, float depth, vec4 tileRect) {
 
 // Normal offset (in shadow map texels) along the geometric normal, scaled up at grazing angles.
 #define SHADOW_NORMAL_OFFSET 1.5
-// Small constant bias in light NDC depth; the normal offset handles the slope-dependent part.
-#define SHADOW_DEPTH_BIAS 0.0005
+// Small constant depth bias in world units; the normal offset handles the slope-dependent part.
+#define SHADOW_DEPTH_BIAS 0.02
 
 float sampleCascade(int cascade, vec3 worldPos, vec3 geometricNormal, float NoL) {
     vec2 atlasSize = vec2(textureSize(shadowMap, 0));
@@ -172,6 +172,9 @@ float sampleCascade(int cascade, vec3 worldPos, vec3 geometricNormal, float NoL)
     mat4 lvp = shadows.cascades[cascade].lightFromWorldMatrix;
     float ndcScale = length(vec3(lvp[0][0], lvp[1][0], lvp[2][0]));
     float texelWorldSize = 2.0 / (tileSize * ndcScale);
+    // Depth is mapped [near, far] -> [0, 1], so this is 1 / depth range: it keeps the bias constant in world units
+    // whatever each cascade's depth range is.
+    float depthScale = length(vec3(lvp[0][2], lvp[1][2], lvp[2][2]));
     worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * (1.0 - NoL));
 
     vec4 lightSpacePos = lvp * vec4(worldPos, 1.0);
@@ -183,7 +186,7 @@ float sampleCascade(int cascade, vec3 worldPos, vec3 geometricNormal, float NoL)
         return 1.0;
     }
 
-    float depth = projCoords.z - SHADOW_DEPTH_BIAS;
+    float depth = projCoords.z - SHADOW_DEPTH_BIAS * depthScale;
 
     vec2 atlasUV = shadowUV * scaleOffset.xy + scaleOffset.zw;
     vec4 tileRect = vec4(scaleOffset.zw + 0.5 * texelSize, scaleOffset.zw + scaleOffset.xy - 0.5 * texelSize);
