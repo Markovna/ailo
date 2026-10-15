@@ -17,6 +17,7 @@
 #include "CommandBuffer.h"
 #include "DeletionQueue.h"
 #include "FrameBufferCache.h"
+#include "GpuTimer.h"
 #include "PipelineCache.h"
 #include "RenderPassCache.h"
 #include "SamplerCache.h"
@@ -82,6 +83,10 @@ public:
     void setViewport(float x, float y, float width, float height);
     void setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height);
 
+    void beginGpuTimer(std::string_view name);
+    void endGpuTimer();
+    std::span<const GpuTiming> gpuTimings() const { return m_gpuTimer.timings(); }
+
     void handleWindowResize();
     vk::Extent2D getSwapchainExtent() const;
 
@@ -124,6 +129,7 @@ private:
 
     VmaAllocator m_Allocator = nullptr;
     StagePool m_stagePool;
+    GpuTimer m_gpuTimer;
 
     // resources
     ResourceContainer<Buffer> m_buffers;

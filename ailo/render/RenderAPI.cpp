@@ -22,6 +22,7 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_descriptorPool(createDescriptorPoolS(*m_device)),
     m_Allocator(createAllocator(m_device.instance(), m_device.physicalDevice(), *m_device)),
     m_stagePool(m_Allocator, m_commands),
+    m_gpuTimer(*m_device, m_device.physicalDevice(), m_device.graphicsQueueFamilyIndex(), m_commands),
     m_framebufferCache(*m_device, m_deletionQueue),
     m_renderPassCache(*m_device, m_deletionQueue),
     m_pipelineCache(*m_device, m_graphicsPipelines),
@@ -53,6 +54,7 @@ RenderAPI::~RenderAPI() {
 
     m_deletionQueue.shutdown();
     m_stagePool.destroy();
+    m_gpuTimer.destroy();
 
     collectGarbage();
 
@@ -92,12 +94,15 @@ bool RenderAPI::beginFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    m_commands.get().setSubmitSignal(std::move(acquireSemaphore));
+    auto& commands = m_commands.get();
+    commands.setSubmitSignal(std::move(acquireSemaphore));
+    m_gpuTimer.beginFrame(*commands);
     return true;
 }
 
 void RenderAPI::endFrame() {
     auto& commands = m_commands.get();
+    m_gpuTimer.endFrame(*commands);
 
     auto result = m_swapChain->present(commands, m_device.graphicsQueue(), m_device.presentQueue());
 
@@ -640,6 +645,14 @@ void RenderAPI::setScissor(int32_t x, int32_t y, uint32_t width, uint32_t height
     vk::Rect2D scissor{{x, y}, {width, height}};
     auto& commands = m_commands.get();
     commands->setScissor(0, 1, &scissor);
+}
+
+void RenderAPI::beginGpuTimer(std::string_view name) {
+    m_gpuTimer.begin(*m_commands.get(), name);
+}
+
+void RenderAPI::endGpuTimer() {
+    m_gpuTimer.end(*m_commands.get());
 }
 
 // Swapchain management
