@@ -2,12 +2,14 @@
 
 #include <algorithm>
 #include <bit>
+#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <vector>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/packing.hpp>
 
 #include "Cubemap.h"
 #include "stb_image/stb_image.h"
@@ -378,7 +380,24 @@ TexturePackage dfgLut() {
     pkg.levels = 1;
     pkg.generateMipmaps = false;
     appendPixels(pkg, pixels);
-    return pkg;
+    return toHalfFloat(pkg);
+}
+
+TexturePackage toHalfFloat(const TexturePackage& package) {
+    assert(package.format == TextureFormat::RGBA32F);
+
+    TexturePackage half = package;
+    half.format = TextureFormat::RGBA16F;
+    half.data.resize(package.data.size() / 2);
+
+    const size_t count = package.data.size() / sizeof(float);
+    for (size_t i = 0; i < count; i++) {
+        float value;
+        std::memcpy(&value, package.data.data() + i * sizeof(float), sizeof(float));
+        const uint16_t bits = glm::packHalf1x16(std::min(value, 65504.0f));
+        std::memcpy(half.data.data() + i * sizeof(uint16_t), &bits, sizeof(uint16_t));
+    }
+    return half;
 }
 
 }

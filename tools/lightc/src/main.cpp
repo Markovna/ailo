@@ -118,8 +118,9 @@ int main(int argc, char** argv) {
     }
 
     LightingPackage pkg;
+    // Projected before the conversion, so the SH keep full precision.
     pkg.irradianceSH = projectIrradianceSH(*reflections);
-    pkg.reflections = std::move(*reflections);
+    pkg.reflections = toHalfFloat(*reflections);
     if (error = pkg.validate(); !error.empty()) {
         std::cerr << sourceName << ": error: " << error << "\n";
         return 1;

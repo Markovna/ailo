@@ -21,6 +21,7 @@ enum class TextureFormat : uint8_t {
     RGBA8,
     RGBA8_SRGB,
     RGBA32F,
+    RGBA16F,
 };
 
 std::string_view toString(TextureType type);

@@ -104,6 +104,23 @@ void testLayout() {
     assert(generated.allocatedLevels() == 9);
 }
 
+void testHalfFloat() {
+    assert(bytesPerPixel(TextureFormat::RGBA16F) == 8);
+    assert(toString(TextureFormat::RGBA16F) == "rgba16f");
+
+    auto cube = makeCubemapWithLevels();
+    cube.format = TextureFormat::RGBA16F;
+    cube.data.resize(cube.expectedDataSize());
+    assert(cube.data.size() == 6 * 8 * (16 + 4 + 1));
+    assert(cube.validate().empty());
+
+    std::string error;
+    auto restored = TexturePackage::deserialize(cube.serialize(), error);
+    assert(restored && error.empty());
+    assert(restored->format == TextureFormat::RGBA16F);
+    assert(restored->data == cube.data);
+}
+
 void testRoundTrip() {
     auto cube = makeCubemapWithLevels();
     std::string error;
@@ -365,6 +382,7 @@ int main() {
     testMipLevelCount();
     testLayout();
     testRoundTrip();
+    testHalfFloat();
     testDeserializeRejectsBadPackages();
     testDeserializeSkipsUnknownChunks();
     testPackFromPixels();

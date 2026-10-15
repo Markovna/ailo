@@ -36,6 +36,7 @@ std::string_view toString(TextureFormat format) {
         case TextureFormat::RGBA8:      return "rgba8";
         case TextureFormat::RGBA8_SRGB: return "rgba8_srgb";
         case TextureFormat::RGBA32F:    return "rgba32f";
+        case TextureFormat::RGBA16F:    return "rgba16f";
     }
     return "?";
 }
@@ -45,6 +46,7 @@ uint32_t bytesPerPixel(TextureFormat format) {
         case TextureFormat::RGBA8:
         case TextureFormat::RGBA8_SRGB: return 4;
         case TextureFormat::RGBA32F:    return 16;
+        case TextureFormat::RGBA16F:    return 8;
     }
     return 0;
 }
@@ -157,7 +159,7 @@ std::optional<TexturePackage> TexturePackage::deserialize(std::span<const uint8_
         switch (tag) {
             case kChunkInfo:
                 pkg.type = c.enumeration(TextureType::Cubemap);
-                pkg.format = c.enumeration(TextureFormat::RGBA32F);
+                pkg.format = c.enumeration(TextureFormat::RGBA16F);
                 pkg.width = c.u32();
                 pkg.height = c.u32();
                 pkg.levels = c.u32();
