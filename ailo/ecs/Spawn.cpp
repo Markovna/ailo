@@ -43,11 +43,11 @@ Entity spawnCube(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& m
     return entity;
 }
 
-Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const glm::mat4& transform) {
+Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const Transform& transform) {
     if (!prefab) return entt::null;
 
     const Entity root = scene.addEntity();
-    scene.addComponent<TransformComponent>(root, Transform::fromMatrix(transform));
+    scene.addComponent<TransformComponent>(root, transform);
 
     // The animator owns the bone buffer that every skinned mesh of this instance reads.
     if (prefab->skeleton && !prefab->clips.empty()) {

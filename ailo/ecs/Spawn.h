@@ -17,7 +17,7 @@ struct Model;
 
 namespace scene {
 
-Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const glm::mat4& transform = glm::mat4(1.0f));
+Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const Transform& transform = {});
 Entity spawnCube(Scene& scene, RenderAPI& api, AssetStorage<MaterialInstance>& materialInstances,
                  AssetServer& server, const Transform& transform = {}, MotionType motionType = MotionType::Dynamic);
 

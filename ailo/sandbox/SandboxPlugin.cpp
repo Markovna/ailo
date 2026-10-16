@@ -58,16 +58,18 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         .outerAngle = glm::radians(66.0f),
     });
 
-    auto characterTransform = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
-    characterTransform = glm::rotate(characterTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    const glm::quat yaw90 = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/Sponza.gltf"));
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), characterTransform);
-
-    auto helmetTransform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
-    helmetTransform = glm::translate(helmetTransform, glm::vec3(2.0f, 5.0f, 0.0f));
-    helmetTransform = glm::rotate(helmetTransform, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/DamagedHelmet.glb"), helmetTransform);
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx"), {
+        .rotation = yaw90,
+        .scale = glm::vec3(0.01f),
+    });
+    scene::spawnPrefab(scene, server.load<Model>("assets/models/DamagedHelmet.glb"), {
+        .position = { 1.2f, 3.0f, 0.0f },
+        .rotation = yaw90,
+        .scale = glm::vec3(0.6f),
+    });
 
     // Physics playground next to the character: a static slab (top face at y = 0) and a few falling cubes.
     scene::spawnCube(scene, api, materialInstances, server,
