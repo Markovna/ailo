@@ -65,9 +65,6 @@ public:
         return splits;
     }
 
-    static Aabb computeLightFrustumBounds(const glm::mat4& lightView, const Aabb& worldSpaceSceneBounds);
-    static Aabb compute2DBounds(const glm::mat4& lightView, const Aabb& volume) noexcept;
-
 private:
     std::array<ShadowCascade, kMaxShadowCascades> m_cascades {};
     uint32_t m_cascadeCount = 0;

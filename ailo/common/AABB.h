@@ -31,16 +31,6 @@ struct Aabb {
             glm::vec3 { max.x, max.y, max.z }
         };
     }
-
-    float contains(glm::vec3 p) const noexcept {
-        float d = min.x - p.x;
-        d = glm::max(d, min.y - p.y);
-        d = glm::max(d, min.z - p.z);
-        d = glm::max(d, p.x - max.x);
-        d = glm::max(d, p.y - max.y);
-        d = glm::max(d, p.z - max.z);
-        return d;
-    }
 };
 
 

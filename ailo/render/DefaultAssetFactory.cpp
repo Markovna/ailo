@@ -97,6 +97,7 @@ AssetPtr<Mesh> createSkyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderAp
     mesh->indexBuffer.updateBuffer(renderApi, sCubeIndices, sizeof(sCubeIndices));
 
     mesh->faces.emplace_back(0, 36);
+    mesh->bounds = { glm::vec3(-10.0f), glm::vec3(10.0f) };
     return mesh;
 }
 
@@ -144,6 +145,7 @@ AssetPtr<Mesh> createUnitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi)
     mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(indices));
     mesh->indexBuffer.updateBuffer(renderApi, indices.data(), sizeof(indices));
     mesh->faces.push_back({ 0, static_cast<uint32_t>(indices.size()) });
+    mesh->bounds = { glm::vec3(-0.5f), glm::vec3(0.5f) };
     return mesh;
 }
 

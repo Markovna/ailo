@@ -1,8 +1,7 @@
 #pragma once
-#include "RenderAPI.h"
 #include "RenderPrimitive.h"
 
-#include "assets/AssetServer.h"
+#include "common/AABB.h"
 
 namespace ailo {
 
@@ -15,6 +14,7 @@ struct Mesh {
     VertexBuffer vertexBuffer;
     BufferObject indexBuffer;
     std::vector<Face> faces;
+    Aabb bounds {};
 };
 
 }

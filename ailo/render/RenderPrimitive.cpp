@@ -1,5 +1,7 @@
 #include "RenderPrimitive.h"
 
+#include "RenderAPI.h"
+
 namespace ailo {
 
 BufferObject::BufferObject(RenderAPI* renderApi, BufferBinding binding, size_t byteSize)

@@ -1,10 +1,13 @@
 #pragma once
 
-#include "RenderAPI.h"
+#include <cstdint>
+
+#include "render/vulkan/Resources.h"
 
 namespace ailo {
-class VertexBuffer;
 
+class RenderAPI;
+class VertexBuffer;
 class Shader;
 
 class BufferObject {

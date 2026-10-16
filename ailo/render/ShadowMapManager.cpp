@@ -71,29 +71,4 @@ namespace ailo {
         }
     }
 
-    Aabb ShadowMapManager::compute2DBounds(const glm::mat4& lightView, const Aabb& volume) noexcept {
-        Aabb bounds {
-            .min = glm::vec3(std::numeric_limits<float>::max()),
-            .max = glm::vec3(std::numeric_limits<float>::lowest()),
-        };
-
-        auto project = [](const glm::mat4& projectionMatrix, const glm::vec3& vertice) {
-            glm::vec4 r = projectionMatrix * glm::vec4 { vertice, 1.0 };
-            return glm::vec3 { r[0], r[1], r[2] } * (1 / r[3]);
-        };
-
-        const auto corners = volume.corners();
-        for (const auto& corner : corners) {
-            const glm::vec3 v = project(lightView, corner);
-            bounds.min = min(bounds.min, v);
-            bounds.max = max(bounds.max, v);
-        }
-        return bounds;
-    }
-
-    Aabb ShadowMapManager::computeLightFrustumBounds(const glm::mat4& lightView, const Aabb& worldSpaceSceneBounds) {
-        Aabb const lsSceneBounds = compute2DBounds(lightView, worldSpaceSceneBounds);
-
-        return lsSceneBounds;
-    }
 }

@@ -1,6 +1,8 @@
 #include "Model.h"
 
+#include <cstring>
 #include <filesystem>
+#include <limits>
 #include <iostream>
 #include <set>
 #include <stdexcept>
@@ -36,6 +38,18 @@ VertexInputDescription vertexInput(model::VertexLayout layout) {
         addAttr(VertexLocation::BoneWeights, vk::Format::eR32G32B32A32Sfloat, offsetof(S, boneWeights));
     }
     return input;
+}
+
+Aabb computeBounds(const model::Mesh& mesh) {
+    Aabb bounds { glm::vec3(std::numeric_limits<float>::max()), glm::vec3(std::numeric_limits<float>::lowest()) };
+    const uint32_t stride = model::vertexStride(mesh.layout);
+    for (uint32_t i = 0; i < mesh.vertexCount; i++) {
+        glm::vec3 p;
+        std::memcpy(&p, mesh.vertices.data() + i * stride + offsetof(model::StaticVertex, position), sizeof(p));
+        bounds.min = glm::min(bounds.min, p);
+        bounds.max = glm::max(bounds.max, p);
+    }
+    return mesh.vertexCount ? bounds : Aabb {};
 }
 
 static_assert(offsetof(model::StaticVertex, tangent) == offsetof(model::SkinnedVertex, tangent));
@@ -135,6 +149,7 @@ void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
         mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, indexBytes);
         mesh->indexBuffer.updateBuffer(renderApi, src.indices.data(), indexBytes);
         mesh->faces.push_back({ 0, static_cast<uint32_t>(src.indices.size()) });
+        mesh->bounds = computeBounds(src);
         meshes.push_back(std::move(mesh));
     }
 
