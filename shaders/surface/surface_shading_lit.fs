@@ -157,8 +157,8 @@ float sampleShadow(vec2 uv, float depth, vec4 tileRect) {
     return textureLod(shadowMap, vec3(uv, depth), 0.0);
 }
 
-// Normal offset (in shadow map texels) along the geometric normal, scaled up at grazing angles.
-#define SHADOW_NORMAL_OFFSET 1.5
+// Normal offset (in shadow map texels) along the geometric normal, scaled by sin of the angle to the light.
+#define SHADOW_NORMAL_OFFSET 1.0
 // Small constant depth bias in world units; the normal offset handles the slope-dependent part.
 #define SHADOW_DEPTH_BIAS 0.02
 
@@ -175,7 +175,8 @@ float sampleCascade(int cascade, vec3 worldPos, vec3 geometricNormal, float NoL)
     // Depth is mapped [near, far] -> [0, 1], so this is 1 / depth range: it keeps the bias constant in world units
     // whatever each cascade's depth range is.
     float depthScale = length(vec3(lvp[0][2], lvp[1][2], lvp[2][2]));
-    worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * (1.0 - NoL));
+    float sinTheta = sqrt(max(1.0 - NoL * NoL, 0.0));
+    worldPos += geometricNormal * (texelWorldSize * SHADOW_NORMAL_OFFSET * sinTheta);
 
     vec4 lightSpacePos = lvp * vec4(worldPos, 1.0);
     vec3 projCoords = lightSpacePos.xyz;
