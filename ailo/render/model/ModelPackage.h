@@ -15,7 +15,7 @@
 namespace ailo::model {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
-static constexpr uint32_t kModelPackageVersion = 1;
+static constexpr uint32_t kModelPackageVersion = 2;
 
 // Vertices are stored in the layout the engine uploads; the attribute locations are VertexLocation's.
 struct StaticVertex {
@@ -47,8 +47,12 @@ struct Mesh {
     VertexLayout layout = VertexLayout::Static;
     uint32_t vertexCount = 0;
     std::vector<uint8_t> vertices;      // vertexCount * vertexStride(layout) bytes
-    std::vector<uint16_t> indices;      // triangle list
+    std::vector<uint32_t> indices;      // triangle list; stored 16-bit when fitsUint16Indices
 };
+
+// True when every index fits 16 bits (at most 65536 vertices): the package then stores, and the engine uploads,
+// 16-bit indices.
+bool fitsUint16Indices(const Mesh& mesh);
 
 enum class TextureSource : uint8_t {
     Uri,        // `path` as written in the source model, relative to the model's folder

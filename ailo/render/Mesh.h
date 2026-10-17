@@ -12,7 +12,7 @@ struct Mesh {
     };
 
     VertexBuffer vertexBuffer;
-    BufferObject indexBuffer;
+    IndexBuffer indexBuffer;
     std::vector<Face> faces;
     Aabb bounds {};
 };

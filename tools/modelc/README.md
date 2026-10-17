@@ -66,7 +66,8 @@ the source has them, and the runtime skips (with a warning) the ones the materia
 
 ## Geometry
 
-Meshes are triangulated and split to at most 65535 vertices (indices are 16-bit). Points and lines are dropped.
+Meshes are triangulated; points and lines are dropped. Indices are stored 16-bit when the mesh has at most 65536
+vertices (after optimization) and 32-bit otherwise; meshes are never split.
 Vertices are stored in the engine's layout (`model::StaticVertex`, or `model::SkinnedVertex` with up to 4 bone weights
 for skinned meshes); identical vertices are merged. Unless `"optimize": false`, each mesh is then optimized with
 [meshoptimizer](https://github.com/zeux/meshoptimizer): vertices identical in the engine's layout are merged again,

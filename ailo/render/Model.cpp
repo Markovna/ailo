@@ -145,10 +145,16 @@ void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
         mesh->vertexBuffer = VertexBuffer(renderApi, vertexInput(src.layout), src.vertices.size());
         mesh->vertexBuffer.updateBuffer(renderApi, src.vertices.data(), src.vertices.size());
 
-        const size_t indexBytes = src.indices.size() * sizeof(uint16_t);
-        mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, indexBytes);
-        mesh->indexBuffer.updateBuffer(renderApi, src.indices.data(), indexBytes);
-        mesh->faces.push_back({ 0, static_cast<uint32_t>(src.indices.size()) });
+        const auto indexCount = static_cast<uint32_t>(src.indices.size());
+        if (model::fitsUint16Indices(src)) {
+            const std::vector<uint16_t> indices(src.indices.begin(), src.indices.end());
+            mesh->indexBuffer = IndexBuffer(renderApi, IndexType::UINT16, indexCount);
+            mesh->indexBuffer.updateBuffer(renderApi, indices.data(), indexCount);
+        } else {
+            mesh->indexBuffer = IndexBuffer(renderApi, IndexType::UINT32, indexCount);
+            mesh->indexBuffer.updateBuffer(renderApi, src.indices.data(), indexCount);
+        }
+        mesh->faces.push_back({ 0, indexCount });
         mesh->bounds = computeBounds(src);
         meshes.push_back(std::move(mesh));
     }

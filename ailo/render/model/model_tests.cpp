@@ -16,7 +16,7 @@ bool contains(const std::string& text, const std::string& part) {
 }
 
 template<typename V>
-Mesh makeMesh(VertexLayout layout, const std::vector<V>& vertices, std::vector<uint16_t> indices) {
+Mesh makeMesh(VertexLayout layout, const std::vector<V>& vertices, std::vector<uint32_t> indices) {
     Mesh mesh;
     mesh.layout = layout;
     mesh.vertexCount = uint32_t(vertices.size());
@@ -139,6 +139,28 @@ void testRoundTrip() {
     assert(out->textures[0].data == pkg.textures[0].data && out->textures[0].generateMipmaps);
 }
 
+void testIndexWidth() {
+    ModelPackage pkg;
+    pkg.meshes.push_back(makeMesh(VertexLayout::Static, std::vector<StaticVertex>(65536), { 0, 1, 65535 }));
+    pkg.meshes.push_back(makeMesh(VertexLayout::Static, std::vector<StaticVertex>(65537), { 0, 1, 65536 }));
+    assert(fitsUint16Indices(pkg.meshes[0]) && !fitsUint16Indices(pkg.meshes[1]));
+    assert(pkg.validate().empty());
+
+    std::string error;
+    auto out = roundTrip(pkg, error);
+    assert(out && error.empty());
+    assert(out->meshes[0].indices == pkg.meshes[0].indices);
+    assert(out->meshes[1].indices == pkg.meshes[1].indices);
+
+    // One more vertex switches the mesh to 32-bit indices, 2 more bytes per index.
+    ModelPackage wide = pkg;
+    wide.meshes.pop_back();
+    ModelPackage narrow = wide;
+    wide.meshes[0].vertices.resize(size_t(65537) * sizeof(StaticVertex));
+    wide.meshes[0].vertexCount = 65537;
+    assert(wide.serialize().size() - narrow.serialize().size() == sizeof(StaticVertex) + 3 * sizeof(uint16_t));
+}
+
 void testEmptyPackage() {
     std::string error;
     auto out = roundTrip(ModelPackage {}, error);
@@ -225,6 +247,7 @@ void testDeserializeRejectsBadPackages() {
 
 int main() {
     testRoundTrip();
+    testIndexWidth();
     testEmptyPackage();
     testValidate();
     testDeserializeRejectsBadPackages();

@@ -46,9 +46,7 @@ public:
     // Buffer management
     Unique<gpu::VertexBufferLayout> createVertexBufferLayout(const VertexInputDescription& description);
 
-    Unique<gpu::Buffer> createVertexBuffer(const void* data, uint64_t size);
-    Unique<gpu::Buffer> createIndexBuffer(const void* data, uint64_t size);
-    Unique<gpu::Buffer> createBuffer(BufferBinding, uint64_t size);
+    Unique<gpu::Buffer> createBuffer(BufferBinding, uint64_t size, const void* data = nullptr);
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
     // Texture management
@@ -75,8 +73,7 @@ public:
     void endRenderPass();
     void bindPipeline(const PipelineState& state);
     void bindVertexBuffer(const BufferHandle& handle);
-    // FIXME: remove indexType from here, save it on creation instead
-    void bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType = vk::IndexType::eUint16);
+    void bindIndexBuffer(const BufferHandle& handle, IndexType indexType);
     void bindDescriptorSet(const DescriptorSetHandle& descriptorSet, uint32_t setIndex, std::initializer_list<uint32_t> dynamicOffsets = { });
     void drawIndexed(uint32_t indexCount, uint32_t instanceCount = 1, uint32_t firstIndex = 0, int32_t vertexOffset = 0);
     void draw(uint32_t vertexCount, uint32_t firstVertex = 0);
@@ -106,9 +103,9 @@ private:
     void collectGarbage();
 
     void freeDescriptorSet(vk::DescriptorSet);
-    void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes);
+    void allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint64_t numBytes);
     StagePool::Allocation stage(CommandBuffer& commands, const void* data, uint64_t size, vk::DeviceSize alignment = 16);
-    void loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes);
+    void loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint64_t byteOffset, uint64_t numBytes);
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:

@@ -119,13 +119,14 @@ uint32_t vertexStride(VertexLayout layout) {
     return layout == VertexLayout::Skinned ? sizeof(SkinnedVertex) : sizeof(StaticVertex);
 }
 
+bool fitsUint16Indices(const Mesh& mesh) {
+    return mesh.vertexCount <= std::numeric_limits<uint16_t>::max() + 1u;
+}
+
 std::string ModelPackage::validate() const {
     for (size_t i = 0; i < meshes.size(); i++) {
         const auto& mesh = meshes[i];
         const std::string what = "mesh " + std::to_string(i);
-        if (mesh.vertexCount > std::numeric_limits<uint16_t>::max() + 1u) {
-            return what + " has " + std::to_string(mesh.vertexCount) + " vertices, 16-bit indices address 65536";
-        }
         if (mesh.vertices.size() != size_t(mesh.vertexCount) * vertexStride(mesh.layout)) {
             return what + " vertex data is " + std::to_string(mesh.vertices.size()) + " bytes, expected " +
                    std::to_string(size_t(mesh.vertexCount) * vertexStride(mesh.layout));
@@ -133,7 +134,7 @@ std::string ModelPackage::validate() const {
         if (mesh.indices.empty() || mesh.indices.size() % 3 != 0) {
             return what + " has " + std::to_string(mesh.indices.size()) + " indices, expected a multiple of 3";
         }
-        for (uint16_t index : mesh.indices) {
+        for (uint32_t index : mesh.indices) {
             if (index >= mesh.vertexCount) {
                 return what + " index " + std::to_string(index) + " is out of range (" +
                        std::to_string(mesh.vertexCount) + " vertices)";
@@ -199,7 +200,13 @@ std::vector<uint8_t> ModelPackage::serialize() const {
         w.u32(uint32_t(mesh.vertices.size()));
         w.bytes(mesh.vertices.data(), mesh.vertices.size());
         w.u32(uint32_t(mesh.indices.size()));
-        w.bytes(mesh.indices.data(), mesh.indices.size() * sizeof(uint16_t));
+        if (fitsUint16Indices(mesh)) {
+            w.u8(sizeof(uint16_t));
+            for (uint32_t index : mesh.indices) w.u16(uint16_t(index));
+        } else {
+            w.u8(sizeof(uint32_t));
+            w.bytes(mesh.indices.data(), mesh.indices.size() * sizeof(uint32_t));
+        }
         w.endChunk();
     }
 
@@ -299,9 +306,21 @@ std::optional<ModelPackage> ModelPackage::deserialize(std::span<const uint8_t> d
                 auto vertices = c.sub(c.u32());
                 mesh.vertices.assign(vertices.begin(), vertices.end());
                 uint32_t indexCount = c.u32();
-                auto indices = c.sub(size_t(indexCount) * sizeof(uint16_t));
-                mesh.indices.resize(indices.size() / sizeof(uint16_t));
-                std::memcpy(mesh.indices.data(), indices.data(), indices.size());
+                uint8_t indexSize = c.u8();
+                if (indexSize == sizeof(uint16_t)) {
+                    Reader indices(c.sub(size_t(indexCount) * sizeof(uint16_t)));
+                    if (!c.ok()) break;
+                    mesh.indices.resize(indexCount);
+                    for (uint32_t& index : mesh.indices) index = indices.u16();
+                } else if (indexSize == sizeof(uint32_t)) {
+                    auto indices = c.sub(size_t(indexCount) * sizeof(uint32_t));
+                    mesh.indices.resize(indices.size() / sizeof(uint32_t));
+                    std::memcpy(mesh.indices.data(), indices.data(), indices.size());
+                } else {
+                    error = "mesh " + std::to_string(pkg.meshes.size() - 1) + " has " + std::to_string(indexSize) +
+                            "-byte indices";
+                    return std::nullopt;
+                }
                 break;
             }
 

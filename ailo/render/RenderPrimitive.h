@@ -22,6 +22,21 @@ class BufferObject {
   Shared<gpu::Buffer> m_buffer;
 };
 
+class IndexBuffer {
+ public:
+  IndexBuffer() = default;
+  IndexBuffer(RenderAPI*, IndexType, uint32_t indexCount);
+  void updateBuffer(RenderAPI*, const void* data, uint32_t indexCount, uint32_t firstIndex = 0);
+  BufferHandle getHandle() const { return m_buffer; }
+  IndexType getIndexType() const { return m_indexType; }
+
+ private:
+  Unique<gpu::Buffer> m_buffer;
+  IndexType m_indexType = IndexType::UINT16;
+};
+
+uint32_t indexSize(IndexType);
+
 enum class VertexLocation {
   Position = 0,
   Color = 1,

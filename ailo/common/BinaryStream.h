@@ -18,6 +18,7 @@ constexpr uint32_t makeTag(const char (&s)[5]) {
 class Writer {
 public:
     void u8(uint8_t v) { m_data.push_back(v); }
+    void u16(uint16_t v) { bytes(&v, sizeof(v)); }
     void u32(uint32_t v) { bytes(&v, sizeof(v)); }
     void i32(int32_t v) { bytes(&v, sizeof(v)); }
     void f32(float v) { bytes(&v, sizeof(v)); }
@@ -53,6 +54,7 @@ public:
     bool atEnd() const { return m_pos >= m_data.size(); }
 
     uint8_t u8() { uint8_t v = 0; bytes(&v, 1); return v; }
+    uint16_t u16() { uint16_t v = 0; bytes(&v, sizeof(v)); return v; }
     uint32_t u32() { uint32_t v = 0; bytes(&v, sizeof(v)); return v; }
     int32_t i32() { int32_t v = 0; bytes(&v, sizeof(v)); return v; }
     float f32() { float v = 0; bytes(&v, sizeof(v)); return v; }

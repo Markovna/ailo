@@ -188,6 +188,7 @@ struct RenderData {
   uint32_t objectBufferOffset;
   const MaterialInstance* materialInstance;
   BufferHandle indexBuffer;
+  IndexType indexType;
   BufferHandle vertexBuffer;
   uint32_t indexCount;
   uint32_t indexOffset;

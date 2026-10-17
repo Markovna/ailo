@@ -39,6 +39,11 @@ enum class BufferBinding : uint8_t {
   UNIFORM,
 };
 
+enum class IndexType : uint8_t {
+  UINT16,
+  UINT32,
+};
+
 enum class CullingMode : uint8_t {
   NONE,
   FRONT,

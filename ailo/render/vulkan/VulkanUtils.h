@@ -13,6 +13,7 @@ vk::Filter getFilter(SamplerFilter);
 vk::SamplerMipmapMode getMipmapMode(SamplerMipmapMode);
 vk::SamplerAddressMode getWrapMode(SamplerWrapMode);
 vk::BufferUsageFlagBits getBufferUsage(BufferBinding);
+vk::IndexType getIndexType(IndexType);
 vk::ImageUsageFlags getTextureUsage(TextureUsage);
 
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout);

@@ -188,7 +188,7 @@ void Renderer::shadowPass() {
         std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
         { renderData.objectBufferOffset, 0 });
 
-      backend->bindIndexBuffer(renderData.indexBuffer);
+      backend->bindIndexBuffer(renderData.indexBuffer, renderData.indexType);
       backend->bindVertexBuffer(renderData.vertexBuffer);
 
       backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
@@ -230,7 +230,7 @@ void Renderer::colorPass() {
 
       renderData.materialInstance->bind(*backend);
 
-      backend->bindIndexBuffer(renderData.indexBuffer);
+      backend->bindIndexBuffer(renderData.indexBuffer, renderData.indexType);
       backend->bindVertexBuffer(renderData.vertexBuffer);
       backend->drawIndexed(renderData.indexCount, 1, renderData.indexOffset);
   }
@@ -296,7 +296,7 @@ void Renderer::drawSkybox() {
   backend->bindDescriptorSet(m_objectDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_RENDERABLE),
     { m_skyboxObjectBufferOffset, 0 });
   m_skyboxMaterial->bind(*backend);
-  backend->bindIndexBuffer(m_skyboxMesh->indexBuffer.getHandle());
+  backend->bindIndexBuffer(m_skyboxMesh->indexBuffer.getHandle(), m_skyboxMesh->indexBuffer.getIndexType());
   backend->bindVertexBuffer(m_skyboxMesh->vertexBuffer.getBuffer());
   const auto& face = m_skyboxMesh->faces.front();
   backend->drawIndexed(face.indexCount, 1, face.indexOffset);
@@ -452,6 +452,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
       entry.vertexBufferLayout = mesh->vertexBuffer.getLayout();
       entry.materialInstance = instance.get();
       entry.indexBuffer = mesh->indexBuffer.getHandle();
+      entry.indexType = mesh->indexBuffer.getIndexType();
       entry.vertexBuffer = mesh->vertexBuffer.getBuffer();
       entry.indexCount = indexCount;
       entry.indexOffset = indexOffset;

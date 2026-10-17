@@ -85,12 +85,7 @@ void ImGuiRenderer::setupRenderState(ImDrawData* drawData, const ImGuiIO& io, ui
     // Bind vertex and index buffers
     m_renderAPI->bindVertexBuffer(m_vertexBuffer);
 
-    // ImGui uses 16-bit indices by default
-    if (sizeof(ImDrawIdx) == 2) {
-        m_renderAPI->bindIndexBuffer(m_indexBuffer, vk::IndexType::eUint16);
-    } else {
-        m_renderAPI->bindIndexBuffer(m_indexBuffer, vk::IndexType::eUint32);
-    }
+    m_renderAPI->bindIndexBuffer(m_indexBuffer, sizeof(ImDrawIdx) == 2 ? IndexType::UINT16 : IndexType::UINT32);
 
     // Setup viewport
     m_renderAPI->setViewport(0.0f, 0.0f, static_cast<float>(fbWidth), static_cast<float>(fbHeight));
@@ -189,7 +184,7 @@ void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io
     // Create or resize vertex buffer if needed
     if (!m_vertexBuffer || m_vertexBufferSize < vertexSize) {
         m_vertexBufferSize = vertexSize + 5000 * sizeof(ImDrawVert); // Add some extra space
-        m_vertexBuffer = m_renderAPI->createVertexBuffer(nullptr, m_vertexBufferSize);
+        m_vertexBuffer = m_renderAPI->createBuffer(BufferBinding::VERTEX, m_vertexBufferSize);
     }
 
     if (!m_vertexLayoutHandle) {
@@ -233,7 +228,7 @@ void ImGuiRenderer::processImGuiCommands(ImDrawData* drawData, const ImGuiIO& io
     // Create or resize index buffer if needed
     if (!m_indexBuffer || m_indexBufferSize < indexSize) {
         m_indexBufferSize = indexSize + 10000 * sizeof(ImDrawIdx); // Add some extra space
-        m_indexBuffer = m_renderAPI->createIndexBuffer(nullptr, m_indexBufferSize);
+        m_indexBuffer = m_renderAPI->createBuffer(BufferBinding::INDEX, m_indexBufferSize);
     }
 
     // Allocate temporary buffers to collect all vertex and index data

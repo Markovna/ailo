@@ -159,35 +159,6 @@ Unique<gpu::VertexBufferLayout> RenderAPI::createVertexBufferLayout(const Vertex
     return layout;
 }
 
-// Buffer management
-
-Unique<gpu::Buffer> RenderAPI::createVertexBuffer(const void* data, uint64_t size) {
-    auto handle = m_buffers.make();
-    auto& vertexBuffer = *handle;
-    allocateBuffer(vertexBuffer, vk::BufferUsageFlagBits::eVertexBuffer, size);
-    vertexBuffer.binding = BufferBinding::VERTEX;
-
-    if(data != nullptr) {
-        auto& commands = m_commands.get();
-        loadFromCpu(commands, vertexBuffer, data, 0, size);
-        commands.acquire(m_buffers.share(handle));
-    }
-    return handle;
-}
-
-Unique<gpu::Buffer> RenderAPI::createIndexBuffer(const void* data, uint64_t size) {
-    auto handle = m_buffers.make();
-    auto& indexBuffer = *handle;
-    allocateBuffer(indexBuffer, vk::BufferUsageFlagBits::eIndexBuffer, size);
-    indexBuffer.binding = BufferBinding::INDEX;
-    if(data != nullptr) {
-        auto& commands = m_commands.get();
-        loadFromCpu(commands, indexBuffer, data, 0, size);
-        commands.acquire(m_buffers.share(handle));
-    }
-    return handle;
-}
-
 VmaAllocator RenderAPI::createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
   VmaAllocator allocator;
   VmaVulkanFunctions const funcs {
@@ -230,7 +201,7 @@ VmaAllocator RenderAPI::createAllocator(VkInstance instance, VkPhysicalDevice ph
   return allocator;
 }
 
-void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint32_t numBytes) {
+void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, uint64_t numBytes) {
     VkBufferCreateInfo const bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = numBytes,
@@ -260,11 +231,15 @@ void RenderAPI::allocateBuffer(Buffer& buffer, vk::BufferUsageFlags usageFlags, 
     buffer.allocator = m_Allocator;
 }
 
-Unique<gpu::Buffer> RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size) {
+Unique<gpu::Buffer> RenderAPI::createBuffer(BufferBinding bufferBinding, uint64_t size, const void* data) {
   auto buffer = m_buffers.make();
-  auto usageFlags = vkutils::getBufferUsage(bufferBinding);
-  allocateBuffer(*buffer, usageFlags, size);
+  allocateBuffer(*buffer, vkutils::getBufferUsage(bufferBinding), size);
   buffer->binding = bufferBinding;
+  if (data != nullptr) {
+    auto& commands = m_commands.get();
+    loadFromCpu(commands, *buffer, data, 0, size);
+    commands.acquire(m_buffers.share(buffer));
+  }
   return buffer;
 }
 
@@ -607,10 +582,11 @@ void RenderAPI::bindVertexBuffer(const BufferHandle& handle) {
     commands.acquire(std::move(buffer));
 }
 
-void RenderAPI::bindIndexBuffer(const BufferHandle& handle, vk::IndexType indexType) {
+void RenderAPI::bindIndexBuffer(const BufferHandle& handle, IndexType indexType) {
     auto buffer = m_buffers.share(handle);
+    assert(buffer->binding == BufferBinding::INDEX);
     auto& commands = m_commands.get();
-    commands->bindIndexBuffer(buffer->buffer, 0, indexType);
+    commands->bindIndexBuffer(buffer->buffer, 0, vkutils::getIndexType(indexType));
     buffer->lastReadSerial = m_commands.currentSerial();
     commands.acquire(std::move(buffer));
 }
@@ -749,7 +725,7 @@ void getReadBarrierAccessAndStage(BufferBinding bufferBinding, VkAccessFlags& ac
 
 }
 
-void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint32_t byteOffset, uint32_t numBytes) {
+void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle, const void* data, uint64_t byteOffset, uint64_t numBytes) {
   vk::CommandBuffer commandBuffer = *commands;
 
   auto staged = stage(commands, data, numBytes);

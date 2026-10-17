@@ -30,8 +30,6 @@ namespace {
 // Matches textures::kDefaultMetallicRoughness (render/DefaultAssetFactory.h), which modelc can't include.
 constexpr const char* kDefaultMetallicRoughness = "builtin://textures/default_metallic_roughness";
 
-constexpr unsigned kMaxVertices = 65535;
-
 // meshopt_optimizeOverdraw may make the vertex cache this much worse to reduce overdraw (its recommended value).
 constexpr float kOverdrawThreshold = 1.05f;
 
@@ -110,14 +108,12 @@ public:
 
         Assimp::Importer importer;
         importer.SetIOHandler(new RecordingIOSystem(m_out.dependencies));
-        importer.SetPropertyInteger(AI_CONFIG_PP_SLM_VERTEX_LIMIT, kMaxVertices);
         importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_POINT | aiPrimitiveType_LINE);
 
         m_scene = importer.ReadFile(toUtf8(sourcePath),
             aiProcess_Triangulate |
             aiProcess_SortByPType |
             aiProcess_JoinIdenticalVertices |
-            aiProcess_SplitLargeMeshes |
             aiProcess_OptimizeMeshes |
             aiProcess_FlipUVs |
             aiProcess_GenNormals |
@@ -315,17 +311,12 @@ private:
         for (unsigned i = 0; i < m_scene->mNumMeshes; i++) {
             const aiMesh* src = m_scene->mMeshes[i];
             const std::string what = "mesh \"" + std::string(src->mName.C_Str()) + "\"";
-            if (src->mNumVertices > kMaxVertices + 1) {
-                throw CompileError(what + " has " + std::to_string(src->mNumVertices) +
-                                   " vertices after splitting, 16-bit indices address 65536");
-            }
-
             Mesh& mesh = m_pkg.meshes.emplace_back();
             mesh.indices.reserve(src->mNumFaces * 3);
             for (unsigned f = 0; f < src->mNumFaces; f++) {
                 const aiFace& face = src->mFaces[f];
                 if (face.mNumIndices != 3) continue;
-                for (unsigned j = 0; j < 3; j++) mesh.indices.push_back(uint16_t(face.mIndices[j]));
+                for (unsigned j = 0; j < 3; j++) mesh.indices.push_back(face.mIndices[j]);
             }
             if (mesh.indices.empty()) throw CompileError(what + " has no triangles");
 

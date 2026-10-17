@@ -107,8 +107,8 @@ AssetPtr<Mesh> createSkyboxCube(AssetStorage<Mesh>& storage, RenderAPI* renderAp
         sizeof(sCubeVertices));
     mesh->vertexBuffer.updateBuffer(renderApi, sCubeVertices, sizeof(sCubeVertices));
 
-    mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(sCubeIndices));
-    mesh->indexBuffer.updateBuffer(renderApi, sCubeIndices, sizeof(sCubeIndices));
+    mesh->indexBuffer = IndexBuffer(renderApi, IndexType::UINT16, std::size(sCubeIndices));
+    mesh->indexBuffer.updateBuffer(renderApi, sCubeIndices, std::size(sCubeIndices));
 
     mesh->faces.emplace_back(0, 36);
     mesh->bounds = { glm::vec3(-10.0f), glm::vec3(10.0f) };
@@ -156,8 +156,8 @@ AssetPtr<Mesh> createUnitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi)
     auto mesh = storage.emplace(meshes::kUnitCube);
     mesh->vertexBuffer = VertexBuffer(renderApi, pbrVertexInput(), sizeof(vertices));
     mesh->vertexBuffer.updateBuffer(renderApi, vertices.data(), sizeof(vertices));
-    mesh->indexBuffer = BufferObject(renderApi, BufferBinding::INDEX, sizeof(indices));
-    mesh->indexBuffer.updateBuffer(renderApi, indices.data(), sizeof(indices));
+    mesh->indexBuffer = IndexBuffer(renderApi, IndexType::UINT16, indices.size());
+    mesh->indexBuffer.updateBuffer(renderApi, indices.data(), indices.size());
     mesh->faces.push_back({ 0, static_cast<uint32_t>(indices.size()) });
     mesh->bounds = { glm::vec3(-0.5f), glm::vec3(0.5f) };
     return mesh;

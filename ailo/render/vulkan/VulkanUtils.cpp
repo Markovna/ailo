@@ -73,6 +73,14 @@ vk::BufferUsageFlagBits getBufferUsage(BufferBinding binding) {
   return static_cast<vk::BufferUsageFlagBits>(0);
 }
 
+vk::IndexType getIndexType(IndexType type) {
+  switch(type) {
+    case IndexType::UINT16: return vk::IndexType::eUint16;
+    case IndexType::UINT32: return vk::IndexType::eUint32;
+  }
+  return vk::IndexType::eUint16;
+}
+
 vk::ImageUsageFlags getTextureUsage(TextureUsage usage) {
   vk::ImageUsageFlags usageFlags;
   if ((usage & TextureUsage::Sampled) == TextureUsage::Sampled ) usageFlags |= vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
