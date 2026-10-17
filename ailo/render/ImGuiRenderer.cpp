@@ -51,8 +51,8 @@ void ImGuiRenderer::createPipeline() {
     // Create the graphics pipeline
     m_program = m_renderAPI->createProgram(
         ShaderDescription {
-                .vertexShader = ShaderDescription::code(resources::builtin_shaders::kImGuiVert),
-                .fragmentShader = ShaderDescription::code(resources::builtin_shaders::kImGuiFrag),
+                .vertexShader = ShaderDescription::code(resources::embedded::kImguiVert),
+                .fragmentShader = ShaderDescription::code(resources::embedded::kImguiFrag),
                     .raster = ailo::RasterDescription {
                         .cullingMode = ailo::CullingMode::NONE,
                         .inverseFrontFace = false,

@@ -171,7 +171,7 @@ void textures::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Texture
     defaults.add(createTexture2D(renderApi, storage, kNormal, vk::Format::eR8G8B8A8Unorm, { 128, 128, 255, 255 }));
     defaults.add(createTexture2D(renderApi, storage, kDefaultMetallicRoughness, vk::Format::eR8G8B8A8Unorm, { 0, 128, 0, 255 }));
     defaults.add(createCubemap(renderApi, storage, kBlackCube, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
-    defaults.add(createEmbeddedTexture(renderApi, storage, kDfgLut, resources::builtin_textures::kDfgLut));
+    defaults.add(createEmbeddedTexture(renderApi, storage, kDfgLut, resources::embedded::kDfgLut));
 }
 
 void meshes::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Mesh>& storage, RenderAPI& renderApi) {

@@ -102,8 +102,8 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   m_tonemapUniformBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(TonemapUniforms));
   backend->updateDescriptorSetBuffer(m_tonemapDescriptorSet, m_tonemapUniformBuffer, 1);
   m_tonemapProgram = backend->createProgram(ShaderDescription {
-    .vertexShader = ShaderDescription::code(resources::builtin_shaders::kTonemapVert),
-    .fragmentShader = ShaderDescription::code(resources::builtin_shaders::kTonemapFrag),
+    .vertexShader = ShaderDescription::code(resources::embedded::kTonemapVert),
+    .fragmentShader = ShaderDescription::code(resources::embedded::kTonemapFrag),
     .raster = RasterDescription {
       .cullingMode = CullingMode::NONE,
       .depthWriteEnable = false,

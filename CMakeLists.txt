@@ -262,8 +262,8 @@ if(NOT GLSLC)
     message(FATAL_ERROR "glslc shader compiler not found!")
 endif()
 
-# Compiles SHADER to <build>/shaders/<name>.<stage>.spv and stores that path in OUTPUT_VAR.
-function(add_shader OUTPUT_VAR SHADER)
+# Compiles SHADER to <build>/shaders/<name>.<stage>.spv and appends that path to the list LIST_VAR.
+function(add_shader LIST_VAR SHADER)
     # Parse optional arguments: NAME and DEFINES
     set(options "")
     set(oneValueArgs NAME)
@@ -303,28 +303,23 @@ function(add_shader OUTPUT_VAR SHADER)
             COMMENT "Compiling shader ${OUTPUT_NAME}.${FILE_EXT}.spv with defines: ${SHADER_ARG_DEFINES}"
     )
 
-    set(${OUTPUT_VAR} ${SPIRV} PARENT_SCOPE)
+    list(APPEND ${LIST_VAR} ${SPIRV})
+    set(${LIST_VAR} ${${LIST_VAR}} PARENT_SCOPE)
 endfunction()
 
-# Embeds files into TARGET (tools/resgen/README.md). Each RESOURCES entry is <symbol>=<file>; the symbol is declared in
-# "resources/<PACKAGE>.h" as std::span<const uint8_t> ailo::resources::<PACKAGE>::<symbol>.
+# Embeds FILES into TARGET (tools/resgen/README.md). Each file is declared in "resources/<PACKAGE>.h" as
+# std::span<const uint8_t> ailo::resources::embedded::k<Name>, named after the file ("tonemap.vert.spv" -> kTonemapVert).
 function(add_resources TARGET)
-    cmake_parse_arguments(RES "" "PACKAGE" "RESOURCES" ${ARGN})
+    cmake_parse_arguments(RES "" "PACKAGE" "FILES" ${ARGN})
 
     set(OUT_DIR ${CMAKE_BINARY_DIR}/generated/resources)
     set(HEADER ${OUT_DIR}/${RES_PACKAGE}.h)
     set(SOURCE ${OUT_DIR}/${RES_PACKAGE}.cpp)
 
-    set(FILES "")
-    foreach(RESOURCE ${RES_RESOURCES})
-        string(REGEX REPLACE "^[^=]*=" "" FILE ${RESOURCE})
-        list(APPEND FILES ${FILE})
-    endforeach()
-
     add_custom_command(
             OUTPUT ${HEADER} ${SOURCE}
-            COMMAND $<TARGET_FILE:resgen> --package ${RES_PACKAGE} -o ${OUT_DIR} ${RES_RESOURCES}
-            DEPENDS resgen ${FILES}
+            COMMAND $<TARGET_FILE:resgen> --package ${RES_PACKAGE} -o ${OUT_DIR} ${RES_FILES}
+            DEPENDS resgen ${RES_FILES}
             COMMENT "Embedding resources ${RES_PACKAGE}"
     )
 
@@ -340,7 +335,7 @@ add_custom_command(
         DEPENDS lightc
         COMMENT "Generating DFG LUT texture"
 )
-add_resources(ailo PACKAGE builtin_textures RESOURCES kDfgLut=${DFG_LUT_OUTPUT})
+add_resources(ailo PACKAGE builtin_textures FILES ${DFG_LUT_OUTPUT})
 
 # Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
 # assets/ with the tool its extension maps to in config.json and copies everything else. CMake only generates the
@@ -381,16 +376,11 @@ add_custom_target(ailo_assets ALL
 add_dependencies(ailo_assets texc matcomp modelc lightc)
 
 # Built-in shaders, embedded into the engine
-add_shader(IMGUI_VERT shaders/imgui.vert)
-add_shader(IMGUI_FRAG shaders/imgui.frag)
-add_shader(TONEMAP_VERT shaders/tonemap.vert)
-add_shader(TONEMAP_FRAG shaders/tonemap.frag)
-add_resources(ailo PACKAGE builtin_shaders RESOURCES
-        kImGuiVert=${IMGUI_VERT}
-        kImGuiFrag=${IMGUI_FRAG}
-        kTonemapVert=${TONEMAP_VERT}
-        kTonemapFrag=${TONEMAP_FRAG}
-)
+add_shader(BUILTIN_SHADERS shaders/imgui.vert)
+add_shader(BUILTIN_SHADERS shaders/imgui.frag)
+add_shader(BUILTIN_SHADERS shaders/tonemap.vert)
+add_shader(BUILTIN_SHADERS shaders/tonemap.frag)
+add_resources(ailo PACKAGE builtin_shaders FILES ${BUILTIN_SHADERS})
 
 # The demo game
 add_subdirectory(sandbox)
