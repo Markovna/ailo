@@ -17,7 +17,7 @@ material {
 
 fragment {
     void material(inout MaterialInputs material) {
-        material.normal = texture(materialParams_normalMap, getUV0()).rgb * 2.0 - 1.0;
+        material.normal = unpackNormalMap(texture(materialParams_normalMap, getUV0()));
         prepareMaterial(material);
 
         material.baseColor = texture(materialParams_baseColorMap, getUV0()) * materialParams.baseColorFactor;

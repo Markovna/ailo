@@ -72,7 +72,7 @@ bool decode(std::span<const uint8_t> encoded, const TextureImportOptions& option
     out.format = hdr ? TextureFormat::RGBA32F : ldrFormat(options);
 
     auto* first = static_cast<const uint8_t*>(pixels);
-    out.data.assign(first, first + size_t(width) * height * bytesPerPixel(out.format));
+    out.data.assign(first, first + size_t(width) * height * blockBytes(out.format));
     stbi_image_free(pixels);
     return true;
 }
@@ -291,7 +291,7 @@ std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, ui
 
     constexpr float pi = std::numbers::pi_v<float>;
     const bool hdr = image.format == TextureFormat::RGBA32F;
-    const uint32_t pixelSize = bytesPerPixel(image.format);
+    const uint32_t pixelSize = blockBytes(image.format);
 
     // Unnormalized direction through (uc, vc) in [-1, 1] of a face, as Vulkan selects cube faces: +x -x +y -y +z -z.
     auto faceDirection = [](uint32_t face, float uc, float vc, float d[3]) {
@@ -367,7 +367,7 @@ bool generateMipLevels(TexturePackage& pkg, std::string& error) {
         error = "mip levels can only be generated for a package with one stored level";
         return false;
     }
-    if (pkg.format == TextureFormat::RGBA16F) {
+    if (pkg.format == TextureFormat::RGBA16F || isCompressed(pkg.format)) {
         error = "cannot generate mip levels for " + std::string(toString(pkg.format));
         return false;
     }

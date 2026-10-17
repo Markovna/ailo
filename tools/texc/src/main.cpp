@@ -7,6 +7,7 @@
 
 #include "FileIO.h"
 #include "TextureDefinition.h"
+#include "TextureEncoder.h"
 #include "render/texture/TexturePacker.h"
 
 namespace fs = std::filesystem;
@@ -18,7 +19,8 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: texc -o <output.texpack> [--depfile <file>] [--root <assets folder>] <input.tex>\n"
+        "usage: texc -o <output.texpack> [--depfile <file>] [--root <assets folder>] [--target desktop]\n"
+        "            <input.tex>\n"
         "       texc --dump <package.texpack>\n";
 }
 
@@ -66,6 +68,7 @@ int dump(const fs::path& path) {
 
 int main(int argc, char** argv) {
     fs::path input, output, depfile, root;
+    Target target = Target::Desktop;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -81,6 +84,12 @@ int main(int argc, char** argv) {
         if (arg == "-o") output = value();
         else if (arg == "--depfile") depfile = value();
         else if (arg == "--root") root = value();
+        else if (arg == "--target") {
+            const std::string name = value();
+            auto parsed = parseTarget(name);
+            if (!parsed) { std::cerr << "texc: unknown target " << name << " (expected desktop)\n"; return 2; }
+            target = *parsed;
+        }
         else if (arg == "-h" || arg == "--help") { printUsage(); return 0; }
         else if (arg.starts_with("-")) { std::cerr << "texc: unknown option " << arg << "\n"; printUsage(); return 2; }
         else if (input.empty()) input = arg;
@@ -129,6 +138,41 @@ int main(int argc, char** argv) {
     } else {
         pkg = packTexture(def.sources[0], def.options, error);
     }
+    if (!pkg) {
+        std::cerr << sourceName << ": error: " << error << "\n";
+        return 1;
+    }
+
+    try {
+        resolveSettings(def, pkg->format == TextureFormat::RGBA32F);
+    } catch (const DefinitionError& e) {
+        std::cerr << sourceName << ": error: " << e.what() << "\n";
+        return 1;
+    }
+
+    TextureFormat format;
+    if (def.format) {
+        format = *def.format;
+    } else {
+        const bool alpha = def.usage == Usage::Color && def.alpha.value_or(hasAlpha(*pkg));
+        format = chooseFormat(target, *def.usage, def.quality, alpha);
+        if (def.usage == Usage::Color && def.options.srgb) format = *withSrgb(format);
+    }
+    if (!supports(target, format)) {
+        std::cerr << sourceName << ": error: the " << toString(target) << " target has no " << toString(format) << "\n";
+        return 1;
+    }
+
+    // The engine generates mipmaps only for uncompressed images.
+    if (isCompressed(format) && pkg->generateMipmaps) {
+        pkg->generateMipmaps = false;
+        if (!generateMipLevels(*pkg, error)) {
+            std::cerr << sourceName << ": error: " << error << "\n";
+            return 1;
+        }
+    }
+
+    pkg = encodeTexture(*pkg, format, def.quality, error);
     if (!pkg) {
         std::cerr << sourceName << ": error: " << error << "\n";
         return 1;

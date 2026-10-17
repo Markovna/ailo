@@ -60,6 +60,8 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
             vk::PhysicalDeviceFeatures supportedFeatures;
             device.getFeatures(&supportedFeatures);
             if (!supportedFeatures.samplerAnisotropy) { continue; }
+            // texc stores textures BC-compressed (the desktop target).
+            if (!supportedFeatures.textureCompressionBC) { continue; }
 
             vk::PhysicalDeviceVulkan12Features supportedFeatures12{};
             vk::PhysicalDeviceFeatures2 supportedFeatures2{};
@@ -125,6 +127,7 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
 
     vk::PhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = true;
+    deviceFeatures.textureCompressionBC = true;
 
     vk::PhysicalDeviceVulkan12Features deviceFeatures12{};
     deviceFeatures12.timelineSemaphore = true;

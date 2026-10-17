@@ -25,6 +25,13 @@ vec3 getWorldGeometricNormal() {
     return normalize(fragNormalWorld);
 }
 
+// A tangent-space normal from a normal map texel. texc stores normal maps as x, y in RG (BC5 has no blue channel),
+// so z is rebuilt; this also holds for uncompressed maps that do store it.
+vec3 unpackNormalMap(vec4 texel) {
+    vec2 xy = texel.rg * 2.0 - 1.0;
+    return vec3(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
+}
+
 // Valid after prepareMaterial().
 mat3 shading_tangentToWorld;
 vec3 shading_view;

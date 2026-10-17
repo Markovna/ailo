@@ -96,6 +96,8 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
   `getPosition()`, `getWorldFromModelMatrix()`, `getClipFromWorldMatrix()`, `getClipFromViewMatrix()`,
   `getViewFromWorldMatrix()`, `getWorldFromViewMatrix()` (vertex). The per-view and per-object uniforms in
   `shaders/common_uniforms.glsl` are available too.
+- `unpackNormalMap(texel)` (fragment) turns a normal map texel into a tangent-space normal for `material.normal`.
+  texc stores normal maps as x and y only (`tools/texc/README.md`), so sample them through it, not as `rgb * 2 - 1`.
 
 Errors in the material's code are reported against the `.mat` file and line.
 

@@ -52,6 +52,13 @@ MipmapMode getMipmaps(const json::Value& v) {
     fail(v.line, "unknown mipmaps \"" + v.asString() + "\" (expected true, false or \"offline\")");
 }
 
+template<typename T>
+T getName(const json::Value& v, const std::string& what, std::optional<T> (*parse)(std::string_view), const char* expected) {
+    const auto& s = getString(v, what);
+    if (auto value = parse(s)) return *value;
+    fail(v.line, "unknown " + what + " \"" + s + "\" (expected " + expected + ")");
+}
+
 TextureType getType(const json::Value& v) {
     const auto& s = getString(v, "type");
     if (s == "2d") return TextureType::Texture2D;
@@ -80,11 +87,17 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
         if (key == "source") sourceValue = &v;
         else if (key == "faces") facesValue = &v;
         else if (key == "type") def.type = getType(v);
-        else if (key == "srgb") def.options.srgb = getBool(v, "srgb");
+        else if (key == "srgb") def.srgb = getBool(v, "srgb");
+        else if (key == "usage") def.usage = getName(v, "usage", parseUsage, "color, normal or hdr");
+        else if (key == "quality") def.quality = getName(v, "quality", parseQuality, "low, normal or high");
+        else if (key == "alpha") def.alpha = getBool(v, "alpha");
+        else if (key == "format") {
+            def.format = getName(v, "format", parseFormat, "rgba8, rgba16f, rgba32f, bc1, bc3, bc4, bc5, bc6h or bc7");
+        }
         else if (key == "mipmaps") def.options.mipmaps = getMipmaps(v);
         else if (key == "layout") layoutValue = &v;
         else if (key == "size") sizeValue = &v;
-        else fail(v.line, "unknown texture property \"" + key + "\" (expected source, faces, type, layout, size, srgb, mipmaps)");
+        else fail(v.line, "unknown texture property \"" + key + "\" (expected source, faces, type, layout, size, usage, quality, alpha, format, srgb, mipmaps)");
     }
 
     if (sourceValue && facesValue) fail(facesValue->line, "\"source\" and \"faces\" are mutually exclusive");
@@ -121,7 +134,36 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
         fail(root.line, def.type == TextureType::Cubemap ? "missing \"source\" or \"faces\"" : "missing \"source\"");
     }
 
+    // Known before decoding, for the packer: an HDR source ignores it, and an unset usage only becomes hdr for those.
+    def.options.srgb = def.usage.value_or(Usage::Color) == Usage::Color && def.srgb.value_or(true);
     return def;
+}
+
+void resolveSettings(TextureDefinition& def, bool hdrSource) {
+    const Usage usage = def.usage.value_or(hdrSource ? Usage::Hdr : Usage::Color);
+    def.usage = usage;
+    const std::string name(toString(usage));
+
+    if (usage == Usage::Hdr && !hdrSource) fail(0, "\"usage\": \"hdr\" needs an HDR source (.hdr)");
+    if (usage != Usage::Hdr && hdrSource) fail(0, "an HDR source needs \"usage\": \"hdr\", got \"" + name + "\"");
+    if (usage != Usage::Color && def.srgb) fail(0, "\"srgb\" is for color textures, this one is " + name);
+    if (usage != Usage::Color && def.alpha) fail(0, "\"alpha\" is for color textures, this one is " + name);
+
+    const bool srgb = usage == Usage::Color && def.options.srgb;
+
+    if (def.format) {
+        const bool hdrFormat = *def.format == TextureFormat::BC6H || *def.format == TextureFormat::RGBA16F ||
+                               *def.format == TextureFormat::RGBA32F;
+        const std::string format(toString(*def.format));
+        if (hdrFormat != (usage == Usage::Hdr)) {
+            fail(0, "\"format\": \"" + format + "\" cannot store " + name + " textures");
+        }
+        if (srgb) {
+            auto srgbFormat = withSrgb(*def.format);
+            if (!srgbFormat) fail(0, "\"format\": \"" + format + "\" has no sRGB variant, set \"srgb\": false");
+            def.format = srgbFormat;
+        }
+    }
 }
 
 }

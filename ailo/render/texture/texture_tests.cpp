@@ -105,7 +105,7 @@ void testLayout() {
 }
 
 void testHalfFloat() {
-    assert(bytesPerPixel(TextureFormat::RGBA16F) == 8);
+    assert(blockBytes(TextureFormat::RGBA16F) == 8);
     assert(toString(TextureFormat::RGBA16F) == "rgba16f");
 
     auto cube = makeCubemapWithLevels();
@@ -119,6 +119,52 @@ void testHalfFloat() {
     assert(restored && error.empty());
     assert(restored->format == TextureFormat::RGBA16F);
     assert(restored->data == cube.data);
+}
+
+void testCompressedLayout() {
+    assert(!isCompressed(TextureFormat::RGBA8) && blockExtent(TextureFormat::RGBA8) == 1);
+    assert(isCompressed(TextureFormat::BC7_SRGB) && blockExtent(TextureFormat::BC7_SRGB) == 4);
+    assert(isSrgb(TextureFormat::BC1_SRGB) && !isSrgb(TextureFormat::BC5));
+
+    // 10x6 bc1: 3x2 blocks, then 5x3 (2x1), 2x1 (1x1) and 1x1 (1x1): levels below a block still take one.
+    TexturePackage bc1;
+    bc1.format = TextureFormat::BC1;
+    bc1.width = 10;
+    bc1.height = 6;
+    bc1.levels = 4;
+    assert(bc1.imageSize(0) == 3 * 2 * 8);
+    assert(bc1.imageSize(1) == 2 * 1 * 8);
+    assert(bc1.imageSize(2) == 8 && bc1.imageSize(3) == 8);
+    bc1.data.resize(bc1.expectedDataSize());
+    assert(bc1.data.size() == (6 + 2 + 1 + 1) * 8);
+
+    std::string error;
+    auto restored = TexturePackage::deserialize(bc1.serialize(), error);
+    assert(restored && restored->format == TextureFormat::BC1);
+
+    TexturePackage cube;
+    cube.type = TextureType::Cubemap;
+    cube.format = TextureFormat::BC6H;
+    cube.width = cube.height = 8;
+    cube.levels = 4;
+    cube.data.resize(cube.expectedDataSize());
+    assert(cube.data.size() == 6 * 16 * (4 + 1 + 1 + 1));
+    assert(cube.image(1, 2).data() == cube.data.data() + 6 * 4 * 16 + 2 * 16);
+    restored = TexturePackage::deserialize(cube.serialize(), error);
+    assert(restored && restored->format == TextureFormat::BC6H);
+
+    // The engine cannot generate mipmaps for block-compressed images.
+    TexturePackage generated = bc1;
+    generated.levels = 1;
+    generated.generateMipmaps = true;
+    generated.data.resize(generated.expectedDataSize());
+    assert(!TexturePackage::deserialize(generated.serialize(), error));
+    assert(contains(error, "cannot generate mipmaps"));
+
+    TexturePackage mips = generated;
+    mips.generateMipmaps = false;
+    assert(!generateMipLevels(mips, error));
+    assert(contains(error, "bc1"));
 }
 
 void testRoundTrip() {
@@ -459,6 +505,7 @@ int main() {
     testLayout();
     testRoundTrip();
     testHalfFloat();
+    testCompressedLayout();
     testDeserializeRejectsBadPackages();
     testDeserializeSkipsUnknownChunks();
     testPackFromPixels();

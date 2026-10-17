@@ -37,6 +37,15 @@ vk::Format toVkFormat(texture::TextureFormat format) {
         case texture::TextureFormat::RGBA8_SRGB: return vk::Format::eR8G8B8A8Srgb;
         case texture::TextureFormat::RGBA32F:    return vk::Format::eR32G32B32A32Sfloat;
         case texture::TextureFormat::RGBA16F:    return vk::Format::eR16G16B16A16Sfloat;
+        case texture::TextureFormat::BC1:        return vk::Format::eBc1RgbUnormBlock;
+        case texture::TextureFormat::BC1_SRGB:   return vk::Format::eBc1RgbSrgbBlock;
+        case texture::TextureFormat::BC3:        return vk::Format::eBc3UnormBlock;
+        case texture::TextureFormat::BC3_SRGB:   return vk::Format::eBc3SrgbBlock;
+        case texture::TextureFormat::BC4:        return vk::Format::eBc4UnormBlock;
+        case texture::TextureFormat::BC5:        return vk::Format::eBc5UnormBlock;
+        case texture::TextureFormat::BC6H:       return vk::Format::eBc6HUfloatBlock;
+        case texture::TextureFormat::BC7:        return vk::Format::eBc7UnormBlock;
+        case texture::TextureFormat::BC7_SRGB:   return vk::Format::eBc7SrgbBlock;
     }
     throw std::runtime_error("unknown texture package format");
 }

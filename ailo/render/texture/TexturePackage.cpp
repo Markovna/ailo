@@ -37,16 +37,58 @@ std::string_view toString(TextureFormat format) {
         case TextureFormat::RGBA8_SRGB: return "rgba8_srgb";
         case TextureFormat::RGBA32F:    return "rgba32f";
         case TextureFormat::RGBA16F:    return "rgba16f";
+        case TextureFormat::BC1:        return "bc1";
+        case TextureFormat::BC1_SRGB:   return "bc1_srgb";
+        case TextureFormat::BC3:        return "bc3";
+        case TextureFormat::BC3_SRGB:   return "bc3_srgb";
+        case TextureFormat::BC4:        return "bc4";
+        case TextureFormat::BC5:        return "bc5";
+        case TextureFormat::BC6H:       return "bc6h";
+        case TextureFormat::BC7:        return "bc7";
+        case TextureFormat::BC7_SRGB:   return "bc7_srgb";
     }
     return "?";
 }
 
-uint32_t bytesPerPixel(TextureFormat format) {
+bool isCompressed(TextureFormat format) {
+    return blockExtent(format) > 1;
+}
+
+bool isSrgb(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::BC1_SRGB:
+        case TextureFormat::BC3_SRGB:
+        case TextureFormat::BC7_SRGB: return true;
+        default:                      return false;
+    }
+}
+
+uint32_t blockExtent(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8:
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::RGBA32F:
+        case TextureFormat::RGBA16F: return 1;
+        default:                     return 4;
+    }
+}
+
+uint32_t blockBytes(TextureFormat format) {
     switch (format) {
         case TextureFormat::RGBA8:
         case TextureFormat::RGBA8_SRGB: return 4;
         case TextureFormat::RGBA32F:    return 16;
         case TextureFormat::RGBA16F:    return 8;
+        case TextureFormat::BC1:
+        case TextureFormat::BC1_SRGB:
+        case TextureFormat::BC4:        return 8;
+        case TextureFormat::BC3:
+        case TextureFormat::BC3_SRGB:
+        case TextureFormat::BC5:
+        case TextureFormat::BC6H:
+        case TextureFormat::BC7:
+        case TextureFormat::BC7_SRGB:   return 16;
     }
     return 0;
 }
@@ -64,7 +106,9 @@ uint32_t TexturePackage::levelHeight(uint32_t level) const {
 }
 
 size_t TexturePackage::imageSize(uint32_t level) const {
-    return size_t(levelWidth(level)) * levelHeight(level) * bytesPerPixel(format);
+    // A level smaller than a block still takes a whole one.
+    const uint32_t block = blockExtent(format);
+    return size_t((levelWidth(level) + block - 1) / block) * ((levelHeight(level) + block - 1) / block) * blockBytes(format);
 }
 
 size_t TexturePackage::expectedDataSize() const {
@@ -97,6 +141,9 @@ std::string TexturePackage::validate() const {
     if (levels == 0 || levels > mipLevelCount(width, height)) {
         return std::to_string(levels) + " levels stored, a " + std::to_string(width) + "x" + std::to_string(height) +
                " texture has at most " + std::to_string(mipLevelCount(width, height));
+    }
+    if (generateMipmaps && isCompressed(format)) {
+        return "the engine cannot generate mipmaps for " + std::string(toString(format)) + ", store the levels";
     }
     if (generateMipmaps && levels != 1) {
         return "generateMipmaps needs exactly one stored level, got " + std::to_string(levels);
@@ -159,7 +206,7 @@ std::optional<TexturePackage> TexturePackage::deserialize(std::span<const uint8_
         switch (tag) {
             case kChunkInfo:
                 pkg.type = c.enumeration(TextureType::Cubemap);
-                pkg.format = c.enumeration(TextureFormat::RGBA16F);
+                pkg.format = c.enumeration(TextureFormat::BC7_SRGB);
                 pkg.width = c.u32();
                 pkg.height = c.u32();
                 pkg.levels = c.u32();
