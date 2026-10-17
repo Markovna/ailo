@@ -93,9 +93,8 @@ add_subdirectory(tools/modelc)
 add_subdirectory(tools/lightc)
 add_subdirectory(tools/resgen)
 
-# Add executable
-add_executable(ailo
-    ailo/main.cpp
+# The engine. Games link it and get its include dirs, defines and public dependencies.
+add_library(ailo STATIC
     ailo/render/RenderAPI.cpp
     ailo/render/RenderAPI.h
     ailo/render/ImGuiRenderer.cpp
@@ -189,8 +188,6 @@ add_executable(ailo
         ailo/platform/PlatformPlugin.h
         ailo/render/RenderPlugin.cpp
         ailo/render/RenderPlugin.h
-        ailo/sandbox/SandboxPlugin.cpp
-        ailo/sandbox/SandboxPlugin.h
         ailo/ui/ImGuiPlugin.cpp
         ailo/ui/ImGuiPlugin.h
         ailo/ui/OrbitCameraPlugin.cpp
@@ -214,41 +211,43 @@ add_executable(ailo
         ailo/common/AABB.h
 )
 
-# Link libraries
+# PUBLIC: libraries whose headers the engine's headers include.
 target_link_libraries(ailo
+    PUBLIC
         Vulkan::Vulkan
         glfw
         glm::glm
-        stb_image
         GPUOpen::VulkanMemoryAllocator
         EnTT::EnTT
         imgui
         Jolt
         ailo_material
-        ailo_model
         ailo_lighting
+    PRIVATE
+        stb_image
+        ailo_model
         ailo_texture
         ailo_fileio
 )
 
-# Include directories
-target_include_directories(ailo PRIVATE
+target_include_directories(ailo PUBLIC
     ${Vulkan_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/ailo
 )
 
-# GLM configuration for Vulkan
-target_compile_definitions(ailo PRIVATE
+# PUBLIC so that games see the same GLM/Vulkan configuration as the engine (GLM_FORCE_DEPTH_ZERO_TO_ONE changes the
+# projection matrices).
+target_compile_definitions(ailo PUBLIC
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
-target_compile_definitions(ailo PRIVATE GLFW_INCLUDE_VULKAN)
+target_compile_definitions(ailo PUBLIC GLFW_INCLUDE_VULKAN)
 
-target_compile_definitions(ailo PRIVATE VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
+target_compile_definitions(ailo PUBLIC VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
 
 # VK_KHR_portability_subset (MoltenVK) is declared in vulkan_beta.h
-target_compile_definitions(ailo PRIVATE VK_ENABLE_BETA_EXTENSIONS)
+target_compile_definitions(ailo PUBLIC VK_ENABLE_BETA_EXTENSIONS)
 
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
@@ -380,7 +379,6 @@ add_custom_target(ailo_assets ALL
         USES_TERMINAL
 )
 add_dependencies(ailo_assets texc matcomp modelc lightc)
-add_dependencies(ailo ailo_assets)
 
 # Built-in shaders, embedded into the engine
 add_shader(IMGUI_VERT shaders/imgui.vert)
@@ -394,7 +392,9 @@ add_resources(ailo PACKAGE builtin_shaders RESOURCES
         kTonemapFrag=${TONEMAP_FRAG}
 )
 
-# Add executable
+# The demo game
+add_subdirectory(sandbox)
+
 add_executable(ditest ailo/di/di_tests.cpp)
 
 add_executable(apptest

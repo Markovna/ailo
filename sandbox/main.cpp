@@ -4,7 +4,7 @@
 #include "physics/PhysicsPlugin.h"
 #include "platform/PlatformPlugin.h"
 #include "render/RenderPlugin.h"
-#include "sandbox/SandboxPlugin.h"
+#include "SandboxPlugin.h"
 #include "ui/ImGuiPlugin.h"
 #include "ui/OrbitCameraPlugin.h"
 
