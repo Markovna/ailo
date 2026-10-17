@@ -1,6 +1,6 @@
 # resgen
 
-Embeds binary files into the engine executable, like Filament's resgen. It is for built-in resources: files the
+Embeds binary files into the engine executable. It is for built-in resources: files the
 engine needs that are not assets loaded by key (built-in shaders, the DFG LUT).
 
 ```
@@ -15,7 +15,7 @@ extern const std::span<const uint8_t> kTonemapVert;
 }
 ```
 
-As in Filament, the symbol is made from the file name: the last extension is dropped, the remaining letters and digits
+The symbol is made from the file name: the last extension is dropped, the remaining letters and digits
 are split into words at every other character, and each word is capitalized behind a `k` (`tonemap.vert.spv` ->
 `kTonemapVert`, `dfg_lut.texpack` -> `kDfgLut`). Two files with the same symbol in a package are an error; every
 package shares the namespace, so the same symbol in two packages fails to link.

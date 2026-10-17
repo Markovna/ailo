@@ -29,7 +29,7 @@ void printUsage() {
     std::cerr << "usage: resgen --package <name> -o <output folder> <file>...\n";
 }
 
-// Like Filament's resgen, the symbol comes from the file name without its last extension, written as a constant:
+// The symbol comes from the file name without its last extension, written as a constant:
 // "tonemap.vert.spv" -> kTonemapVert, "dfg_lut.texpack" -> kDfgLut. Empty if the name has no letters or digits.
 std::string symbolName(const fs::path& path) {
     std::string symbol;

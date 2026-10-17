@@ -53,7 +53,7 @@ struct MaterialInputs {
 };
 
 #if defined(MATERIAL_HAS_CUSTOM_SURFACE_SHADING)
-// Arguments of the material's surfaceShading(), same as Filament's.
+// Arguments of the material's surfaceShading().
 struct ShadingData {
     vec3 diffuseColor;
     vec3 f0;

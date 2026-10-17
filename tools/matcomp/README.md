@@ -112,13 +112,11 @@ vec3 surfaceShading(const MaterialInputs materialInputs, const ShadingData shadi
 which replaces the lit BRDF for each light (the directional light and every point/spot light) and returns
 that light's contribution. It is called even when the fragment faces away from the light or is in its shadow
 (`NdotL` or `visibility` is 0), so it can add its own ambient term. Image-based lighting is still applied
-on top. The structures match Filament's:
+on top.
 
 - `ShadingData`: `diffuseColor`, `f0`, `perceptualRoughness`, `roughness`
 - `LightData`: `colorIntensity` (rgb, intensity in w), `l` (towards the light), `NdotL`, `worldPosition`,
   `attenuation`, `visibility` (shadowing)
-
-`materials/toon.mat` is an example, after Filament's toon shading.
 
 ## Variants
 
