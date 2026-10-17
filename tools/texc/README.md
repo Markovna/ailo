@@ -10,7 +10,7 @@ texc --dump <package.texpack>
 
 - `--root` is the assets folder that paths starting with `/` are relative to. The asset build passes it.
 - `--depfile` lists the `.tex` file and every source image, so editing an image repacks it.
-- `--dump` prints a package's header: type, format, size, levels, mipmap generation, data size.
+- `--dump` prints a package's header: type, format, size, stored levels, runtime mipmap generation, data size.
 
 It is run by the asset build (`build/README.md`): every `.tex` file in `assets/` (`assets/<dir>/<name>.tex`) is packed into `<build>/assets/<dir>/<name>.texpack`. Its source images are copied
 into the build too, like any other file.
@@ -39,6 +39,6 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `layout`  | `"faces"` \| `"equirectangular"` | `"faces"` | Cubemap only. `equirectangular`: `source` is one equirectangular (latitude/longitude) image, resampled into the six faces with the mapping `lightc` prefilters with, so a skybox matches the reflections baked from the same image. |
 | `size`    | int              | width / 4 | Equirectangular only: the face size. |
 | `srgb`    | bool             | `true`  | 8-bit images are stored as `rgba8_srgb`, or `rgba8` when false (normal, roughness/metallic, data maps). |
-| `mipmaps` | bool             | `true`  | Only level 0 is stored; the engine generates the mip chain at load time. |
+| `mipmaps` | bool \| `"offline"` | `true`  | `true`: only level 0 is stored and the engine generates the mip chain at load time. `"offline"`: texc box-filters the whole chain (`rgba8_srgb` in linear space, each face of a cubemap on its own) and stores every level. `false`: level 0 only. |
 
 HDR sources (`.hdr`) are stored as `rgba32f` whatever `srgb` says.

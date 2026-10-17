@@ -217,7 +217,7 @@ void testPackFromPixels() {
     assert(pkg->generateMipmaps);
     assert(pkg->data == (std::vector<uint8_t> { 30, 20, 10, 40,   70, 60, 50, 80 }));
 
-    pkg = packTextureFromPixels(bgra.data(), 2, 1, PixelLayout::RGBA8, { .srgb = false, .mipmaps = false }, error);
+    pkg = packTextureFromPixels(bgra.data(), 2, 1, PixelLayout::RGBA8, { .srgb = false, .mipmaps = MipmapMode::None }, error);
     assert(pkg);
     assert(pkg->format == TextureFormat::RGBA8);
     assert(!pkg->generateMipmaps);
@@ -302,7 +302,7 @@ void testPackCubemap() {
     }
 
     std::string error;
-    auto pkg = packCubemap(faces, { .srgb = true, .mipmaps = true }, error);
+    auto pkg = packCubemap(faces, { .srgb = true, .mipmaps = MipmapMode::Runtime }, error);
     assert(pkg);
     assert(pkg->type == TextureType::Cubemap);
     assert(pkg->format == TextureFormat::RGBA8_SRGB);
@@ -347,7 +347,7 @@ void testPackCubemapFromEquirect() {
     writeFile(path, encodeHdr(16, 8, rgb));
 
     std::string error;
-    auto pkg = packCubemapFromEquirect(path, 0, { .mipmaps = false }, error);
+    auto pkg = packCubemapFromEquirect(path, 0, { .mipmaps = MipmapMode::None }, error);
     assert(pkg);
     assert(pkg->type == TextureType::Cubemap);
     assert(pkg->format == TextureFormat::RGBA32F);
@@ -378,6 +378,82 @@ void testPackCubemapFromEquirect() {
 
 }
 
+std::vector<uint8_t> red(std::initializer_list<uint8_t> values) {
+    std::vector<uint8_t> pixels;
+    for (uint8_t v : values) pixels.insert(pixels.end(), { v, 0, 0, 255 });
+    return pixels;
+}
+
+void testOfflineMipmaps() {
+    std::string error;
+    const TextureImportOptions linear { .srgb = false, .mipmaps = MipmapMode::Offline };
+
+    auto pixels = red({ 0, 40, 80, 120,   4, 8, 12, 16 });
+    auto pkg = packTextureFromPixels(pixels.data(), 4, 2, PixelLayout::RGBA8, linear, error);
+    assert(pkg);
+    assert(pkg->levels == 3 && !pkg->generateMipmaps && pkg->allocatedLevels() == 3);
+    auto level0 = pkg->image(0, 0);
+    assert(std::equal(level0.begin(), level0.end(), pixels.begin(), pixels.end()));
+    auto level1 = pkg->image(1, 0);
+    assert(std::ranges::equal(level1, red({ 13, 57 })));
+    // Filtered from level 1 before it was rounded to 8 bits.
+    assert(std::ranges::equal(pkg->image(2, 0), red({ 35 })));
+
+    // sRGB color is averaged in linear space, alpha as is.
+    const std::vector<uint8_t> blackWhite { 0, 0, 0, 0,   255, 255, 255, 255 };
+    pkg = packTextureFromPixels(blackWhite.data(), 2, 1, PixelLayout::RGBA8, { .mipmaps = MipmapMode::Offline }, error);
+    assert(pkg && pkg->format == TextureFormat::RGBA8_SRGB && pkg->levels == 2);
+    assert(std::ranges::equal(pkg->image(1, 0), std::vector<uint8_t> { 188, 188, 188, 128 }));
+
+    // An odd size blends its last column in.
+    pixels = red({ 0, 90, 180 });
+    pkg = packTextureFromPixels(pixels.data(), 3, 1, PixelLayout::RGBA8, linear, error);
+    assert(pkg && pkg->levels == 2);
+    assert(std::ranges::equal(pkg->image(1, 0), red({ 90 })));
+
+    pixels = solid(5, 3, { 1, 2, 3, 4 });
+    pkg = packTextureFromPixels(pixels.data(), 5, 3, PixelLayout::RGBA8, linear, error);
+    assert(pkg && pkg->levels == 3);
+    assert(pkg->levelWidth(1) == 2 && pkg->levelHeight(1) == 1);
+    assert(std::ranges::equal(pkg->image(1, 0), solid(2, 1, { 1, 2, 3, 4 })));
+    assert(std::ranges::equal(pkg->image(2, 0), solid(1, 1, { 1, 2, 3, 4 })));
+
+    // A 1x1 texture has no chain.
+    pkg = packTextureFromPixels(pixels.data(), 1, 1, PixelLayout::RGBA8, linear, error);
+    assert(pkg && pkg->levels == 1);
+
+    // Every cubemap face gets its own chain.
+    auto dir = scratchDir();
+    auto faces = cubemapFacePaths(dir / "sky.png");
+    for (size_t i = 0; i < faces.size(); i++) {
+        writeFile(faces[i], encodePng(4, 4, 4, solid(4, 4, { uint8_t(i), uint8_t(10 * i), 0, 255 })));
+    }
+    pkg = packCubemap(faces, { .mipmaps = MipmapMode::Offline }, error);
+    assert(pkg && pkg->levels == 3 && !pkg->generateMipmaps);
+    for (uint32_t face = 0; face < 6; face++) {
+        assert(std::ranges::equal(pkg->image(2, face), solid(1, 1, { uint8_t(face), uint8_t(10 * face), 0, 255 })));
+    }
+    fs::remove_all(dir);
+
+    // HDR values are kept as floats.
+    const std::vector<float> hdr { 1.0f, 2.0f, 4.0f, 1.0f,   3.0f, 6.0f, 12.0f, 1.0f };
+    TexturePackage floats;
+    floats.format = TextureFormat::RGBA32F;
+    floats.width = 2;
+    floats.height = 1;
+    floats.data.resize(sizeof(float) * hdr.size());
+    std::memcpy(floats.data.data(), hdr.data(), floats.data.size());
+    assert(generateMipLevels(floats, error));
+    float texel[4];
+    std::memcpy(texel, floats.image(1, 0).data(), sizeof(texel));
+    assert(texel[0] == 2.0f && texel[1] == 4.0f && texel[2] == 8.0f && texel[3] == 1.0f);
+
+    // A package already set up for runtime generation is left alone.
+    pkg = packTextureFromPixels(pixels.data(), 2, 1, PixelLayout::RGBA8, {}, error);
+    assert(pkg && pkg->generateMipmaps);
+    assert(!generateMipLevels(*pkg, error));
+}
+
 int main() {
     testMipLevelCount();
     testLayout();
@@ -391,6 +467,7 @@ int main() {
     testCubemapFacePaths();
     testPackCubemap();
     testPackCubemapFromEquirect();
+    testOfflineMipmaps();
 
     std::cout << "All texture tests passed" << std::endl;
     return 0;

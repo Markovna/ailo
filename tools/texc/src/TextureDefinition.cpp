@@ -45,6 +45,13 @@ uint32_t getSize(const json::Value& v) {
     return uint32_t(n);
 }
 
+MipmapMode getMipmaps(const json::Value& v) {
+    if (v.isBool()) return v.asBool() ? MipmapMode::Runtime : MipmapMode::None;
+    expect(v, v.isString(), "a boolean or \"offline\"", "mipmaps");
+    if (v.asString() == "offline") return MipmapMode::Offline;
+    fail(v.line, "unknown mipmaps \"" + v.asString() + "\" (expected true, false or \"offline\")");
+}
+
 TextureType getType(const json::Value& v) {
     const auto& s = getString(v, "type");
     if (s == "2d") return TextureType::Texture2D;
@@ -74,7 +81,7 @@ TextureDefinition parseTextureDefinition(std::string_view source) {
         else if (key == "faces") facesValue = &v;
         else if (key == "type") def.type = getType(v);
         else if (key == "srgb") def.options.srgb = getBool(v, "srgb");
-        else if (key == "mipmaps") def.options.mipmaps = getBool(v, "mipmaps");
+        else if (key == "mipmaps") def.options.mipmaps = getMipmaps(v);
         else if (key == "layout") layoutValue = &v;
         else if (key == "size") sizeValue = &v;
         else fail(v.line, "unknown texture property \"" + key + "\" (expected source, faces, type, layout, size, srgb, mipmaps)");

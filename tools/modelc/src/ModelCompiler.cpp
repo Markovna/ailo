@@ -269,7 +269,7 @@ private:
         auto key = std::make_pair(tex, srgb);
         if (auto it = m_embedded.find(key); it != m_embedded.end()) return it->second;
 
-        texture::TextureImportOptions options { .srgb = srgb, .mipmaps = true };
+        texture::TextureImportOptions options { .srgb = srgb, .mipmaps = texture::MipmapMode::Runtime };
         std::string error;
         // mHeight == 0: pcData holds mWidth bytes of an encoded image (png, jpg, ...); otherwise raw BGRA texels.
         auto pkg = tex->mHeight == 0

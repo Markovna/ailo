@@ -84,7 +84,7 @@ TexturePackage makePackage(TextureType type, const Image& first, const TextureIm
     pkg.width = first.width;
     pkg.height = first.height;
     pkg.levels = 1;
-    pkg.generateMipmaps = options.mipmaps && mipLevelCount(first.width, first.height) > 1;
+    pkg.generateMipmaps = options.mipmaps == MipmapMode::Runtime && mipLevelCount(first.width, first.height) > 1;
     return pkg;
 }
 
@@ -115,9 +115,83 @@ void sampleEquirect(const Image& image, float u, float v, float out[4]) {
     }
 }
 
-std::optional<TexturePackage> finish(TexturePackage pkg, std::string& error) {
+float srgbToLinear(uint8_t value) {
+    static const auto table = [] {
+        std::array<float, 256> t;
+        for (int i = 0; i < 256; i++) {
+            const float c = float(i) / 255.0f;
+            t[i] = c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+        }
+        return t;
+    }();
+    return table[value];
+}
+
+uint8_t linearToSrgb(float value) {
+    const float c = std::clamp(value, 0.0f, 1.0f);
+    const float s = c <= 0.0031308f ? c * 12.92f : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+    return uint8_t(std::lround(s * 255.0f));
+}
+
+std::vector<float> toFloat(std::span<const uint8_t> image, TextureFormat format) {
+    std::vector<float> out;
+    if (format == TextureFormat::RGBA32F) {
+        out.resize(image.size() / sizeof(float));
+        std::memcpy(out.data(), image.data(), image.size());
+        return out;
+    }
+    out.resize(image.size());
+    const bool srgb = format == TextureFormat::RGBA8_SRGB;
+    for (size_t i = 0; i < image.size(); i++) {
+        out[i] = srgb && i % 4 != 3 ? srgbToLinear(image[i]) : float(image[i]) / 255.0f;
+    }
+    return out;
+}
+
+void fromFloat(std::span<const float> image, TextureFormat format, uint8_t* out) {
+    if (format == TextureFormat::RGBA32F) {
+        std::memcpy(out, image.data(), image.size_bytes());
+        return;
+    }
+    const bool srgb = format == TextureFormat::RGBA8_SRGB;
+    for (size_t i = 0; i < image.size(); i++) {
+        out[i] = srgb && i % 4 != 3 ? linearToSrgb(image[i])
+                                    : uint8_t(std::lround(std::clamp(image[i], 0.0f, 1.0f) * 255.0f));
+    }
+}
+
+// Box-filters one axis of a width x height RGBA image down to `target` texels. Each source texel is weighted by how
+// much of the destination texel it covers, so an odd size blends its last row or column in instead of dropping it.
+std::vector<float> downsampleAxis(std::span<const float> src, uint32_t width, uint32_t height, uint32_t target,
+                                  bool vertical) {
+    const uint32_t length = vertical ? height : width;
+    const uint32_t lines = vertical ? width : height;
+    const uint32_t outWidth = vertical ? width : target;
+    const size_t srcStep = vertical ? size_t(width) * 4 : 4;
+    const size_t srcLine = vertical ? 4 : size_t(width) * 4;
+    const size_t dstStep = vertical ? size_t(outWidth) * 4 : 4;
+    const size_t dstLine = vertical ? 4 : size_t(outWidth) * 4;
+
+    std::vector<float> dst(size_t(lines) * target * 4);
+    const double scale = double(length) / double(target);
+    for (uint32_t i = 0; i < target; i++) {
+        const double lo = i * scale, hi = (i + 1) * scale;
+        for (uint32_t j = uint32_t(lo); j < length && j < hi; j++) {
+            const float weight = float((std::min(hi, j + 1.0) - std::max(lo, double(j))) / scale);
+            for (uint32_t line = 0; line < lines; line++) {
+                const float* s = src.data() + line * srcLine + j * srcStep;
+                float* d = dst.data() + line * dstLine + i * dstStep;
+                for (int c = 0; c < 4; c++) d[c] += weight * s[c];
+            }
+        }
+    }
+    return dst;
+}
+
+std::optional<TexturePackage> finish(TexturePackage pkg, const TextureImportOptions& options, std::string& error) {
     error = pkg.validate();
     if (!error.empty()) return std::nullopt;
+    if (options.mipmaps == MipmapMode::Offline && !generateMipLevels(pkg, error)) return std::nullopt;
     return pkg;
 }
 
@@ -139,7 +213,7 @@ std::optional<TexturePackage> packTextureFromMemory(std::span<const uint8_t> enc
 
     TexturePackage pkg = makePackage(TextureType::Texture2D, image, options);
     pkg.data = std::move(image.data);
-    return finish(std::move(pkg), error);
+    return finish(std::move(pkg), options, error);
 }
 
 std::optional<TexturePackage> packTextureFromPixels(const void* pixels, uint32_t width, uint32_t height, PixelLayout layout,
@@ -161,7 +235,7 @@ std::optional<TexturePackage> packTextureFromPixels(const void* pixels, uint32_t
 
     TexturePackage pkg = makePackage(TextureType::Texture2D, image, options);
     pkg.data = std::move(image.data);
-    return finish(std::move(pkg), error);
+    return finish(std::move(pkg), options, error);
 }
 
 std::optional<TexturePackage> packCubemap(std::span<const fs::path, 6> faces, const TextureImportOptions& options,
@@ -196,7 +270,7 @@ std::optional<TexturePackage> packCubemap(std::span<const fs::path, 6> faces, co
     for (const Image& face : images) {
         pkg.data.insert(pkg.data.end(), face.data.begin(), face.data.end());
     }
-    return finish(std::move(pkg), error);
+    return finish(std::move(pkg), options, error);
 }
 
 std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, uint32_t faceSize,
@@ -283,9 +357,46 @@ std::optional<TexturePackage> packCubemapFromEquirect(const fs::path& source, ui
         }
     }
 
-    auto result = finish(std::move(pkg), error);
+    auto result = finish(std::move(pkg), options, error);
     if (!result) error = describe(source, error);
     return result;
+}
+
+bool generateMipLevels(TexturePackage& pkg, std::string& error) {
+    if (pkg.levels != 1 || pkg.generateMipmaps) {
+        error = "mip levels can only be generated for a package with one stored level";
+        return false;
+    }
+    if (pkg.format == TextureFormat::RGBA16F) {
+        error = "cannot generate mip levels for " + std::string(toString(pkg.format));
+        return false;
+    }
+
+    const uint32_t levels = mipLevelCount(pkg.width, pkg.height);
+    if (levels == 1) return true;
+
+    // Each level is filtered from the unquantized previous one, so 8-bit rounding doesn't accumulate down the chain.
+    std::vector<std::vector<float>> layers;
+    for (uint32_t layer = 0; layer < pkg.layers(); layer++) {
+        layers.push_back(toFloat(pkg.image(0, layer), pkg.format));
+    }
+
+    pkg.levels = levels;
+    pkg.data.resize(pkg.expectedDataSize());
+    for (uint32_t level = 1; level < levels; level++) {
+        const uint32_t width = pkg.levelWidth(level - 1), height = pkg.levelHeight(level - 1);
+        const uint32_t targetWidth = pkg.levelWidth(level), targetHeight = pkg.levelHeight(level);
+        for (uint32_t layer = 0; layer < pkg.layers(); layer++) {
+            auto& image = layers[layer];
+            image = downsampleAxis(downsampleAxis(image, width, height, targetWidth, false), targetWidth, height,
+                                   targetHeight, true);
+            const size_t offset = pkg.image(level, layer).data() - pkg.data.data();
+            fromFloat(image, pkg.format, pkg.data.data() + offset);
+        }
+    }
+
+    error = pkg.validate();
+    return error.empty();
 }
 
 std::array<fs::path, 6> cubemapFacePaths(const fs::path& path) {
