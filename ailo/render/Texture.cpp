@@ -54,7 +54,12 @@ TextureType toTextureType(texture::TextureType type) {
     return type == texture::TextureType::Cubemap ? TextureType::TEXTURE_CUBEMAP : TextureType::TEXTURE_2D;
 }
 
-void upload(Texture& tex, RenderAPI* renderApi, const texture::TexturePackage& pkg) {
+}
+
+Texture Texture::fromPackage(RenderAPI* renderApi, const texture::TexturePackage& pkg) {
+    Texture tex(renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled, pkg.width, pkg.height,
+                pkg.allocatedLevels());
+
     // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
     for (uint32_t level = 0; level < pkg.levels; level++) {
         auto image = pkg.image(level, 0);
@@ -65,22 +70,6 @@ void upload(Texture& tex, RenderAPI* renderApi, const texture::TexturePackage& p
     if (pkg.generateMipmaps) {
         tex.generateMipmaps(renderApi);
     }
-}
-
-}
-
-AssetPtr<Texture> Texture::fromPackage(AssetStorage<Texture>& storage, RenderAPI* renderApi, const texture::TexturePackage& pkg) {
-    auto tex = storage.emplace(noname_t{}, renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled,
-                               pkg.width, pkg.height, pkg.allocatedLevels());
-    upload(*tex, renderApi, pkg);
-    return tex;
-}
-
-AssetPtr<Texture> Texture::fromPackage(AssetStorage<Texture>& storage, const std::string& key, RenderAPI* renderApi,
-                                       const texture::TexturePackage& pkg) {
-    auto tex = storage.emplace(key, renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled,
-                               pkg.width, pkg.height, pkg.allocatedLevels());
-    upload(*tex, renderApi, pkg);
     return tex;
 }
 
@@ -105,9 +94,7 @@ void TextureLoader::loadPackage(const std::filesystem::path& packagePath, LoadCo
         throw std::runtime_error("texture '" + packagePath.generic_string() + "': " + error);
     }
 
-    Texture& tex = ctx.construct(m_renderApi, toTextureType(pkg->type), toVkFormat(pkg->format), TextureUsage::Sampled,
-                                 pkg->width, pkg->height, pkg->allocatedLevels());
-    upload(tex, m_renderApi, *pkg);
+    ctx.construct(Texture::fromPackage(m_renderApi, *pkg));
 }
 
 // Without a package there are no options: 8-bit images are sRGB color. Data textures (normal, metallic/roughness)

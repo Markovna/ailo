@@ -33,7 +33,7 @@ AssetPtr<Texture> createEmbeddedTexture(RenderAPI& renderApi, AssetStorage<Textu
     if (!pkg) {
         throw std::runtime_error(std::string("texture '") + key + "': " + error);
     }
-    return Texture::fromPackage(textures, key, &renderApi, *pkg);
+    return textures.emplace(key, Texture::fromPackage(&renderApi, *pkg));
 }
 
 AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,

@@ -82,7 +82,7 @@ void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
     std::vector<AssetPtr<Texture>> embedded;
     embedded.reserve(pkg->textures.size());
     for (const auto& texture : pkg->textures) {
-        embedded.push_back(Texture::fromPackage(*m_storages.textures, renderApi, texture));
+        embedded.push_back(m_storages.textures->emplace(noname_t{}, Texture::fromPackage(renderApi, texture)));
     }
 
     auto resolveTexture = [&](const model::TextureRef& ref) -> AssetPtr<Texture> {

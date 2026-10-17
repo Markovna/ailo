@@ -22,7 +22,7 @@ void IndirectLightLoader::load(const std::string& key, LoadContext<IndirectLight
     }
 
     IndirectLight& light = ctx.construct();
-    light.reflections = Texture::fromPackage(*m_textures, m_renderApi, pkg->reflections);
+    light.reflections = m_textures->emplace(noname_t{}, Texture::fromPackage(m_renderApi, pkg->reflections));
     light.irradianceSH = pkg->irradianceSH;
 }
 
