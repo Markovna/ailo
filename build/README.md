@@ -11,8 +11,9 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   read by a tool.
 - **Ninja** compares timestamps and runs only what is out of date, on all cores. Its log and deps live in
   `<build>/asset_build/`, apart from CMake's.
-- **Tools** (e.g. `texc`) compile a single asset and can write a depfile with the extra inputs they read (source
-  images, includes), so editing one of those rebuilds the asset.
+- **Tools** (e.g. `texc`) are built by CMake into `<build>/asset_tools/`, which is passed to the generator as
+  `--tools-dir`. They compile a single asset and can write a depfile with the extra inputs they read (source images,
+  includes), so editing one of those rebuilds the asset.
 
 CMake runs `gen.py` once, when `build_assets.ninja` is missing or `gen.py`/`config.json` change. The `ailo_assets`
 target (a dependency of `ailo`) runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
@@ -58,7 +59,7 @@ Strict JSON with `//` and `/* */` comments.
 
 | Property                   | Meaning |
 |----------------------------|---------|
-| `tools.<name>`             | Tool name. Its path is passed to `gen.py` as `--tool <name>=<path>` (CMake: `--tool texc=$<TARGET_FILE:texc>`). Assets are rebuilt when the tool changes. |
+| `tools.<name>`             | Tool name: the executable `<name>` (`<name>.exe` on Windows) in the folder passed as `--tools-dir`. Assets are rebuilt when the tool changes. |
 | `tools.<name>.extensions`  | Asset extension -> output extension, matched case-insensitively. The output extension replaces the asset's: `textures/sky.tex` builds `<build>/assets/textures/sky.texpack`. An extension may belong to only one tool. |
 | `tools.<name>.args`        | Tool arguments, the same for every extension: the tool decides what to compile from `$in`'s extension. Ninja variables: `$in` is the asset file (absolute), `$out` is the output (relative to the build folder), `$root` is the assets folder (absolute; texc, modelc and lightc take it as `--root` to resolve paths starting with `/`). Default: `["$in", "$out"]`. |
 | `tools.<name>.depfile`     | Optional. The Makefile-style depfile the tool writes. Its target must be `$out` as passed. |
@@ -82,5 +83,5 @@ Negation (`!`) and `**` are not supported. Editing the file regenerates the mani
 - **To an existing tool:** teach the tool the new extension, then add it to the tool's `extensions`, e.g.
   `{ ".tex": ".texpack", ".cube": ".texpack" }`.
 - **With a new tool:** write it. It takes one asset file and writes one output, plus a depfile if it reads other files.
-  Add it to `tools` in `config.json`, add `--tool <name>=$<TARGET_FILE:<name>>` to the `gen.py` command in
-  `CMakeLists.txt`, and add `add_dependencies(ailo_assets <name>)`.
+  Add it to `tools` in `config.json` and its target to `AILO_ASSET_TOOLS` in `CMakeLists.txt`, which builds it into
+  `<build>/asset_tools/` before the assets.

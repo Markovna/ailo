@@ -347,6 +347,12 @@ else()
     find_program(AILO_NINJA ninja REQUIRED)
 endif()
 
+# gen.py runs the tools named in config.json from AILO_ASSET_TOOLS_DIR. The generator expression keeps multi-config
+# generators from adding a per-config subfolder.
+set(AILO_ASSET_TOOLS texc matcomp modelc lightc)
+set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
+set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
+
 set(AILO_ASSET_MANIFEST ${CMAKE_BINARY_DIR}/build_assets.ninja)
 add_custom_command(
         OUTPUT ${AILO_ASSET_MANIFEST}
@@ -354,11 +360,7 @@ add_custom_command(
                 --source ${CMAKE_SOURCE_DIR}/assets
                 --build-dir ${CMAKE_BINARY_DIR}
                 --config ${CMAKE_SOURCE_DIR}/build/config.json
-                --cmake ${CMAKE_COMMAND}
-                --tool texc=$<TARGET_FILE:texc>
-                --tool matcomp=$<TARGET_FILE:matcomp>
-                --tool modelc=$<TARGET_FILE:modelc>
-                --tool lightc=$<TARGET_FILE:lightc>
+                --tools-dir ${AILO_ASSET_TOOLS_DIR}
         DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
         COMMENT "Generating build_assets.ninja"
 )
@@ -373,7 +375,7 @@ add_custom_target(ailo_assets ALL
         COMMENT "Building assets"
         USES_TERMINAL
 )
-add_dependencies(ailo_assets texc matcomp modelc lightc)
+add_dependencies(ailo_assets ${AILO_ASSET_TOOLS})
 
 # Built-in shaders, embedded into the engine
 add_shader(BUILTIN_SHADERS shaders/imgui.vert)
