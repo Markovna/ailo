@@ -76,6 +76,14 @@ AssetPtr<Texture> Texture::fromPackage(AssetStorage<Texture>& storage, RenderAPI
     return tex;
 }
 
+AssetPtr<Texture> Texture::fromPackage(AssetStorage<Texture>& storage, const std::string& key, RenderAPI* renderApi,
+                                       const texture::TexturePackage& pkg) {
+    auto tex = storage.emplace(key, renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled,
+                               pkg.width, pkg.height, pkg.allocatedLevels());
+    upload(*tex, renderApi, pkg);
+    return tex;
+}
+
 void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
     std::filesystem::path packagePath = key + ".texpack";
     if (std::filesystem::exists(packagePath)) {

@@ -5,8 +5,7 @@ Bakes image-based lighting data:
 - a light definition (`.light`) naming an equirectangular HDR environment becomes a lighting package (`.lightpack`,
   `ailo/render/lighting/LightingPackage.h`): its prefiltered specular radiance cubemap and the spherical harmonics of
   its diffuse irradiance;
-- `--dfg` writes the DFG LUT of the split-sum approximation as a texture package (`.texpack`). It has no source, so
-  CMake runs it, not the asset build.
+- `--dfg` writes the DFG LUT of the split-sum approximation as a texture package (`.texpack`). It has no source.
 
 ```
 lightc -o <output.lightpack> [--depfile <file>] [--root <assets folder>] <input.light>
@@ -19,7 +18,6 @@ lightc --dfg -o <output.texpack>
 
 It is run by the asset build (`build/README.md`): every `.light` file in `assets/` (`assets/<dir>/<name>.light`) is
 baked into `<build>/assets/<dir>/<name>.lightpack`, loaded with `server.load<IndirectLight>("assets/<dir>/<name>")`.
-The DFG LUT is built by CMake into `<build>/assets/textures/dfg_lut.texpack` (key `assets/textures/dfg_lut`).
 
 ## Outputs
 

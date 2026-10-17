@@ -1,5 +1,5 @@
 #include "ImGuiRenderer.h"
-#include <OS.h>
+#include "resources/builtin_shaders.h"
 #include <cstring>
 #include <iostream>
 
@@ -51,8 +51,8 @@ void ImGuiRenderer::createPipeline() {
     // Create the graphics pipeline
     m_program = m_renderAPI->createProgram(
         ShaderDescription {
-                .vertexShader = ailo::os::readFile("shaders/imgui.vert.spv"),
-                .fragmentShader = ailo::os::readFile("shaders/imgui.frag.spv"),
+                .vertexShader = ShaderDescription::code(resources::builtin_shaders::kImGuiVert),
+                .fragmentShader = ShaderDescription::code(resources::builtin_shaders::kImGuiFrag),
                     .raster = ailo::RasterDescription {
                         .cullingMode = ailo::CullingMode::NONE,
                         .inverseFrontFace = false,

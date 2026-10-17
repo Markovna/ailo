@@ -98,7 +98,6 @@ struct RendererSettings {
   uint32_t shadowMapSize = 1024;
   ShadowSettings shadows;
   glm::vec4 clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
-  std::string dfgLutPath = "assets/textures/dfg_lut";
 };
 
 enum class DescriptorSetBindingPoints : uint8_t {

@@ -3,11 +3,15 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 #include <utility>
 
 #include "DefaultAssets.h"
 #include "Mesh.h"
 #include "Texture.h"
+#include "render/texture/TexturePackage.h"
+#include "resources/builtin_textures.h"
 
 namespace ailo {
 
@@ -20,6 +24,16 @@ AssetPtr<Texture> createTexture2D(RenderAPI& renderApi, AssetStorage<Texture>& t
     auto texture = textures.emplace(key, &renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, 1, 1, 1);
     texture->updateImage(&renderApi, pixel.data(), pixel.size());
     return texture;
+}
+
+AssetPtr<Texture> createEmbeddedTexture(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
+                                        std::span<const uint8_t> data) {
+    std::string error;
+    auto pkg = texture::TexturePackage::deserialize(data, error);
+    if (!pkg) {
+        throw std::runtime_error(std::string("texture '") + key + "': " + error);
+    }
+    return Texture::fromPackage(textures, key, &renderApi, *pkg);
 }
 
 AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
@@ -157,6 +171,7 @@ void textures::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Texture
     defaults.add(createTexture2D(renderApi, storage, kNormal, vk::Format::eR8G8B8A8Unorm, { 128, 128, 255, 255 }));
     defaults.add(createTexture2D(renderApi, storage, kDefaultMetallicRoughness, vk::Format::eR8G8B8A8Unorm, { 0, 128, 0, 255 }));
     defaults.add(createCubemap(renderApi, storage, kBlackCube, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
+    defaults.add(createEmbeddedTexture(renderApi, storage, kDfgLut, resources::builtin_textures::kDfgLut));
 }
 
 void meshes::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Mesh>& storage, RenderAPI& renderApi) {

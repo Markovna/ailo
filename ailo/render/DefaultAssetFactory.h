@@ -16,6 +16,7 @@ inline constexpr const char* kBlack = "builtin://textures/black";
 inline constexpr const char* kBlackCube = "builtin://textures/black_cube";
 inline constexpr const char* kNormal = "builtin://textures/normal";
 inline constexpr const char* kDefaultMetallicRoughness = "builtin://textures/default_metallic_roughness";
+inline constexpr const char* kDfgLut = "builtin://textures/dfg_lut";
 
 void createDefaultAssets(DefaultAssets&, AssetStorage<Texture>&, RenderAPI&);
 

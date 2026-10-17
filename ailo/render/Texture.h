@@ -21,6 +21,7 @@ public:
 
     // An unnamed texture, e.g. one embedded in a model package.
     static AssetPtr<Texture> fromPackage(AssetStorage<Texture>&, RenderAPI*, const texture::TexturePackage&);
+    static AssetPtr<Texture> fromPackage(AssetStorage<Texture>&, const std::string& key, RenderAPI*, const texture::TexturePackage&);
 
 private:
     Unique<gpu::Texture> m_handle;

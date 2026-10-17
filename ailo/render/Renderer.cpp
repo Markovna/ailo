@@ -6,8 +6,8 @@
 #include "app/System.h"
 
 #include "DefaultAssetFactory.h"
-#include "OS.h"
 #include "Mesh.h"
+#include "resources/builtin_shaders.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
 #include "ecs/Lights.h"
@@ -60,7 +60,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   : m_settings(settings), m_shadowMapManager(), m_renderAPI(renderApi) {
   m_defaultIblSpecular = server.load<Texture>(textures::kBlackCube);
 
-  m_iblDfgLut = server.load<Texture>(m_settings.dfgLutPath);
+  m_iblDfgLut = server.load<Texture>(textures::kDfgLut);
 
   auto backend = m_renderAPI;
   m_viewUniformBufferHandle = backend->createBuffer(BufferBinding::UNIFORM, sizeof(m_perViewUniformBufferData));
@@ -102,8 +102,8 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   m_tonemapUniformBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(TonemapUniforms));
   backend->updateDescriptorSetBuffer(m_tonemapDescriptorSet, m_tonemapUniformBuffer, 1);
   m_tonemapProgram = backend->createProgram(ShaderDescription {
-    .vertexShader = os::readFile("shaders/tonemap.vert.spv"),
-    .fragmentShader = os::readFile("shaders/tonemap.frag.spv"),
+    .vertexShader = ShaderDescription::code(resources::builtin_shaders::kTonemapVert),
+    .fragmentShader = ShaderDescription::code(resources::builtin_shaders::kTonemapFrag),
     .raster = RasterDescription {
       .cullingMode = CullingMode::NONE,
       .depthWriteEnable = false,

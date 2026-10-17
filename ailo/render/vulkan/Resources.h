@@ -1,6 +1,8 @@
 #pragma once
 #include <memory>
 #include <bitset>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 #include "vulkan/vulkan.hpp"
@@ -247,6 +249,8 @@ struct DescriptorSetLayoutBinding {
 struct ShaderDescription {
     using ShaderCode = std::vector<char>;
     using SetLayout = std::vector<DescriptorSetLayoutBinding>;
+
+    static ShaderCode code(std::span<const uint8_t> spirv) { return { spirv.begin(), spirv.end() }; }
 
     ShaderCode vertexShader;
     ShaderCode fragmentShader;
