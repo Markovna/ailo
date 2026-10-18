@@ -1,7 +1,7 @@
 # resgen
 
-Embeds binary files into the engine executable. It is for built-in resources: files the
-engine needs that are not assets loaded by key (built-in shaders, the DFG LUT).
+Embeds binary files into a C++ source file, so a program can read them without opening any file (e.g. compiled
+shaders, lookup tables).
 
 ```
 resgen --package <name> -o <output folder> <file>...
@@ -23,12 +23,5 @@ package shares the namespace, so the same symbol in two packages fails to link.
 The `.cpp` holds all files in one `uint8_t` array (MSVC has neither `.incbin` nor `#embed` and limits string literals
 to 64 KB). Each file starts at a multiple of 16 bytes, so SPIR-V and other word-sized data can be read in place.
 
-CMake runs it through `add_resources` (`CMakeLists.txt`):
-
-```cmake
-add_shader(BUILTIN_SHADERS shaders/tonemap.vert)
-add_resources(ailo PACKAGE builtin_shaders FILES ${BUILTIN_SHADERS})
-```
-
-which writes into `<build>/generated/resources/`, so code includes `"resources/builtin_shaders.h"`. The package is
-regenerated when any of its files or resgen changes.
+To use a package, compile `<name>.cpp` into the program and include `<name>.h`. Rerun resgen when any of the files
+changes.

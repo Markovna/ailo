@@ -1,17 +1,17 @@
 # matcomp
 
-Compiles a material definition (`.mat`) into a material package (`.matpack`) that the engine loads.
+Compiles a material definition (`.mat`) into a material package (`.matpack`).
 A material provides named parameters, raster state, required vertex inputs, a shading model and
-shader *functions*. The engine owns `main()`, attributes, varyings, skinning, lighting and the
-render passes; matcomp joins the engine templates in `shaders/surface/` with the material's code
-for every variant.
+shader *functions*. The surface templates in `shaders/surface/` own `main()`, attributes, varyings, skinning and
+lighting; matcomp joins them with the material's code for every variant.
 
 ```
 matcomp [-I <dir>]... -o <output.matpack> [--depfile <file>] [--emit-glsl <dir>] <input.mat>
 matcomp --dump <package.matpack>
 ```
 
-- `-I` adds an include directory. The engine's `shaders/` folder is always searched, after these.
+- `-I` adds an include directory. The repository's `shaders/` folder, which holds the templates, is always searched,
+  after these.
 - `--depfile` writes the `.mat` file and every included template, so editing a template rebuilds the materials.
 - `--emit-glsl` writes the generated GLSL of each variant, for debugging.
 - `--dump` prints a package: properties, parameter layout and defaults, variants.
@@ -72,8 +72,8 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
   std140) and are read as `materialParams.<name>`. `default` is a value or a flat array of values
   (matrices column-major); without it the value is zero.
 - Sampler types: `sampler2d`, `samplerCubemap`. Each gets its own binding in set 2 starting at 1, in
-  declaration order, and is read as `materialParams_<name>`. `default` names the built-in texture used
-  when the material instance doesn't set one: `white` (sampler2d default), `black` (cubemap default), `normal`.
+  declaration order, and is read as `materialParams_<name>`. `default` names the texture to bind when none is set,
+  stored in the package: `white` (sampler2d default), `black` (cubemap default), `normal`.
 
 ### Shader code
 
@@ -87,8 +87,8 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
   which the fragment code reads as `variable_<name>`.
 - Writing `material.clipPosition` in the vertex block replaces the output position (normally
   `getClipFromWorldMatrix() * worldPosition`, which is also its initial value). The depth variant then runs
-  `materialVertex()` too, so shadows follow the moved vertices. `materials/skybox.mat` uses it to put the sky
-  on the far plane.
+  `materialVertex()` too, so shadows follow the moved vertices. A sky uses it to sit on the far plane
+  (`clipPosition.z = clipPosition.w`).
 - Getters: `getUV0()`, `getColor()`, `getWorldPosition()`, `getWorldGeometricNormal()` (fragment),
   `getPosition()`, `getWorldFromModelMatrix()`, `getClipFromWorldMatrix()`, `getClipFromViewMatrix()`,
   `getViewFromWorldMatrix()`, `getWorldFromViewMatrix()` (vertex). The per-view and per-object uniforms in
@@ -117,12 +117,12 @@ on top.
 
 ## Variants
 
-Variants are chosen by the engine per draw, never by the material (see `ailo/render/material/Variant.h`):
+matcomp compiles every variant that `variantFilter` doesn't exclude; the material's code never picks one:
 
 | Bit | Meaning | Stages |
 |---|---|---|
 | `SKINNING` | GPU skinning | vertex |
 | `SHADOWS` | receives shadows (`lit` only) | fragment |
-| `DEPTH_ONLY` | depth only, used by the shadow pass; doesn't run `material()`, nor `materialVertex()` unless it writes `clipPosition` | both |
+| `DEPTH_ONLY` | depth only (no color output); doesn't run `material()`, nor `materialVertex()` unless it writes `clipPosition` | both |
 
 Identical SPIR-V is stored once in the package.
