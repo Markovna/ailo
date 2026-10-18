@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "AssetReader.h"
 #include "common/slot_map.h"
 #include "entt/entt.hpp"
 
@@ -176,12 +177,12 @@ template<class T>
 class AssetLoader : public detail::AssetLoaderBase {
 public:
     virtual constexpr std::span<const std::string_view> extensions() const = 0;
-    virtual void load(const std::string& key, LoadContext<T>& context) = 0;
+    virtual void load(const std::string& key, std::span<const std::uint8_t> bytes, LoadContext<T>& context) = 0;
 };
 
 class AssetServer {
 public:
-    AssetServer() = default;
+    explicit AssetServer(std::unique_ptr<AssetReader> reader);
     ~AssetServer();
 
     AssetServer(const AssetServer&) = delete;
@@ -196,7 +197,8 @@ public:
             LoadContext<T> context {this, storage, key};
 
             try {
-                loader.load(key, context);
+                const auto bytes = m_reader->read(key);
+                loader.load(key, bytes, context);
             }
             catch (const std::exception& e) {
                 std::cerr << "Failed to load asset '" << key << "': " << e.what() << std::endl;
@@ -236,6 +238,7 @@ private:
                    std::unique_ptr<detail::AssetLoaderBase> loader);
     void setStorage(entt::id_type type, detail::AssetStorageBase*);
 
+    std::unique_ptr<AssetReader> m_reader;
     std::vector<std::unique_ptr<detail::AssetLoaderBase>> m_loaders;
     std::unordered_map<entt::id_type, std::unordered_map<std::string, detail::AssetLoaderBase*>> m_loadersByExtension;
     std::unordered_map<entt::id_type, detail::AssetStorageBase*> m_storages;

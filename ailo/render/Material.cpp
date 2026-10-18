@@ -2,7 +2,6 @@
 
 #include <iostream>
 
-#include "OS.h"
 #include "Renderer.h"
 
 namespace ailo {
@@ -100,13 +99,11 @@ ProgramHandle Material::getProgram(material::Variant variant) const {
     return program;
 }
 
-void MaterialLoader::load(const std::string& key, LoadContext<Material>& ctx) {
-    const auto& path = key;
-    auto data = os::readFile(path);
+void MaterialLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Material>& ctx) {
     std::string error;
-    auto package = material::MaterialPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
+    auto package = material::MaterialPackage::deserialize(bytes, error);
     if (!package) {
-        throw std::runtime_error(path + ": " + error);
+        throw std::runtime_error(key + ": " + error);
     }
     ctx.construct(m_renderApi, std::move(*package));
 }

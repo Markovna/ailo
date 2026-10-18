@@ -7,6 +7,10 @@
 
 namespace ailo {
 
+AssetServer::AssetServer(std::unique_ptr<AssetReader> reader) : m_reader(std::move(reader)) {
+    assert(m_reader && "AssetServer needs an AssetReader");
+}
+
 AssetServer::~AssetServer() = default;
 
 detail::AssetStorageBase* AssetServer::findStorage(entt::id_type type) const {

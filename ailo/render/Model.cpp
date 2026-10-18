@@ -8,7 +8,6 @@
 #include <stdexcept>
 #include <unordered_map>
 
-#include "FileIO.h"
 #include "MaterialInstance.h"
 #include "Texture.h"
 #include "render/model/ModelPackage.h"
@@ -64,14 +63,9 @@ std::string textureKey(const std::string& modelKey, const std::string& uri) {
 
 }
 
-void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
-    std::string data;
-    if (!fileio::readFile(key, data)) {
-        throw std::runtime_error("model '" + key + "': cannot read file");
-    }
-
+void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Model>& ctx) {
     std::string error;
-    auto pkg = model::ModelPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
+    auto pkg = model::ModelPackage::deserialize(bytes, error);
     if (!pkg) {
         throw std::runtime_error("model '" + key + "': " + error);
     }

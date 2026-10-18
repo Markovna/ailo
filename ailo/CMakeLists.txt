@@ -160,6 +160,8 @@ add_library(ailo STATIC
     physics/PhysicsPlugin.h
     physics/PhysicsWorld.cpp
     physics/PhysicsWorld.h
+    assets/AssetReader.h
+    assets/AssetReader.cpp
     assets/AssetServer.h
     assets/AssetServer.cpp
     render/DefaultAssets.h

@@ -16,6 +16,15 @@ bool readFile(const fs::path& path, std::string& out) {
     return true;
 }
 
+bool readFile(const fs::path& path, std::vector<std::uint8_t>& out) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return false;
+    out.resize(static_cast<size_t>(file.tellg()));
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(out.data()), std::streamsize(out.size()));
+    return bool(file);
+}
+
 bool writeFile(const fs::path& path, const void* data, size_t size) {
     if (path.has_parent_path()) fs::create_directories(path.parent_path());
     std::ofstream file(path, std::ios::binary);

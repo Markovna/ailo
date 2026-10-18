@@ -6,7 +6,6 @@
 #include <iostream>
 #include <ostream>
 
-#include "FileIO.h"
 #include "render/texture/TexturePackage.h"
 #include "stb_image/stb_image.h"
 
@@ -73,14 +72,9 @@ Texture Texture::fromPackage(RenderAPI* renderApi, const texture::TexturePackage
     return tex;
 }
 
-void TexturePackageLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
-    std::string data;
-    if (!fileio::readFile(key, data)) {
-        throw std::runtime_error("texture '" + key + "': cannot read file");
-    }
-
+void TexturePackageLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Texture>& ctx) {
     std::string error;
-    auto pkg = texture::TexturePackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
+    auto pkg = texture::TexturePackage::deserialize(bytes, error);
     if (!pkg) {
         throw std::runtime_error("texture '" + key + "': " + error);
     }
@@ -90,10 +84,11 @@ void TexturePackageLoader::load(const std::string& key, LoadContext<Texture>& ct
 
 // Without a package there are no options: 8-bit images are sRGB color. Data textures (normal, metallic/roughness)
 // need a .tex file with "srgb": false.
-void TextureRawLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
+void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Texture>& ctx) {
     const bool mipmaps = true;
-    const std::string& path = key;
-    bool isHdr = stbi_is_hdr(path.c_str());
+    const auto* data = reinterpret_cast<const stbi_uc*>(bytes.data());
+    const int size = static_cast<int>(bytes.size());
+    bool isHdr = stbi_is_hdr_from_memory(data, size);
 
     vk::Format format = isHdr ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR8G8B8A8Srgb;
 
@@ -103,9 +98,9 @@ void TextureRawLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
         int texWidth, texHeight, texChannels;
         int desiredChannels = STBI_rgb_alpha;
 
-        stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        stbi_uc* pixels = stbi_load_from_memory(data, size, &texWidth, &texHeight, &texChannels, desiredChannels);
         if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            std::cerr << "Failed to load texture image at '" << key << "'! Reason " << stbi_failure_reason() << std::endl;
             throw std::runtime_error("failed to load texture image!");
         }
 
@@ -118,9 +113,9 @@ void TextureRawLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
         int texWidth, texHeight, texChannels;
         int desiredChannels = STBI_rgb_alpha;
 
-        float* pixels = stbi_loadf(path.c_str(), &texWidth, &texHeight, &texChannels, desiredChannels);
+        float* pixels = stbi_loadf_from_memory(data, size, &texWidth, &texHeight, &texChannels, desiredChannels);
         if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << path << "'! Reason " << stbi_failure_reason() << std::endl;
+            std::cerr << "Failed to load texture image at '" << key << "'! Reason " << stbi_failure_reason() << std::endl;
             throw std::runtime_error("failed to load texture image!");
         }
 

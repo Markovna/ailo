@@ -3,19 +3,13 @@
 #include <filesystem>
 #include <stdexcept>
 
-#include "FileIO.h"
 #include "Texture.h"
 
 namespace ailo {
 
-void IndirectLightLoader::load(const std::string& key, LoadContext<IndirectLight>& ctx) {
-    std::string data;
-    if (!fileio::readFile(key, data)) {
-        throw std::runtime_error("indirect light '" + key + "': cannot read file");
-    }
-
+void IndirectLightLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<IndirectLight>& ctx) {
     std::string error;
-    auto pkg = lighting::LightingPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
+    auto pkg = lighting::LightingPackage::deserialize(bytes, error);
     if (!pkg) {
         throw std::runtime_error("indirect light '" + key + "': " + error);
     }

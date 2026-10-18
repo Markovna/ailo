@@ -25,7 +25,7 @@ public:
     constexpr std::span<const std::string_view> extensions() const override { return kExtensions; }
 
 protected:
-    void load(const std::string& key, LoadContext<IndirectLight>& ctx) override;
+    void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<IndirectLight>& ctx) override;
 
 private:
     static constexpr std::array<std::string_view, 1> kExtensions = { ".lightpack" };
