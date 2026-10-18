@@ -160,6 +160,8 @@ add_library(ailo STATIC
     physics/PhysicsWorld.h
     assets/AssetReader.h
     assets/AssetReader.cpp
+    assets/MemoryAssetReader.h
+    assets/MemoryAssetReader.cpp
     assets/AssetServer.h
     assets/AssetServer.cpp
     render/DefaultAssets.h
@@ -244,6 +246,19 @@ add_executable(assetservertest
 )
 target_link_libraries(assetservertest EnTT::EnTT)
 target_include_directories(assetservertest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_executable(embeddedassettest
+        assets/embedded_asset_tests.cpp
+        assets/AssetServer.cpp
+        assets/MemoryAssetReader.cpp
+)
+target_link_libraries(embeddedassettest EnTT::EnTT)
+target_include_directories(embeddedassettest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+embed_assets(embeddedassettest PACKAGE test_assets ROOT assets/test_data FILES
+        hello.txt
+        nested/world.txt
+        materials/unlit.mat
+)
 
 add_executable(texturetest render/texture/texture_tests.cpp)
 target_link_libraries(texturetest ailo_texture stb_image)

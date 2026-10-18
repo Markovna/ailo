@@ -107,6 +107,78 @@ add_subdirectory(third_party/JoltPhysics/Build)
 
 add_subdirectory(libs/fileio)
 
+# Asset builds (build/README.md) run Ninja on manifests written by the scripts in build/, which run the tools named
+# in config.json from AILO_ASSET_TOOLS_DIR. Set before the engine, whose tests embed assets.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+if(CMAKE_GENERATOR MATCHES "Ninja")
+    set(AILO_NINJA ${CMAKE_MAKE_PROGRAM})
+else()
+    find_program(AILO_NINJA ninja REQUIRED)
+endif()
+set(AILO_ASSET_TOOLS texc matcomp modelc lightc)
+set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
+
+# Builds FILES like ailo_assets and compiles them into TARGET as a C++ package written by bin2cpp
+# (tools/bin2cpp/README.md): "embedded/<PACKAGE>.h" declares a std::span<const uint8_t> per file in
+# ailo::embedded::<PACKAGE>, named after the built file's path relative to ROOT ("materials/toon.mat" -> kMaterialsToon).
+# FILES are relative to ROOT (an assets folder, default: the current source folder). PACKAGE names the generated files,
+# so it must be unique in the build.
+function(embed_assets TARGET)
+    cmake_parse_arguments(EMB "" "PACKAGE;ROOT" "FILES" ${ARGN})
+    if(NOT EMB_PACKAGE OR NOT EMB_FILES)
+        message(FATAL_ERROR "embed_assets(${TARGET}) needs PACKAGE and FILES")
+    endif()
+    if(NOT EMB_ROOT)
+        set(EMB_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()
+    cmake_path(ABSOLUTE_PATH EMB_ROOT BASE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} NORMALIZE)
+
+    set(MANIFEST package_${EMB_PACKAGE}.ninja)
+    set(OUT_DIR ${CMAKE_BINARY_DIR}/generated/embedded)
+    set(HEADER ${OUT_DIR}/${EMB_PACKAGE}.h)
+    set(SOURCE ${OUT_DIR}/${EMB_PACKAGE}.cpp)
+    # Written only when it changes, so the manifest is regenerated only when FILES do.
+    set(FILE_LIST ${CMAKE_BINARY_DIR}/package_build/${EMB_PACKAGE}/files.txt)
+    list(JOIN EMB_FILES "
+" FILE_LIST_CONTENT)
+    file(GENERATE OUTPUT ${FILE_LIST} CONTENT "${FILE_LIST_CONTENT}
+")
+
+    add_custom_command(
+            OUTPUT ${CMAKE_BINARY_DIR}/${MANIFEST}
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/gen_package.py
+                    --root ${EMB_ROOT}
+                    --files ${FILE_LIST}
+                    --build-dir ${CMAKE_BINARY_DIR}
+                    --bin2cpp $<TARGET_FILE:bin2cpp>
+                    --config ${CMAKE_SOURCE_DIR}/build/config.json
+                    --tools-dir ${AILO_ASSET_TOOLS_DIR}
+                    --package ${EMB_PACKAGE}
+                    --namespace ailo::embedded::${EMB_PACKAGE}
+                    --output ${OUT_DIR}
+            DEPENDS ${CMAKE_SOURCE_DIR}/build/gen_package.py ${CMAKE_SOURCE_DIR}/build/gen.py
+                    ${CMAKE_SOURCE_DIR}/build/config.json ${FILE_LIST}
+            COMMENT "Generating ${MANIFEST}"
+    )
+
+    # Runs every build, like ailo_assets: only Ninja knows whether an asset changed. bin2cpp rewrites the header and
+    # source only when their content changes, so an up-to-date package recompiles nothing.
+    add_custom_target(embed_${EMB_PACKAGE}
+            COMMAND ${AILO_NINJA} -f ${MANIFEST}
+            COMMAND ${AILO_NINJA} -f ${MANIFEST} -t cleandead
+            BYPRODUCTS ${HEADER} ${SOURCE}
+            DEPENDS ${CMAKE_BINARY_DIR}/${MANIFEST}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            COMMENT "Building embedded assets ${EMB_PACKAGE}"
+            USES_TERMINAL
+    )
+    add_dependencies(embed_${EMB_PACKAGE} bin2cpp ${AILO_ASSET_TOOLS})
+
+    target_sources(${TARGET} PRIVATE ${HEADER} ${SOURCE})
+    target_include_directories(${TARGET} PRIVATE ${CMAKE_BINARY_DIR}/generated)
+    add_dependencies(${TARGET} embed_${EMB_PACKAGE})
+endfunction()
+
 # The engine
 add_subdirectory(ailo)
 
@@ -116,22 +188,14 @@ add_subdirectory(tools/texc)
 add_subdirectory(tools/modelc)
 add_subdirectory(tools/lightc)
 add_subdirectory(tools/resgen)
+add_subdirectory(tools/bin2cpp)
+
+# The generator expression keeps multi-config generators from adding a per-config subfolder.
+set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
 
 # Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
 # assets/ with the tool its extension maps to in config.json and copies everything else. CMake only generates the
 # manifest the first time; after that it regenerates itself when assets are added or removed.
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-if(CMAKE_GENERATOR MATCHES "Ninja")
-    set(AILO_NINJA ${CMAKE_MAKE_PROGRAM})
-else()
-    find_program(AILO_NINJA ninja REQUIRED)
-endif()
-
-# gen.py runs the tools named in config.json from AILO_ASSET_TOOLS_DIR. The generator expression keeps multi-config
-# generators from adding a per-config subfolder.
-set(AILO_ASSET_TOOLS texc matcomp modelc lightc)
-set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
-set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
 
 set(AILO_ASSET_MANIFEST ${CMAKE_BINARY_DIR}/build_assets.ninja)
 add_custom_command(

@@ -8,7 +8,8 @@
 
 namespace ailo {
 
-// Resources: AssetServer, reading asset files through a FileAssetReader relative to root (empty: the working directory).
+// Resources: AssetServer, whose default reader is a FileAssetReader relative to root (empty: the working directory).
+// More readers can be registered by source name (AssetServer::registerReader) and are used for "<source>:/<path>" keys.
 // Asset types are added by the plugins that own them through addAssetType<T>, which inserts an
 // AssetStorage<T> resource; they also register the loaders (e.g. RenderPlugin registers the Texture loader).
 // Assets are destroyed as soon as their last AssetPtr drops. A storage reports the assets still alive and asserts

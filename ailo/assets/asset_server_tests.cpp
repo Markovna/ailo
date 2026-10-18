@@ -714,6 +714,85 @@ void testNothingReadWithoutLoaderOrForStoredAssets() {
     assert(log.reads.empty());
 }
 
+void testAssetPathParse() {
+    static_assert(AssetPath::parse("engine:/textures/rock.png").source == "engine");
+    static_assert(AssetPath::parse("engine:/textures/rock.png").path == "textures/rock.png");
+    static_assert(AssetPath::parse("textures/rock.png").source.empty());
+    static_assert(AssetPath::parse("textures/rock.png").path == "textures/rock.png");
+    // A ":/" after a '/' belongs to the path.
+    static_assert(AssetPath::parse("dir/a:/b").source.empty());
+    static_assert(AssetPath::parse("dir/a:/b").path == "dir/a:/b");
+}
+
+void testReaderChosenBySource() {
+    int calls = 0;
+    auto defaultReader = std::make_unique<TestReader>();
+    TestReader& defaultLog = *defaultReader;
+    auto engineReader = std::make_unique<TestReader>();
+    TestReader& engineLog = *engineReader;
+    AssetStorage<Texture> textures;
+    AssetServer server { std::move(defaultReader) };
+    server.registerStorage(&textures);
+    server.registerLoader<Texture>(std::make_unique<BytesTextureLoader>(&calls));
+    server.registerReader("engine", std::move(engineReader));
+
+    // The reader gets the path without its source; the asset keeps the whole key.
+    auto engine = server.load<Texture>("engine:/textures/rock.tex");
+    assert(engine->name == "textures/rock.tex");
+    assert(textures.has("engine:/textures/rock.tex"));
+    auto plain = server.load<Texture>("textures/rock.tex");
+    assert(plain->name == "textures/rock.tex");
+    assert(plain != engine);
+
+    assert(engineLog.reads == std::vector<std::string>{ "textures/rock.tex" });
+    assert(defaultLog.reads == std::vector<std::string>{ "textures/rock.tex" });
+}
+
+void testDependencyKeepsSource() {
+    auto engineReader = std::make_unique<TestReader>();
+    TestReader& engineLog = *engineReader;
+    AssetStorage<Texture> textures;
+    AssetStorage<Material> materials;
+    AssetServer server { std::make_unique<TestReader>() };
+    server.registerStorage(&textures);
+    server.registerStorage(&materials);
+    int calls = 0;
+    registerTextureLoader(server, &calls);
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
+    server.registerReader("engine", std::move(engineReader));
+
+    auto brick = server.load<Material>("engine:/brick.mat");
+    assert(brick && brick->texture->name == "engine:/brick.mat.tex");
+    assert((engineLog.reads == std::vector<std::string>{ "brick.mat", "brick.mat.tex" }));
+}
+
+void testUnknownSourceThrows() {
+    auto reader = std::make_unique<TestReader>();
+    TestReader& log = *reader;
+    AssetStorage<Texture> textures;
+    AssetServer server { std::move(reader) };
+    server.registerStorage(&textures);
+    int calls = 0;
+    registerTextureLoader(server, &calls);
+
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("engine:/rock.tex"); })));
+    assert(log.reads.empty() && calls == 0 && textures.empty());
+
+    // A key already in storage needs no reader.
+    auto preloaded = textures.emplace("engine:/rock.tex", "rock");
+    assert(server.load<Texture>("engine:/rock.tex") == preloaded);
+}
+
+void testRegisterReaderValidates() {
+    AssetServer server { std::make_unique<TestReader>() };
+    server.registerReader("engine", std::make_unique<TestReader>());
+    assert((throws<std::invalid_argument>([&] { server.registerReader("engine", std::make_unique<TestReader>()); })));
+    assert((throws<std::invalid_argument>([&] { server.registerReader("", std::make_unique<TestReader>()); })));
+    assert((throws<std::invalid_argument>([&] { server.registerReader("a/b", std::make_unique<TestReader>()); })));
+    assert((throws<std::invalid_argument>([&] { server.registerReader("a:b", std::make_unique<TestReader>()); })));
+    assert((throws<std::invalid_argument>([&] { server.registerReader("game", nullptr); })));
+}
+
 void testLoaderExtensionsMustBeDisjoint() {
     AssetStorage<Texture> textures;
     AssetStorage<Material> materials;
@@ -777,6 +856,11 @@ int main() {
     testLoaderGetsReaderBytes();
     testReadFailureFailsLoad();
     testNothingReadWithoutLoaderOrForStoredAssets();
+    testAssetPathParse();
+    testReaderChosenBySource();
+    testDependencyKeepsSource();
+    testUnknownSourceThrows();
+    testRegisterReaderValidates();
 
     std::cout << "All asset server tests passed" << std::endl;
     return 0;

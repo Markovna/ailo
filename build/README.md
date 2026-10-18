@@ -78,6 +78,70 @@ Strict JSON with `//` and `/* */` comments.
 
 Negation (`!`) and `**` are not supported. Editing the file regenerates the manifest.
 
+## Embedded assets
+
+`gen_package.py` builds a list of files into a C++ package instead of separate files, so a program can read them
+without opening any file. It takes the files (relative to a root folder), the `bin2cpp` executable
+(`tools/bin2cpp/README.md`), which writes the package, and optionally the same config and tools as `gen.py`; without them every file is embedded
+as it is. The ignore file does not apply: only the listed files are built. In CMake, `embed_assets` (root
+`CMakeLists.txt`) does all of it for a target:
+
+```cmake
+embed_assets(mygame PACKAGE game_assets ROOT assets FILES
+        materials/toon.mat
+        textures/logo.png.tex
+)
+```
+
+`ROOT` defaults to the current source folder. The function writes the list to `<build>/package_build/<name>/files.txt`
+(only when it changes), generates `<build>/package_<name>.ninja` with `gen_package.py` and runs it on every build, like
+`ailo_assets`. The manifest compiles each file with its tool, or copies it, into `<build>/package_build/<name>/files/`
+and then runs bin2cpp on all of them, sorted by path and passed in a response file, with that folder as its root. It
+writes `<build>/generated/embedded/<name>.h` and `<name>.cpp`, which are compiled into the target:
+
+```cpp
+namespace ailo::embedded::game_assets {
+
+extern const std::span<const std::uint8_t> kPackage;
+
+// materials/toon.matpack
+extern const std::span<const std::uint8_t> kMaterialsToon;
+...
+}
+```
+
+A file's span is named after its built path, with the output extension dropped: `materials/toon.mat` builds
+`materials/toon.matpack`, `kMaterialsToon`. `kPackage` spans the whole package. Each file starts at a multiple of 16 bytes. A listed file
+that is missing or outside the root, an empty list, or two files with the same output or symbol fail the generation or
+bin2cpp. bin2cpp rewrites the header and source only when their content changes (`restat`), so rebuilding an asset to the
+same bytes recompiles nothing. The manifest regenerates itself when the list, the config or the scripts change, and
+has its own log in `<build>/package_build/<name>/`. The package name must be unique in the build.
+
+The engine reads a package with `MemoryAssetReader` (`ailo/assets/MemoryAssetReader.h`), which is given every
+asset's key and span explicitly, and usually registered as a source:
+
+```cpp
+#include "embedded/game_assets.h"
+
+server.registerReader("game", std::make_unique<MemoryAssetReader>(std::initializer_list<MemoryAssetReader::Asset> {
+    { "materials/toon.matpack", embedded::game_assets::kMaterialsToon },
+}));
+server.load<Material>("game:/materials/toon.matpack");
+```
+
+By hand, from the repository root and then the build folder:
+
+```
+python build/gen_package.py --root <folder> --files <list> --build-dir <build> --bin2cpp <build>/tools/bin2cpp/bin2cpp.exe
+                            --package <name> [--namespace <ns>] [--output <folder>] [--config build/config.json --tools-dir <build>/asset_tools]
+                            [--align <n>]
+ninja -f package_<name>.ninja
+```
+
+`<list>` names one file per line, relative to the root. `--namespace` defaults to the package name (`embed_assets`
+passes `ailo::embedded::<name>`), `--output` to `<build>/generated/packages/`. The
+source holds every byte as an array initializer, about six times the files' size, so embed only small assets.
+
 ## Adding an asset kind
 
 - **To an existing tool:** teach the tool the new extension, then add it to the tool's `extensions`, e.g.

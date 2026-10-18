@@ -60,6 +60,21 @@ private:
 
 struct noname_t {};
 
+struct AssetPath {
+    std::string_view source;
+    std::string_view path;
+
+    static constexpr std::string_view kSeparator = ":/";
+
+    static constexpr AssetPath parse(std::string_view key) {
+        const auto separator = key.find(kSeparator);
+        if (separator == std::string_view::npos || key.substr(0, separator).find('/') != std::string_view::npos) {
+            return { {}, key };
+        }
+        return { key.substr(0, separator), key.substr(separator + kSeparator.size()) };
+    }
+};
+
 template<class T>
 class AssetStorage final : public detail::AssetStorageBase {
     friend class AssetPtr<T>;
@@ -182,7 +197,7 @@ public:
 
 class AssetServer {
 public:
-    explicit AssetServer(std::unique_ptr<AssetReader> reader);
+    explicit AssetServer(std::unique_ptr<AssetReader> defaultReader);
     ~AssetServer();
 
     AssetServer(const AssetServer&) = delete;
@@ -194,10 +209,12 @@ public:
         auto ptr = storage.get(key);
         if (!ptr) {
             auto& loader = getLoader<T>(key);
+            const auto path = AssetPath::parse(key);
+            auto& reader = getReader(path.source, key);
             LoadContext<T> context {this, storage, key};
 
             try {
-                const auto bytes = m_reader->read(key);
+                const auto bytes = reader.read(std::string(path.path));
                 loader.load(key, bytes, context);
             }
             catch (const std::exception& e) {
@@ -225,10 +242,15 @@ public:
     template<class T>
     void registerStorage(AssetStorage<T>*);
 
+    // Reads the keys "<source>:/<path>", passing it <path>.
+    // Throws std::invalid_argument if the source is empty or contains '/' or ':', or a reader is already registered for it.
+    void registerReader(std::string source, std::unique_ptr<AssetReader> reader);
+
 private:
     template<class T> AssetStorage<T>& getStorage();
     template<class T> AssetLoader<T>& getLoader(const std::string& key);
     template<class T> void validateLoader(const AssetLoader<T>& loader) const;
+    AssetReader& getReader(std::string_view source, const std::string& key);
 
     static std::string extensionOf(std::string_view key);
 
@@ -238,7 +260,8 @@ private:
                    std::unique_ptr<detail::AssetLoaderBase> loader);
     void setStorage(entt::id_type type, detail::AssetStorageBase*);
 
-    std::unique_ptr<AssetReader> m_reader;
+    std::unique_ptr<AssetReader> m_defaultReader;
+    std::unordered_map<std::string, std::unique_ptr<AssetReader>> m_readers;
     std::vector<std::unique_ptr<detail::AssetLoaderBase>> m_loaders;
     std::unordered_map<entt::id_type, std::unordered_map<std::string, detail::AssetLoaderBase*>> m_loadersByExtension;
     std::unordered_map<entt::id_type, detail::AssetStorageBase*> m_storages;

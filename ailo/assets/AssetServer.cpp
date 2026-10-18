@@ -7,11 +7,35 @@
 
 namespace ailo {
 
-AssetServer::AssetServer(std::unique_ptr<AssetReader> reader) : m_reader(std::move(reader)) {
-    assert(m_reader && "AssetServer needs an AssetReader");
+AssetServer::AssetServer(std::unique_ptr<AssetReader> defaultReader) : m_defaultReader(std::move(defaultReader)) {
+    assert(m_defaultReader && "AssetServer needs an AssetReader");
 }
 
 AssetServer::~AssetServer() = default;
+
+void AssetServer::registerReader(std::string source, std::unique_ptr<AssetReader> reader) {
+    if (!reader) {
+        throw std::invalid_argument("asset reader for source '" + source + "' is null");
+    }
+    if (source.empty() || source.find_first_of("/:") != std::string::npos) {
+        throw std::invalid_argument("invalid asset source name '" + source + "'");
+    }
+    if (m_readers.contains(source)) {
+        throw std::invalid_argument("asset reader already registered for source '" + source + "'");
+    }
+    m_readers.emplace(std::move(source), std::move(reader));
+}
+
+AssetReader& AssetServer::getReader(std::string_view source, const std::string& key) {
+    if (source.empty()) {
+        return *m_defaultReader;
+    }
+    auto it = m_readers.find(std::string(source));
+    if (it == m_readers.end()) {
+        throw std::runtime_error(std::format("no asset reader registered for source '{}' (asset '{}')", source, key));
+    }
+    return *it->second;
+}
 
 detail::AssetStorageBase* AssetServer::findStorage(entt::id_type type) const {
     auto it = m_storages.find(type);
