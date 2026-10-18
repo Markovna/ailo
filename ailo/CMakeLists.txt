@@ -70,8 +70,6 @@ add_library(ailo STATIC
     ecs/Scene.cpp
     ecs/Scene.h
     utils/Utils.h
-    OS.cpp
-    OS.h
     render/Material.cpp
     render/Material.h
     render/MaterialInstance.cpp

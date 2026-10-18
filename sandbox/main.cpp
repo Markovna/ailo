@@ -18,7 +18,7 @@ int main() {
     try {
         App()
             .addPlugin(PlatformPlugin { .window = { .title = "Ailo", .width = 2400, .height = 1400 } })
-            .addPlugin(AssetPlugin { .root = os::executableDirectory() })
+            .addPlugin(AssetPlugin {})
             .addPlugin(RenderPlugin { .settings = { .shadowMapSize = 1024 } })
             .addPlugin(ImGuiPlugin {})
             .addPlugin(AnimationPlugin {})
