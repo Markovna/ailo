@@ -55,7 +55,8 @@ void RenderPlugin::build(App& app) {
     addAssetType<Model>(app);
     auto& indirectLights = addAssetType<IndirectLight>(app);
 
-    server.registerLoader<Texture>(std::make_unique<TextureLoader>(&api));
+    server.registerLoader<Texture>(std::make_unique<TexturePackageLoader>(&api));
+    server.registerLoader<Texture>(std::make_unique<TextureRawLoader>(&api));
     server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
     server.registerLoader<IndirectLight>(std::make_unique<IndirectLightLoader>(&api, &textureStorage));
     server.registerLoader<Model>(std::make_unique<ModelLoader>(&api, &server, ModelLoader::Storages {

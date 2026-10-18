@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <vector>
 #include <glm/glm.hpp>
 
@@ -36,10 +37,14 @@ public:
     ModelLoader(RenderAPI* renderApi, AssetServer* server, const Storages& storages)
         : m_renderApi(renderApi), m_server(server), m_storages(storages) {}
 
+    constexpr std::span<const std::string_view> extensions() const override { return kExtensions; }
+
 protected:
     void load(const std::string& key, LoadContext<Model>& ctx) override;
 
 private:
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".modelpack" };
+
     RenderAPI* m_renderApi;
     AssetServer* m_server;
     Storages m_storages;

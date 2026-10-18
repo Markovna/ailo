@@ -8,8 +8,9 @@ class App;
 
 // Requires: PlatformPlugin (Window), AssetPlugin (AssetServer).
 // Resources: RenderAPI, AssetStorage<T> for Texture, Material, Mesh, Skeleton, AnimationClip, MaterialInstance, Model
-//            and IndirectLight, DefaultAssets, Renderer. Registers the Texture (<key>.texpack or an image), Material
-//            (<key>.matpack), Model (<key>.modelpack) and IndirectLight (<key>.lightpack) asset loaders.
+//            and IndirectLight, DefaultAssets, Renderer. Registers the asset loaders, chosen by the key's extension:
+//            Texture (.texpack, or an image: .png, .jpg, .jpeg, .tga, .bmp, .hdr), Material (.matpack), Model
+//            (.modelpack) and IndirectLight (.lightpack).
 // Render:   Renderer::render(scene) from the first entity with Camera + TransformComponent (identity view if none).
 // Teardown: the World clears the scene, then destroys resources in reverse insertion order: the Renderer and the
 //           DefaultAssets (dropping their asset references), the asset storages and finally ~RenderAPI, which waits

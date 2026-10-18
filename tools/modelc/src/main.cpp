@@ -162,22 +162,32 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // The compiler and the package's texture URIs work relative to the .model file, so a root-relative source is
-    // rewritten as one (e.g. ../../models/x/y.gltf).
-    if (isRootRelative(def.source)) {
+    // The compiler and the package's texture URIs work relative to the .model file, so root-relative paths (the
+    // source and the texture overrides) are rewritten as such (e.g. ../../models/x/y.gltf).
+    auto makeRelative = [&](fs::path& path) {
+        if (!isRootRelative(path)) return true;
         if (root.empty()) {
-            std::cerr << sourceName << ": error: " << def.source.generic_string() << " is relative to the assets "
+            std::cerr << sourceName << ": error: " << path.generic_string() << " is relative to the assets "
                       << "folder, which modelc needs as --root\n";
-            return 1;
+            return false;
         }
-        fs::path absoluteSource = (fs::absolute(root) / def.source.relative_path()).lexically_normal();
-        fs::path relative = absoluteSource.lexically_relative(fs::absolute(input).parent_path().lexically_normal());
+        fs::path absolute = (fs::absolute(root) / path.relative_path()).lexically_normal();
+        fs::path relative = absolute.lexically_relative(fs::absolute(input).parent_path().lexically_normal());
         if (relative.empty()) {
-            std::cerr << sourceName << ": error: " << absoluteSource.generic_string() << " is not reachable from "
+            std::cerr << sourceName << ": error: " << absolute.generic_string() << " is not reachable from "
                       << "the .model file's folder\n";
+            return false;
+        }
+        path = relative;
+        return true;
+    };
+    if (!makeRelative(def.source)) return 1;
+    for (auto& [uri, path] : def.textures) {
+        if (path.has_root_name()) {
+            std::cerr << sourceName << ": error: texture \"" << uri << "\": absolute paths are not supported\n";
             return 1;
         }
-        def.source = relative;
+        if (!makeRelative(path)) return 1;
     }
 
     CompileOutput result;

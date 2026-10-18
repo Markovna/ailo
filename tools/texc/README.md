@@ -16,10 +16,6 @@ texc --dump <package.texpack>
 It is run by the asset build (`build/README.md`): every `.tex` file in `assets/` (`assets/<dir>/<name>.tex`) is packed into `<build>/assets/<dir>/<name>.texpack`. Its source images are copied
 into the build too, like any other file.
 
-The engine loads it by the asset's name without `.tex`: `assets/textures/rock.png.tex` builds `rock.png.texpack`, loaded
-with `server.load<Texture>("assets/textures/rock.png")`. `TextureLoader` reads `<key>.texpack`, or decodes the image at
-`<key>` if there is no package.
-
 ## Format
 
 Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Unknown properties are errors.

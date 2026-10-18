@@ -16,9 +16,6 @@ matcomp --dump <package.matpack>
 - `--emit-glsl` writes the generated GLSL of each variant, for debugging.
 - `--dump` prints a package: properties, parameter layout and defaults, variants.
 
-It is run by the asset build (`build/README.md`): every `.mat` file in `assets/` (`assets/<dir>/<name>.mat`) is
-compiled into `<build>/assets/<dir>/<name>.matpack`.
-
 ## Format
 
 ```
@@ -129,17 +126,3 @@ Variants are chosen by the engine per draw, never by the material (see `ailo/ren
 | `DEPTH_ONLY` | depth only, used by the shadow pass; doesn't run `material()`, nor `materialVertex()` unless it writes `clipPosition` | both |
 
 Identical SPIR-V is stored once in the package.
-
-## Using a material in the engine
-
-```cpp
-auto lit = assets.load<Material>(materials::kLit);                  // reads "assets/materials/lit.matpack"
-auto instance = MaterialInstance::create(assets, api, lit);
-instance->setParameter("baseColorMap", texture);                    // samplers by name
-instance->setParameter("roughnessFactor", 0.5f);                    // uniforms by name, type-checked
-instance->setParameter("weights", std::span<const float>(w), 1);    // array elements from index 1
-renderable.materials.push_back(instance);                           // one instance per mesh face
-```
-
-The renderer picks the variant per draw from the entity (`Skin` → `SKINNING`, `Renderable::receiveShadows` →
-`SHADOWS`, the shadow pass → `DEPTH_ONLY` if `Renderable::castShadows`).

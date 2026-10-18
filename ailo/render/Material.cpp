@@ -101,7 +101,7 @@ ProgramHandle Material::getProgram(material::Variant variant) const {
 }
 
 void MaterialLoader::load(const std::string& key, LoadContext<Material>& ctx) {
-    auto path = key + ".matpack";
+    const auto& path = key;
     auto data = os::readFile(path);
     std::string error;
     auto package = material::MaterialPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);

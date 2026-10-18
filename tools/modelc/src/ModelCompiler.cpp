@@ -238,6 +238,14 @@ private:
             for (const auto& material : m_pkg.materials) available += (available.empty() ? "" : ", ") + material.name;
             throw CompileError("materials: the source has no material named \"" + name + "\" (it has: " + available + ")");
         }
+
+        for (const auto& [uri, path] : m_def.textures) {
+            if (m_textureUris.contains(uri)) continue;
+            std::string available;
+            for (const auto& u : m_textureUris) available += (available.empty() ? "" : ", ") + u;
+            throw CompileError("textures: the source references no texture \"" + uri + "\" (it has: " +
+                               (available.empty() ? "none" : available) + ")");
+        }
     }
 
     std::optional<TextureRef> texture(const aiMaterial* mat, aiTextureType type, bool srgb, const std::string& materialName) {
@@ -251,7 +259,13 @@ private:
             return TextureRef { TextureSource::Embedded, {}, embeddedTexture(embedded, srgb, what) };
         }
 
-        fs::path uri = fromUtf8(m_percentEncodedUris ? percentDecode(path.C_Str()) : path.C_Str());
+        const std::string uriString = m_percentEncodedUris ? percentDecode(path.C_Str()) : path.C_Str();
+        m_textureUris.insert(uriString);
+        if (auto it = m_def.textures.find(uriString); it != m_def.textures.end()) {
+            return TextureRef { TextureSource::Uri, toUtf8(it->second.lexically_normal()), 0 };
+        }
+
+        fs::path uri = fromUtf8(uriString);
         if (uri.has_root_name() || uri.has_root_directory()) {
             throw CompileError(what + ": absolute paths are not supported, reference the texture relative to the model");
         }
@@ -427,6 +441,7 @@ private:
 
     const aiScene* m_scene = nullptr;
     bool m_percentEncodedUris = false;
+    std::set<std::string> m_textureUris;     // every texture URI the source references, decoded
     std::unordered_set<std::string> m_boneNames;
     std::unordered_map<std::string, int32_t> m_boneOutputs;     // bone name -> SkeletonNode::boneOutputIndex
     std::map<std::pair<const aiTexture*, bool>, uint32_t> m_embedded;   // (texture, srgb) -> package texture

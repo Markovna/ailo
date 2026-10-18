@@ -73,25 +73,16 @@ Texture Texture::fromPackage(RenderAPI* renderApi, const texture::TexturePackage
     return tex;
 }
 
-void TextureLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
-    std::filesystem::path packagePath = key + ".texpack";
-    if (std::filesystem::exists(packagePath)) {
-        loadPackage(packagePath, ctx);
-    } else {
-        loadImage(key, ctx);
-    }
-}
-
-void TextureLoader::loadPackage(const std::filesystem::path& packagePath, LoadContext<Texture>& ctx) {
+void TexturePackageLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
     std::string data;
-    if (!fileio::readFile(packagePath, data)) {
-        throw std::runtime_error("texture '" + packagePath.generic_string() + "': cannot read file");
+    if (!fileio::readFile(key, data)) {
+        throw std::runtime_error("texture '" + key + "': cannot read file");
     }
 
     std::string error;
     auto pkg = texture::TexturePackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
     if (!pkg) {
-        throw std::runtime_error("texture '" + packagePath.generic_string() + "': " + error);
+        throw std::runtime_error("texture '" + key + "': " + error);
     }
 
     ctx.construct(Texture::fromPackage(m_renderApi, *pkg));
@@ -99,7 +90,7 @@ void TextureLoader::loadPackage(const std::filesystem::path& packagePath, LoadCo
 
 // Without a package there are no options: 8-bit images are sRGB color. Data textures (normal, metallic/roughness)
 // need a .tex file with "srgb": false.
-void TextureLoader::loadImage(const std::string& key, LoadContext<Texture>& ctx) {
+void TextureRawLoader::load(const std::string& key, LoadContext<Texture>& ctx) {
     const bool mipmaps = true;
     const std::string& path = key;
     bool isHdr = stbi_is_hdr(path.c_str());

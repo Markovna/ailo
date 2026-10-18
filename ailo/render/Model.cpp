@@ -65,16 +65,15 @@ std::string textureKey(const std::string& modelKey, const std::string& uri) {
 }
 
 void ModelLoader::load(const std::string& key, LoadContext<Model>& ctx) {
-    const std::filesystem::path packagePath = key + ".modelpack";
     std::string data;
-    if (!fileio::readFile(packagePath, data)) {
-        throw std::runtime_error("model '" + key + "': cannot read " + packagePath.generic_string());
+    if (!fileio::readFile(key, data)) {
+        throw std::runtime_error("model '" + key + "': cannot read file");
     }
 
     std::string error;
     auto pkg = model::ModelPackage::deserialize({ reinterpret_cast<const uint8_t*>(data.data()), data.size() }, error);
     if (!pkg) {
-        throw std::runtime_error("model '" + packagePath.generic_string() + "': " + error);
+        throw std::runtime_error("model '" + key + "': " + error);
     }
 
     RenderAPI* renderApi = m_renderApi;

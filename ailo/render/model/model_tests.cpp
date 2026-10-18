@@ -50,7 +50,7 @@ ModelPackage makePackage() {
 
     Material& lit = pkg.materials.emplace_back();
     lit.name = "Stone";
-    lit.material = "assets/materials/lit";
+    lit.material = "assets/materials/lit.matpack";
     lit.floats.push_back({ "baseColorFactor", 4, { 0.5f, 0.25f, 1.0f, 1.0f } });
     lit.floats.push_back({ "roughnessFactor", 1, { 0.75f } });
     lit.textures.push_back({ "baseColorMap", { TextureSource::Uri, "textures/stone.png", 0 } });
@@ -105,7 +105,7 @@ void testRoundTrip() {
 
     assert(out->materials.size() == 2);
     const auto& lit = out->materials[0];
-    assert(lit.name == "Stone" && lit.material == "assets/materials/lit");
+    assert(lit.name == "Stone" && lit.material == "assets/materials/lit.matpack");
     assert(lit.floats.size() == 2);
     assert(lit.floats[0].name == "baseColorFactor" && lit.floats[0].components == 4);
     assert(lit.floats[0].value[1] == 0.25f);

@@ -3,9 +3,11 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace ailo;
@@ -48,7 +50,17 @@ struct Throwing {
     }
 };
 
-class TextureLoader : public AssetLoader<Texture> {
+constexpr std::string_view kTexExtensions[] = { ".tex" };
+constexpr std::string_view kMatExtensions[] = { ".mat" };
+constexpr std::string_view kModelExtensions[] = { ".model" };
+
+template<class T>
+class TexLoader : public AssetLoader<T> {
+public:
+    constexpr std::span<const std::string_view> extensions() const override { return kTexExtensions; }
+};
+
+class TextureLoader : public TexLoader<Texture> {
 public:
     explicit TextureLoader(int* calls) : m_calls(calls) {}
     void load(const std::string& key, LoadContext<Texture>& context) override {
@@ -59,20 +71,22 @@ private:
     int* m_calls;
 };
 
-// "brick" -> texture "brick.tex"
+// "brick.mat" -> texture "brick.mat.tex"
 class MaterialLoader : public AssetLoader<Material> {
 public:
+    constexpr std::span<const std::string_view> extensions() const override { return kMatExtensions; }
     void load(const std::string& key, LoadContext<Material>& context) override {
         auto texture = context.load<Texture>(key + ".tex");
         context.construct(key, std::move(texture));
     }
 };
 
-// "house" -> material "house.mat" (a dependency, loaded through the context) and texture
-// "house#embedded" (a sub-asset, emplaced directly into its storage)
+// "house.model" -> material "house.model.mat" (a dependency, loaded through the context) and an anonymous
+// texture "embedded" (a sub-asset, emplaced directly into its storage)
 class ModelLoader : public AssetLoader<Model> {
 public:
     explicit ModelLoader(AssetStorage<Texture>* textures) : m_textures(textures) {}
+    constexpr std::span<const std::string_view> extensions() const override { return kModelExtensions; }
     void load(const std::string& key, LoadContext<Model>& context) override {
         auto material = context.load<Material>(key + ".mat");
         auto embedded = m_textures->emplace(noname_t{}, "embedded");
@@ -82,7 +96,7 @@ private:
     AssetStorage<Texture>* m_textures;
 };
 
-class RenamingTextureLoader : public AssetLoader<Texture> {
+class RenamingTextureLoader : public TexLoader<Texture> {
 public:
     void load(const std::string& key, LoadContext<Texture>& context) override {
         Texture& texture = context.construct("unnamed");
@@ -91,12 +105,12 @@ public:
 };
 
 template<class T>
-class NoConstructLoader : public AssetLoader<T> {
+class NoConstructLoader : public TexLoader<T> {
 public:
     void load(const std::string&, LoadContext<T>&) override {}
 };
 
-class CountingNoConstructLoader : public AssetLoader<Texture> {
+class CountingNoConstructLoader : public TexLoader<Texture> {
 public:
     explicit CountingNoConstructLoader(int* calls) : m_calls(calls) {}
     void load(const std::string&, LoadContext<Texture>&) override { ++*m_calls; }
@@ -105,7 +119,7 @@ private:
 };
 
 template<class T>
-class ThrowAfterConstructLoader : public AssetLoader<T> {
+class ThrowAfterConstructLoader : public TexLoader<T> {
 public:
     void load(const std::string& key, LoadContext<T>& context) override {
         context.construct(key);
@@ -114,12 +128,26 @@ public:
 };
 
 template<class T>
-class DoubleConstructLoader : public AssetLoader<T> {
+class DoubleConstructLoader : public TexLoader<T> {
 public:
     void load(const std::string& key, LoadContext<T>& context) override {
         context.construct(key);
         context.construct(key);
     }
+};
+
+// Names each texture after the loader that made it.
+class TaggingTextureLoader : public AssetLoader<Texture> {
+public:
+    TaggingTextureLoader(std::string tag, std::vector<std::string_view> extensions)
+        : m_tag(std::move(tag)), m_extensions(std::move(extensions)) {}
+    std::span<const std::string_view> extensions() const override { return m_extensions; }
+    void load(const std::string& key, LoadContext<Texture>& context) override {
+        context.construct(m_tag + ":" + key);
+    }
+private:
+    std::string m_tag;
+    std::vector<std::string_view> m_extensions;
 };
 
 template<class E, class F>
@@ -364,26 +392,26 @@ void testServerLoad() {
     server.registerStorage(&textures);
     registerTextureLoader(server, &calls);
     {
-        auto a = server.load<Texture>("a");
-        assert(a && a->name == "a");
+        auto a = server.load<Texture>("a.tex");
+        assert(a && a->name == "a.tex");
         assert(a.useCount() == 1);
-        assert(textures.has("a"));
+        assert(textures.has("a.tex"));
         assert(calls == 1);
 
-        auto again = server.load<Texture>("a");
+        auto again = server.load<Texture>("a.tex");
         assert(again == a);
         assert(a.useCount() == 2);
         assert(calls == 1);
 
-        auto b = server.load<Texture>("b");
+        auto b = server.load<Texture>("b.tex");
         assert(!(b == a));
         assert(calls == 2);
     }
-    assert((g_log == std::vector<std::string>{ "~Texture b", "~Texture a" }));
+    assert((g_log == std::vector<std::string>{ "~Texture b.tex", "~Texture a.tex" }));
     assert(textures.empty());
 
     // Assets are not cached past their last reference
-    auto a = server.load<Texture>("a");
+    auto a = server.load<Texture>("a.tex");
     assert(calls == 3);
 }
 
@@ -398,13 +426,13 @@ void testServerLoadsDependencies() {
     registerTextureLoader(server, &calls);
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
     {
-        auto texture = server.load<Texture>("brick.tex");
-        auto material = server.load<Material>("brick");
+        auto texture = server.load<Texture>("brick.mat.tex");
+        auto material = server.load<Material>("brick.mat");
         assert(material->texture == texture);
         assert(texture.useCount() == 2);
         assert(calls == 1);
     }
-    assert((g_log == std::vector<std::string>{ "~Material brick", "~Texture brick.tex" }));
+    assert((g_log == std::vector<std::string>{ "~Material brick.mat", "~Texture brick.mat.tex" }));
 }
 
 void testConstructReturnsAsset() {
@@ -412,8 +440,8 @@ void testConstructReturnsAsset() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<RenamingTextureLoader>());
-    auto texture = server.load<Texture>("renamed");
-    assert(texture->name == "renamed");
+    auto texture = server.load<Texture>("renamed.tex");
+    assert(texture->name == "renamed.tex");
 }
 
 void testLoaderWithDependencyAndSubAsset() {
@@ -431,8 +459,8 @@ void testLoaderWithDependencyAndSubAsset() {
 
     AssetPtr<Texture> keptSubAsset;
     {
-        auto model = server.load<Model>("house");
-        assert(model->material->texture->name == "house.mat.tex");
+        auto model = server.load<Model>("house.model");
+        assert(model->material->texture->name == "house.model.mat.tex");
         assert(model->embedded->name == "embedded");
         assert(textures.size() == 2);
         keptSubAsset = model->embedded;
@@ -441,7 +469,7 @@ void testLoaderWithDependencyAndSubAsset() {
     assert(textures.size() == 1);
 
     // Re-importing while the old anonymous sub-asset is still alive creates a new one
-    auto model = server.load<Model>("house");
+    auto model = server.load<Model>("house.model");
     assert(!(model->embedded == keptSubAsset));
     assert(textures.size() == 3);
 }
@@ -453,8 +481,8 @@ void testServerReturnsAssetsAlreadyInStorage() {
     server.registerStorage(&textures);
     registerTextureLoader(server, &calls);
 
-    auto preloaded = textures.emplace("pre", "preloaded");
-    auto found = server.load<Texture>("pre");
+    auto preloaded = textures.emplace("pre.tex", "preloaded");
+    auto found = server.load<Texture>("pre.tex");
     assert(found == preloaded);
     assert(calls == 0);
 }
@@ -463,7 +491,7 @@ void testServerWithoutStorageThrows() {
     int calls = 0;
     AssetServer server;
     registerTextureLoader(server, &calls);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
     assert(calls == 0);
 }
 
@@ -476,7 +504,7 @@ void testUnregisteredDependencyStorageFailsLoad() {
     registerTextureLoader(server, &calls);
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
 
-    assert(!server.load<Material>("brick"));
+    assert(!server.load<Material>("brick.mat"));
     assert(calls == 0);
     assert(materials.empty());
     assert(g_log.empty());
@@ -488,17 +516,17 @@ void testUnregisterStorage() {
     AssetServer server;
     server.registerStorage(&textures);
     registerTextureLoader(server, &calls);
-    server.load<Texture>("a");
+    server.load<Texture>("a.tex");
 
     server.registerStorage<Texture>(nullptr);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
 }
 
 void testServerWithoutLoaderThrows() {
     AssetStorage<Texture> textures;
     AssetServer server;
     server.registerStorage(&textures);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a"); })));
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
     assert(textures.empty());
 }
 
@@ -512,7 +540,7 @@ void testRegisteringLoaderTwiceThrows() {
     assert((throws<std::invalid_argument>([&] { registerTextureLoader(server, &second); })));
 
     // The original loader stays registered
-    auto a = server.load<Texture>("a");
+    auto a = server.load<Texture>("a.tex");
     assert(first == 1 && second == 0);
 }
 
@@ -521,7 +549,7 @@ void testLoaderThatDoesNotConstructReturnsNull() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<NoConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a"));
+    assert(!server.load<Texture>("a.tex"));
     assert(textures.empty());
 }
 
@@ -531,8 +559,8 @@ void testLoaderThrowingAfterConstructDoesNotLeak() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a"));
-    assert(g_log == std::vector<std::string>{ "~Texture a" });
+    assert(!server.load<Texture>("a.tex"));
+    assert(g_log == std::vector<std::string>{ "~Texture a.tex" });
     assert(textures.empty());
 }
 
@@ -542,8 +570,8 @@ void testDoubleConstructFailsLoad() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<DoubleConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a"));
-    assert(g_log == std::vector<std::string>{ "~Texture a" });
+    assert(!server.load<Texture>("a.tex"));
+    assert(g_log == std::vector<std::string>{ "~Texture a.tex" });
     assert(textures.empty());
 }
 
@@ -553,8 +581,8 @@ void testFailedLoadIsRetried() {
     AssetServer server;
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<CountingNoConstructLoader>(&calls));
-    assert(!server.load<Texture>("a"));
-    assert(!server.load<Texture>("a"));
+    assert(!server.load<Texture>("a.tex"));
+    assert(!server.load<Texture>("a.tex"));
     assert(calls == 2);
 }
 
@@ -568,13 +596,66 @@ void testFailedDependencyDoesNotPropagate() {
     server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
     {
-        auto material = server.load<Material>("brick");
-        assert(material && material->name == "brick");
+        auto material = server.load<Material>("brick.mat");
+        assert(material && material->name == "brick.mat");
         assert(!material->texture);
         assert(textures.empty());
     }
-    assert((g_log == std::vector<std::string>{ "~Texture brick.tex", "~Material brick" }));
+    assert((g_log == std::vector<std::string>{ "~Texture brick.mat.tex", "~Material brick.mat" }));
     assert(materials.empty());
+}
+
+void testLoaderChosenByExtension() {
+    AssetStorage<Texture> textures;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("pack", std::vector<std::string_view>{ ".texpack" }));
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("raw", std::vector<std::string_view>{ ".png", ".JPG" }));
+
+    assert(server.load<Texture>("dir/rock.png.texpack")->name == "pack:dir/rock.png.texpack");
+    assert(server.load<Texture>("dir/rock.png")->name == "raw:dir/rock.png");
+    // Extensions are compared case-insensitively.
+    assert(server.load<Texture>("dir/ROCK.PNG")->name == "raw:dir/ROCK.PNG");
+    assert(server.load<Texture>("dir/rock.jpg")->name == "raw:dir/rock.jpg");
+}
+
+void testUnknownExtensionThrows() {
+    AssetStorage<Texture> textures;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("raw", std::vector<std::string_view>{ ".png" }));
+
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock"); })));
+    // Only the file name's extension counts, not a dot in a folder name.
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("dir.png/rock"); })));
+    assert(textures.empty());
+
+    // A key that is already in storage needs no loader.
+    auto preloaded = textures.emplace("builtin://rock", "rock");
+    assert(server.load<Texture>("builtin://rock") == preloaded);
+}
+
+void testLoaderExtensionsMustBeDisjoint() {
+    AssetStorage<Texture> textures;
+    AssetStorage<Material> materials;
+    AssetServer server;
+    server.registerStorage(&textures);
+    server.registerStorage(&materials);
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("a", std::vector<std::string_view>{ ".png" }));
+    assert((throws<std::invalid_argument>([&] {
+        server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("b", std::vector<std::string_view>{ ".jpg", ".PNG" }));
+    })));
+    assert((throws<std::invalid_argument>([&] {
+        server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("c", std::vector<std::string_view>{}));
+    })));
+    // The rejected loader registered none of its extensions.
+    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
+    assert(server.load<Texture>("rock.png")->name == "a:rock.png");
+
+    // Loaders of different asset types may share an extension.
+    server.registerLoader<Material>(std::make_unique<MaterialLoader>());
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("mat", std::vector<std::string_view>{ ".mat" }));
 }
 
 }
@@ -612,6 +693,9 @@ int main() {
     testDoubleConstructFailsLoad();
     testFailedLoadIsRetried();
     testFailedDependencyDoesNotPropagate();
+    testLoaderChosenByExtension();
+    testUnknownExtensionThrows();
+    testLoaderExtensionsMustBeDisjoint();
 
     std::cout << "All asset server tests passed" << std::endl;
     return 0;

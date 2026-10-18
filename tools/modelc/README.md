@@ -1,7 +1,7 @@
 # modelc
 
-Compiles a model definition (`.model`) into a model package (`.modelpack`, `ailo/render/model/ModelPackage.h`) that the
-engine loads without importing anything. The source model (glTF, FBX, OBJ, anything assimp reads) is imported with
+Compiles a model definition (`.model`) into a model package (`.modelpack`) that the engine loads without importing 
+anything. The source model (glTF, FBX, OBJ, anything assimp reads) is imported with
 assimp, which only modelc links.
 
 ```
@@ -16,30 +16,25 @@ modelc --dump <package.modelpack>
   overdraw), materials with their parameters, instances, skeleton, clips and embedded
   textures.
 
-It is run by the asset build (`build/README.md`): `assets/<dir>/<name>.model` builds
-`<build>/assets/<dir>/<name>.modelpack`. The model sources are listed in `assets/.assetignore`, so they are not copied
-into the build.
-
-The engine loads it by the asset's name without `.model`: `assets/models/sponza/Sponza.gltf.model` builds
-`Sponza.gltf.modelpack`, loaded with `server.load<Model>("assets/models/sponza/Sponza.gltf")`.
-
 ## Format
 
 Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Unknown properties are errors.
 
 ```
 {
-    "source": "Sponza.gltf",
-    "material": "assets/materials/lit",
-    "materials": { "Curtain": "assets/materials/toon" }
+    "source": "model.gltf",
+    "material": "default.matpack",
+    "materials": { "Curtain": "cloth.matpack" },
+    "textures": { "rock.png": "rock.png.texpack" }
 }
 ```
 
 | Property    | Type   | Meaning |
 |-------------|--------|---------|
-| `source`    | string | Required. The model file, relative to the `.model` file, or to the assets folder if it starts with `/` (`"/models/sponza/Sponza.gltf"`). |
+| `source`    | string | Required. The model file, relative to the `.model` file, or to the assets folder if it starts with `/` . |
 | `material`  | string | Required. Asset key of the material every mesh uses. |
 | `materials` | object | Optional. Source material name -> material key, overriding `material`. Naming a material the source doesn't have is an error. |
+| `textures`  | object | Optional. Source texture URI -> the texture key the runtime loads instead, with its extension. Naming a URI the source doesn't reference is an error. |
 | `optimize`  | bool   | Optional, default `true`. Optimizes the meshes with meshoptimizer (see [Geometry](#geometry)); `false` keeps assimp's vertex and triangle order. |
 
 modelc never reads the materials: it writes their keys, and the runtime loads them. It writes these parameters when
@@ -59,10 +54,14 @@ the source has them, and the runtime skips (with a warning) the ones the materia
 - **Referenced by URI**, the package stores a reference that the runtime resolves: the URI (percent-decoded for
   glTF) relative to the source model, written relative to the `.model` file, and loaded as
   `<model key's folder>/<reference>`. modelc doesn't look at the texture and adds no build dependency on it. With
-  `"source": "Sponza.gltf"`, `white.png` is stored as `white.png`, and the runtime reads `white.png.texpack`, built
-  from a `white.png.tex` file next to the `.model` file (`tools/texc/README.md`), and otherwise decodes `white.png`
-  as an sRGB color image, so data textures (normal, metallic/roughness) need a `.tex` file with `"srgb": false`.
-  Absolute paths are errors.
+  `"source": "model.gltf"`, `white.png` is stored as `white.png`, and the runtime decodes `white.png` as an sRGB
+  color image. To load a texture package instead (compressed, or a data texture such as a normal map with
+  `"srgb": false`), override the URI with the package in `textures` (`"white.png": "white.png.texpack"`, built from
+  `white.png.tex`). Absolute paths are errors.
+- **Overridden** by `textures`, keyed by the URI as the source writes it (percent-decoded for glTF): the reference is
+  replaced by the whole path given, not just its file name, relative to the `.model` file, or to the assets folder if
+  it starts with `/`. It names what the runtime loads, with its extension (`rock.texpack`, or an image), and is stored
+  as given (normalized). modelc doesn't check that it exists. An overridden URI may be absolute in the source.
 
 ## Geometry
 

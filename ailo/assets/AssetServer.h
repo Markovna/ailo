@@ -6,11 +6,11 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <typeindex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -27,8 +27,6 @@ namespace detail {
     class AssetStorageBase {
     public:
         virtual ~AssetStorageBase() = default;
-
-        virtual std::size_t size() const = 0;
     };
 
     class AssetLoaderBase {
@@ -96,7 +94,7 @@ public:
     template<class ...Args>
     AssetPtr<T> emplace(noname_t, Args&&... args);
 
-    std::size_t size() const override { return m_map.size(); }
+    std::size_t size() const { return m_map.size(); }
     bool empty() const { return m_map.empty(); }
 
     void reportLeaks(std::ostream& out) const;
@@ -177,6 +175,7 @@ private:
 template<class T>
 class AssetLoader : public detail::AssetLoaderBase {
 public:
+    virtual constexpr std::span<const std::string_view> extensions() const = 0;
     virtual void load(const std::string& key, LoadContext<T>& context) = 0;
 };
 
@@ -193,9 +192,9 @@ public:
         auto& storage = getStorage<T>();
         auto ptr = storage.get(key);
         if (!ptr) {
+            auto& loader = getLoader<T>(key);
             LoadContext<T> context {this, storage, key};
 
-            auto& loader = getLoader<T>();
             try {
                 loader.load(key, context);
             }
@@ -217,7 +216,7 @@ public:
         return ptr.value();
     }
 
-    // Throws std::invalid_argument if a loader for T is already registered.
+    // Throws std::invalid_argument if the loader has no extensions or another loader of T already handles one of them.
     template<class T>
     void registerLoader(std::unique_ptr<AssetLoader<T>> loader);
 
@@ -226,14 +225,19 @@ public:
 
 private:
     template<class T> AssetStorage<T>& getStorage();
-    template<class T> AssetLoader<T>& getLoader();
+    template<class T> AssetLoader<T>& getLoader(const std::string& key);
+    template<class T> void validateLoader(const AssetLoader<T>& loader) const;
+
+    static std::string extensionOf(std::string_view key);
 
     detail::AssetStorageBase* findStorage(entt::id_type type) const;
-    detail::AssetLoaderBase* findLoader(entt::id_type type) const;
-    void setLoader(entt::id_type type, std::unique_ptr<detail::AssetLoaderBase> loader);
+    detail::AssetLoaderBase* findLoader(entt::id_type type, std::string_view extension) const;
+    void addLoader(entt::id_type type, std::span<const std::string_view> extensions,
+                   std::unique_ptr<detail::AssetLoaderBase> loader);
     void setStorage(entt::id_type type, detail::AssetStorageBase*);
 
-    std::unordered_map<entt::id_type, std::unique_ptr<detail::AssetLoaderBase>> m_loaders;
+    std::vector<std::unique_ptr<detail::AssetLoaderBase>> m_loaders;
+    std::unordered_map<entt::id_type, std::unordered_map<std::string, detail::AssetLoaderBase*>> m_loadersByExtension;
     std::unordered_map<entt::id_type, detail::AssetStorageBase*> m_storages;
 };
 
@@ -468,11 +472,23 @@ AssetPtr<U> LoadContext<T>::load(const std::string& key) {
 
 template<class T>
 void AssetServer::registerLoader(std::unique_ptr<AssetLoader<T>> loader) {
-    const auto type = entt::type_index<T>::value();
-    if (findLoader(type)) {
-        throw std::invalid_argument(std::string("asset loader already registered for type ") + typeid(T).name());
+    validateLoader(*loader);
+    const auto extensions = loader->extensions();
+    addLoader(entt::type_index<T>::value(), extensions, std::move(loader));
+}
+
+template<class T>
+void AssetServer::validateLoader(const AssetLoader<T>& loader) const {
+    const auto extensions = loader.extensions();
+    if (extensions.empty()) {
+        throw std::invalid_argument(std::format("asset loader for type {} has no extensions", entt::type_name<T>::value()));
     }
-    setLoader(type, std::move(loader));
+    for (std::string_view extension : extensions) {
+        if (findLoader(entt::type_index<T>::value(), extension)) {
+            throw std::invalid_argument(std::format("asset loader for extension '{}' already registered for type {}",
+                                                    extension, entt::type_name<T>::value()));
+        }
+    }
 }
 
 template <class T>
@@ -484,16 +500,18 @@ template<class T>
 AssetStorage<T>& AssetServer::getStorage() {
     auto* storage = findStorage(entt::type_index<T>::value());
     if (!storage) {
-        throw std::runtime_error(std::string("no asset storage registered for type ") + typeid(T).name());
+        throw std::runtime_error(std::format("no asset storage registered for type {}", entt::type_name<T>::value()));
     }
     return static_cast<AssetStorage<T>&>(*storage);
 }
 
 template<class T>
-AssetLoader<T>& AssetServer::getLoader() {
-    auto* loader = findLoader(entt::type_index<T>::value());
+AssetLoader<T>& AssetServer::getLoader(const std::string& key) {
+    const std::string extension = extensionOf(key);
+    auto* loader = findLoader(entt::type_index<T>::value(), extension);
     if (!loader) {
-        throw std::runtime_error(std::string("no asset loader registered for type ") + typeid(T).name());
+        throw std::runtime_error(std::format("no asset loader for extension '{}' registered for type {} (asset '{}')",
+                                             extension, entt::type_name<T>::value(), key));
     }
     return static_cast<AssetLoader<T>&>(*loader);
 }

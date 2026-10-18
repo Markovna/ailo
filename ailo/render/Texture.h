@@ -1,5 +1,6 @@
 #pragma once
-#include <filesystem>
+#include <array>
+#include <string_view>
 
 #include "RenderAPI.h"
 #include "assets/AssetServer.h"
@@ -26,16 +27,34 @@ private:
     uint8_t m_levels;
 };
 
-class TextureLoader : public AssetLoader<Texture> {
+// Reads a texture package built by texc (<name>.tex -> <name>.texpack).
+class TexturePackageLoader : public AssetLoader<Texture> {
 public:
-    TextureLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
+    explicit TexturePackageLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
+
+    constexpr std::span<const std::string_view> extensions() const override { return kExtensions; }
 
 protected:
     void load(const std::string& key, LoadContext<Texture>& ctx) override;
 
 private:
-    void loadPackage(const std::filesystem::path& packagePath, LoadContext<Texture>& ctx);
-    void loadImage(const std::string& key, LoadContext<Texture>& ctx);
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".texpack" };
+
+    RenderAPI* m_renderApi;
+};
+
+// Decodes an image file with stb_image.
+class TextureRawLoader : public AssetLoader<Texture> {
+public:
+    explicit TextureRawLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
+
+    constexpr std::span<const std::string_view> extensions() const override { return kExtensions; }
+
+protected:
+    void load(const std::string& key, LoadContext<Texture>& ctx) override;
+
+private:
+    static constexpr std::array<std::string_view, 6> kExtensions = { ".png", ".jpg", ".jpeg", ".tga", ".bmp", ".hdr" };
 
     RenderAPI* m_renderApi;
 };

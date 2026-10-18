@@ -50,11 +50,18 @@ ModelDefinition parseModelDefinition(std::string_view source) {
                     fail(material.line, "material \"" + name + "\" is listed twice");
                 }
             }
+        } else if (key == "textures") {
+            expect(v, v.isObject(), "an object", "textures");
+            for (const auto& [uri, path] : v.asObject()) {
+                if (!def.textures.emplace(uri, getNonEmptyString(path, "texture \"" + uri + "\"")).second) {
+                    fail(path.line, "texture \"" + uri + "\" is listed twice");
+                }
+            }
         } else if (key == "optimize") {
             expect(v, v.isBool(), "a boolean", "optimize");
             def.optimize = v.asBool();
         } else {
-            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, optimize)");
+            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, textures, optimize)");
         }
     }
 

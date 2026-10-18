@@ -77,8 +77,6 @@ struct FloatParameter {
     std::array<float, 4> value {};
 };
 
-// Material is an asset key (e.g. "assets/materials/lit") that the runtime loads; parameters are set by name and
-// skipped when the material does not declare them.
 struct Material {
     std::string name;                   // as named in the source model
     std::string material;
