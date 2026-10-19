@@ -118,7 +118,7 @@ endif()
 set(AILO_ASSET_TOOLS texc matcomp modelc lightc)
 set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
 
-# Builds FILES like ailo_assets and compiles them into TARGET as a C++ package written by bin2cpp
+# Builds FILES like the asset build (build/gen.py) and compiles them into TARGET as a C++ package written by bin2cpp
 # (tools/bin2cpp/README.md): "embedded/<PACKAGE>.h" declares a std::span<const uint8_t> per file in
 # ailo::embedded::<PACKAGE>, named after the built file's path relative to ROOT ("materials/toon.mat" -> kMaterialsToon).
 # FILES are relative to ROOT (an assets folder, default: the current source folder). PACKAGE names the generated files,
@@ -159,7 +159,7 @@ function(embed_assets TARGET)
             COMMENT "Generating ${MANIFEST}"
     )
 
-    # Runs every build, like ailo_assets: only Ninja knows whether an asset changed. bin2cpp rewrites the header and
+    # Runs every build, like the asset build: only Ninja knows whether an asset changed. bin2cpp rewrites the header and
     # source only when their content changes, so an up-to-date package recompiles nothing.
     add_custom_target(embed_${EMB_PACKAGE}
             COMMAND ${AILO_NINJA} -f ${MANIFEST}
@@ -189,34 +189,6 @@ add_subdirectory(tools/bin2cpp)
 
 # The generator expression keeps multi-config generators from adding a per-config subfolder.
 set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
-
-# Offline asset build (build/README.md): gen.py writes build_assets.ninja, which compiles every asset in
-# assets/ with the tool its extension maps to in config.json and copies everything else. CMake only generates the
-# manifest the first time; after that it regenerates itself when assets are added or removed.
-
-set(AILO_ASSET_MANIFEST ${CMAKE_BINARY_DIR}/build_assets.ninja)
-add_custom_command(
-        OUTPUT ${AILO_ASSET_MANIFEST}
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/gen.py
-                --source ${CMAKE_SOURCE_DIR}/assets
-                --build-dir ${CMAKE_BINARY_DIR}
-                --config ${CMAKE_SOURCE_DIR}/build/config.json
-                --tools-dir ${AILO_ASSET_TOOLS_DIR}
-        DEPENDS ${CMAKE_SOURCE_DIR}/build/gen.py ${CMAKE_SOURCE_DIR}/build/config.json
-        COMMENT "Generating build_assets.ninja"
-)
-
-# cleandead removes the outputs of assets that no longer exist. -f takes the manifest's path relative to the build
-# folder: ninja regenerates it only if the path matches its build edge (build_assets.ninja) exactly.
-add_custom_target(ailo_assets ALL
-        COMMAND ${AILO_NINJA} -f build_assets.ninja
-        COMMAND ${AILO_NINJA} -f build_assets.ninja -t cleandead
-        DEPENDS ${AILO_ASSET_MANIFEST}
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Building assets"
-        USES_TERMINAL
-)
-add_dependencies(ailo_assets ${AILO_ASSET_TOOLS})
 
 # The demo game
 add_subdirectory(sandbox)

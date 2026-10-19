@@ -232,7 +232,7 @@ add_shader(BUILTIN_SHADERS shaders/tonemap.frag)
 embed_resources(ailo PACKAGE shaders FILES ${BUILTIN_SHADERS})
 
 # Built-in assets, read by the "engine" source that AssetPlugin registers ("engine:/materials/lit.matpack").
-embed_assets(ailo PACKAGE materials ROOT ${CMAKE_SOURCE_DIR}/embedded FILES
+embed_assets(ailo PACKAGE materials ROOT ${CMAKE_SOURCE_DIR}/assets FILES
         materials/lit.mat
         materials/skybox.mat
 )

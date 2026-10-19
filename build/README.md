@@ -15,8 +15,8 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   `--tools-dir`. They compile a single asset and can write a depfile with the extra inputs they read (source images,
   includes), so editing one of those rebuilds the asset.
 
-CMake runs `gen.py` once, when `build_assets.ninja` is missing or `gen.py`/`config.json` change. The `ailo_assets`
-target (a dependency of `ailo`) runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
+CMake runs `gen.py` once, when `build_assets.ninja` is missing or `gen.py`/`config.json` change. The game's assets
+target runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
 outputs of assets that no longer exist. The manifest depends on every folder in `assets/`, so Ninja reruns `gen.py`
 itself when a file is added or removed.
 
@@ -95,7 +95,7 @@ embed_assets(mygame PACKAGE game_assets ROOT assets FILES
 
 `ROOT` defaults to the current source folder. The function writes the list to `<build>/package_build/<name>/files.txt`
 (only when it changes), generates `<build>/package_<name>.ninja` with `gen_package.py` and runs it on every build, like
-`ailo_assets`. The manifest compiles each file with its tool, or copies it, into `<build>/package_build/<name>/files/`
+the asset build. The manifest compiles each file with its tool, or copies it, into `<build>/package_build/<name>/files/`
 and then runs bin2cpp on all of them, sorted by path and passed in a response file, with that folder as its root. It
 writes `<build>/generated/embedded/<name>.h` and `<name>.cpp`, which are compiled into the target:
 
