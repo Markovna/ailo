@@ -1,6 +1,6 @@
 {
     "source": "Sponza.gltf",
-    "material": "assets/materials/lit.matpack",
+    "material": "engine:/materials/lit.matpack",
     "textures": {
         "10381718147657362067.jpg": "10381718147657362067.jpg.texpack",
         "10388182081421875623.jpg": "10388182081421875623.jpg.texpack",

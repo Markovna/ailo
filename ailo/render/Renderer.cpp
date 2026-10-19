@@ -7,7 +7,7 @@
 
 #include "DefaultAssetFactory.h"
 #include "Mesh.h"
-#include "resources/builtin_shaders.h"
+#include "embedded/shaders.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
 #include "ecs/Lights.h"
@@ -102,8 +102,8 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
   m_tonemapUniformBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(TonemapUniforms));
   backend->updateDescriptorSetBuffer(m_tonemapDescriptorSet, m_tonemapUniformBuffer, 1);
   m_tonemapProgram = backend->createProgram(ShaderDescription {
-    .vertexShader = ShaderDescription::code(resources::embedded::kTonemapVert),
-    .fragmentShader = ShaderDescription::code(resources::embedded::kTonemapFrag),
+    .vertexShader = ShaderDescription::code(embedded::shaders::kTonemapVert),
+    .fragmentShader = ShaderDescription::code(embedded::shaders::kTonemapFrag),
     .raster = RasterDescription {
       .cullingMode = CullingMode::NONE,
       .depthWriteEnable = false,

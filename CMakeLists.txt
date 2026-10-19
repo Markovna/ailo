@@ -139,10 +139,8 @@ function(embed_assets TARGET)
     set(SOURCE ${OUT_DIR}/${EMB_PACKAGE}.cpp)
     # Written only when it changes, so the manifest is regenerated only when FILES do.
     set(FILE_LIST ${CMAKE_BINARY_DIR}/package_build/${EMB_PACKAGE}/files.txt)
-    list(JOIN EMB_FILES "
-" FILE_LIST_CONTENT)
-    file(GENERATE OUTPUT ${FILE_LIST} CONTENT "${FILE_LIST_CONTENT}
-")
+    list(JOIN EMB_FILES "\n" FILE_LIST_CONTENT)
+    file(GENERATE OUTPUT ${FILE_LIST} CONTENT "${FILE_LIST_CONTENT}")
 
     add_custom_command(
             OUTPUT ${CMAKE_BINARY_DIR}/${MANIFEST}
@@ -187,7 +185,6 @@ add_subdirectory(tools/matcomp)
 add_subdirectory(tools/texc)
 add_subdirectory(tools/modelc)
 add_subdirectory(tools/lightc)
-add_subdirectory(tools/resgen)
 add_subdirectory(tools/bin2cpp)
 
 # The generator expression keeps multi-config generators from adding a per-config subfolder.

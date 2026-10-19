@@ -9,7 +9,9 @@
 namespace ailo {
 
 // Resources: AssetServer, whose default reader is a FileAssetReader relative to root (empty: the working directory).
-// More readers can be registered by source name (AssetServer::registerReader) and are used for "<source>:/<path>" keys.
+// The "engine" source is a MemoryAssetReader over the assets embedded into the engine (embedded/, e.g.
+// "engine:/materials/lit.matpack"). More readers can be registered by source name (AssetServer::registerReader) and
+// are used for "<source>:/<path>" keys.
 // Asset types are added by the plugins that own them through addAssetType<T>, which inserts an
 // AssetStorage<T> resource; they also register the loaders (e.g. RenderPlugin registers the Texture loader).
 // Assets are destroyed as soon as their last AssetPtr drops. A storage reports the assets still alive and asserts
@@ -18,9 +20,7 @@ namespace ailo {
 struct AssetPlugin {
     std::filesystem::path root;
 
-    void build(App& app) {
-        app.insertResource<AssetServer>(std::make_unique<FileAssetReader>(root));
-    }
+    void build(App& app);
 };
 
 template<class T>
