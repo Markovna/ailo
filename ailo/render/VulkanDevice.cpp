@@ -1,4 +1,5 @@
 #include "VulkanDevice.h"
+#include <algorithm>
 #include <iostream>
 
 namespace ailo {
@@ -100,7 +101,18 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
         return {};
     };
 
+    // The first suitable device wins. Prefer discrete over integrated GPUs: on hybrid laptops the loader's order follows
+    // the OS per-app GPU preference, which may put the integrated GPU first.
+    auto deviceTypeRank = [](const vk::PhysicalDevice& device) {
+        switch (device.getProperties().deviceType) {
+            case vk::PhysicalDeviceType::eDiscreteGpu: return 0;
+            case vk::PhysicalDeviceType::eIntegratedGpu: return 1;
+            case vk::PhysicalDeviceType::eVirtualGpu: return 2;
+            default: return 3;
+        }
+    };
     auto physicalDevices = m_instance.enumeratePhysicalDevices();
+    std::ranges::stable_sort(physicalDevices, {}, deviceTypeRank);
     auto physicalDeviceSearchResult = findPhysicalDevice(physicalDevices);
     if (!physicalDeviceSearchResult.physicalDevice) {
         throw std::runtime_error("failed to find a suitable GPU!");
