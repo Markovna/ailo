@@ -22,11 +22,20 @@ struct OrbitCamera {
     float minDistance = 1.0f;
     float maxDistance = 1000.0f;
 
+    // Fly controls (WASD/QE, RMB look)
+    float flySpeed = 5.0f;           // world units per second
+    float flyFastMultiplier = 4.0f;  // while Shift is held
+    float flySpeedStep = 1.2f;       // flySpeed factor per scroll step
+    float minFlySpeed = 0.01f;
+    float maxFlySpeed = 1000.0f;
+
     glm::vec3 position() const;
 };
 
 // Requires: PlatformPlugin.
 // Input:  Alt + LMB drag rotates, Alt + Ctrl + LMB drag pans, wheel zooms. Ignored while InputCapture::mouse is set.
+//         Flies like the Unity scene view: WASD moves, Q/E move down/up, Shift moves faster (keys ignored while
+//         InputCapture::keyboard is set). Holding RMB looks around in place and makes the wheel change flySpeed.
 // Update: applies the input to every entity with OrbitCamera + TransformComponent and writes its world transform.
 struct OrbitCameraPlugin {
     void build(App& app);
