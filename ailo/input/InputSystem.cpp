@@ -8,6 +8,7 @@ void InputSystem::processEvents() {
     // Reset mouse delta each frame
     m_mouseDeltaX = 0.0;
     m_mouseDeltaY = 0.0;
+    m_keysPressedThisFrame = {};
 
     Event event;
     while (pollEvent(event)) {
@@ -40,6 +41,7 @@ void InputSystem::onKeyPressed(KeyPressedEvent& e) {
   auto keyIndex = static_cast<uint16_t>(e.keyCode);
   if (keyIndex < m_keyStates.size()) {
     m_keyStates[keyIndex] = true;
+    m_keysPressedThisFrame[keyIndex] = true;
   }
 }
 
@@ -87,6 +89,14 @@ bool InputSystem::isKeyPressed(KeyCode key) const {
     return false;
   }
   return m_keyStates[keyIndex];
+}
+
+bool InputSystem::pressedThisFrame(KeyCode key) const {
+  uint16_t keyIndex = static_cast<uint16_t>(key);
+  if (keyIndex >= m_keysPressedThisFrame.size()) {
+    return false;
+  }
+  return m_keysPressedThisFrame[keyIndex];
 }
 
 bool InputSystem::isMouseButtonPressed(MouseButton button) const {
