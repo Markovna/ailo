@@ -54,8 +54,7 @@ private:
     std::array<bool, 8> m_mouseButtonStates{}; // Track mouse button states
     double m_mouseX = 0.0;
     double m_mouseY = 0.0;
-    double m_lastMouseX = 0.0;
-    double m_lastMouseY = 0.0;
+    bool m_hasMousePosition = false;
     double m_mouseDeltaX = 0.0;
     double m_mouseDeltaY = 0.0;
 

@@ -65,16 +65,20 @@ void InputSystem::onMouseButtonReleased(MouseButtonReleasedEvent& e) {
 }
 
 void InputSystem::onMouseMoved(MouseMovedEvent& e) {
-  // Update mouse position and calculate delta
-  m_lastMouseX = m_mouseX;
-  m_lastMouseY = m_mouseY;
+  // The first event has no previous position, so it must not report a jump from (0, 0)
+  if (!m_hasMousePosition) {
+    m_mouseX = e.x;
+    m_mouseY = e.y;
+    m_hasMousePosition = true;
+  }
+
+  e.deltaX = e.x - m_mouseX;
+  e.deltaY = e.y - m_mouseY;
   m_mouseX = e.x;
   m_mouseY = e.y;
-  m_mouseDeltaX = e.x - m_lastMouseX;
-  m_mouseDeltaY = e.y - m_lastMouseY;
 
-  e.deltaX = m_mouseDeltaX;
-  e.deltaY = m_mouseDeltaY;
+  m_mouseDeltaX += e.deltaX;
+  m_mouseDeltaY += e.deltaY;
 }
 
 bool InputSystem::isKeyPressed(KeyCode key) const {
