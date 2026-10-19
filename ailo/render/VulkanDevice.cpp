@@ -249,9 +249,9 @@ vk::SurfaceFormatKHR VulkanDevice::getSurfaceFormat() const {
 
 vk::PresentModeKHR VulkanDevice::getPresentMode() const {
     auto presentModes = m_physicalDevice.getSurfacePresentModesKHR(m_surface);
-    auto findMode = std::ranges::find(presentModes, vk::PresentModeKHR::eMailbox);
+    auto findMode = std::ranges::find(presentModes, vk::PresentModeKHR::eFifo);
     if (findMode != presentModes.end()) { return *findMode; }
-    return vk::PresentModeKHR::eFifo;
+    return vk::PresentModeKHR::eMailbox;
 }
 
 vk::Extent2D VulkanDevice::getSwapExtent() const {
