@@ -9,6 +9,7 @@ void InputSystem::processEvents() {
     m_mouseDeltaX = 0.0;
     m_mouseDeltaY = 0.0;
     m_keysPressedThisFrame = {};
+    m_keysReleasedThisFrame = {};
 
     Event event;
     while (pollEvent(event)) {
@@ -49,6 +50,7 @@ void InputSystem::onKeyReleased(KeyReleasedEvent& e) {
   auto keyIndex = static_cast<uint16_t>(e.keyCode);
   if (keyIndex < m_keyStates.size()) {
     m_keyStates[keyIndex] = false;
+    m_keysReleasedThisFrame[keyIndex] = true;
   }
 }
 
@@ -97,6 +99,14 @@ bool InputSystem::pressedThisFrame(KeyCode key) const {
     return false;
   }
   return m_keysPressedThisFrame[keyIndex];
+}
+
+bool InputSystem::releasedThisFrame(KeyCode key) const {
+  uint16_t keyIndex = static_cast<uint16_t>(key);
+  if (keyIndex >= m_keysReleasedThisFrame.size()) {
+    return false;
+  }
+  return m_keysReleasedThisFrame[keyIndex];
 }
 
 bool InputSystem::isMouseButtonPressed(MouseButton button) const {
