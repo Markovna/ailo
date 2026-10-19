@@ -46,6 +46,7 @@ struct MaterialInputs {
     float metallic;
     float reflectance;
     float ambientOcclusion;
+    vec3 emissive;  // linear color added after lighting
 #endif
 #if defined(MATERIAL_HAS_NORMAL)
     vec3 normal;    // tangent space
@@ -78,6 +79,7 @@ void initMaterial(out MaterialInputs material) {
     material.metallic = 0.0;
     material.reflectance = 0.5;
     material.ambientOcclusion = 1.0;
+    material.emissive = vec3(0.0);
 #endif
 #if defined(MATERIAL_HAS_NORMAL)
     material.normal = vec3(0.0, 0.0, 1.0);

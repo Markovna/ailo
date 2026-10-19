@@ -327,6 +327,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
 
     color.rgb += ambientLuminance * (Fd + Fr);
+    color.rgb += material.emissive;
 
 #if defined(VARIANT_HAS_SHADOWING)
     if ((shadows.shadowFlags & SHADOW_FLAG_VISUALIZE_CASCADES) != 0u) {

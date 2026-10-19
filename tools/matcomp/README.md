@@ -80,7 +80,7 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 - `fragment` (required) defines `void material(inout MaterialInputs material)` and must call
   `prepareMaterial(material)`. `material.normal` (tangent space, needs `tangents`) only has an effect
   when written before that call. Inputs: `baseColor`, and for `lit` also `roughness`, `metallic`,
-  `reflectance`, `ambientOcclusion`, `normal`. Defaults are in `initMaterial()` in
+  `reflectance`, `ambientOcclusion`, `emissive` (linear color added after lighting), `normal`. Defaults are in `initMaterial()` in
   `shaders/surface/surface_fragment.fs`.
 - `vertex` (optional) defines `void materialVertex(inout MaterialVertexInputs material)`. It can change
   `worldPosition`, `worldNormal`, `color`/`uv0` (if required), and must write the custom `variables`,
