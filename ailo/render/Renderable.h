@@ -6,7 +6,6 @@ namespace ailo {
 
 struct Renderable {
     AssetPtr<Mesh> mesh;
-    // One per mesh face.
     std::vector<AssetPtr<MaterialInstance>> materials;
 
     bool castShadows = true;

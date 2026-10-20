@@ -12,13 +12,56 @@ namespace ailo {
 template<typename...>
 inline constexpr bool always_false = false;
 
-// Iterates entities that have all of Cs. Taken by value (or const&) as a system parameter.
+// Query argument that skips entities having any of Cs: Query<A, Exclude<B, C>>.
 template<typename... Cs>
+struct Exclude {};
+
+namespace detail {
+
+template<typename...>
+struct type_list {};
+
+// Only used in decltype to concatenate type lists with a fold.
+template<typename... As, typename... Bs>
+type_list<As..., Bs...> operator+(type_list<As...>, type_list<Bs...>);
+
+template<typename T>
+struct query_arg {
+    using get = type_list<T>;
+    using exclude = type_list<>;
+};
+
+template<typename... Cs>
+struct query_arg<Exclude<Cs...>> {
+    using get = type_list<>;
+    using exclude = type_list<Cs...>;
+};
+
+template<typename Get, typename Excluded>
+struct query_view;
+
+template<typename... Cs, typename... Es>
+struct query_view<type_list<Cs...>, type_list<Es...>> {
+    using type = decltype(std::declval<entt::registry&>().template view<Cs...>(entt::exclude<Es...>));
+    static type make(entt::registry& registry) { return registry.template view<Cs...>(entt::exclude<Es...>); }
+};
+
+template<typename... Args>
+using query_view_t = query_view<
+    decltype((type_list<> {} + ... + typename query_arg<Args>::get {})),
+    decltype((type_list<> {} + ... + typename query_arg<Args>::exclude {}))>;
+
+}
+
+// Iterates entities that have all of Args except those wrapped in Exclude<...>, and none of the excluded ones.
+// Taken by value (or const&) as a system parameter.
+template<typename... Args>
 class Query {
 public:
-    using view_type = decltype(std::declval<Scene&>().template view<Cs...>());
+    using view_type = typename detail::query_view_t<Args...>::type;
 
     explicit Query(view_type view) : m_view(view) {}
+    explicit Query(entt::registry& registry) : m_view(detail::query_view_t<Args...>::make(registry)) {}
 
     decltype(auto) each() { return m_view.each(); }
     auto begin() const { return m_view.begin(); }
@@ -34,12 +77,6 @@ private:
     view_type m_view;
 };
 
-// Describes how a system parameter type is fetched from the World:
-//   T&, const T&   → resource T (must exist)
-//   T*, const T*   → resource T or nullptr (optional)
-//   World&         → the world itself
-//   Query<Cs...>   → view over entities with components Cs...
-// Specialize to add new parameter kinds.
 template<typename T>
 struct SystemParam {
     static_assert(always_false<T>,
@@ -76,7 +113,7 @@ struct SystemParam<Scene&> {
 
 template<typename... Cs>
 struct SystemParam<Query<Cs...>> {
-    static Query<Cs...> fetch(World& world) { return Query<Cs...> { world.scene().template view<Cs...>() }; }
+    static Query<Cs...> fetch(World& world) { return Query<Cs...> { world.scene().registry() }; }
     static bool available(const World&) { return true; }
     static std::string_view typeName() { return entt::type_name<Query<Cs...>>::value(); }
 };
@@ -90,9 +127,6 @@ struct SystemParam<Query<Cs...>&> {
 };
 
 namespace detail {
-
-template<typename...>
-struct type_list {};
 
 // Generic lambdas (auto parameters) are not supported: parameter types must be concrete.
 template<typename F>

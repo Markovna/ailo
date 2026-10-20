@@ -16,7 +16,7 @@ struct OrbitCamera {
     float pitch = 0.0f;
 
     // Controls
-    float rotateSpeed = 0.005f;  // radians per pixel
+    float rotateSpeed = 0.001f;  // radians per pixel
     float panSpeed = 0.001f;     // world units per pixel, scaled by distance
     float zoomSpeed = 0.5f;      // world units per scroll step
     float minDistance = 1.0f;

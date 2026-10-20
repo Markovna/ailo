@@ -180,6 +180,9 @@ class Scene;
 template<typename... Cs>
 class Query;
 
+template<typename... Cs>
+struct Exclude;
+
 struct RenderData {
   ProgramHandle colorProgram;
   ProgramHandle depthProgram;

@@ -59,6 +59,7 @@ PhysicsBodyHooks::PhysicsBodyHooks(entt::registry& registry, PhysicsWorld& world
     m_registry.on_destroy<PhysicsBody>().connect<&PhysicsBodyHooks::destroyBody>(*this);
     m_registry.on_destroy<RigidBody>().connect<&PhysicsBodyHooks::invalidate>(*this);
     m_registry.on_destroy<Collider>().connect<&PhysicsBodyHooks::invalidate>(*this);
+    m_registry.on_construct<Disabled>().connect<&PhysicsBodyHooks::invalidate>(*this);
     m_registry.on_update<RigidBody>().connect<&PhysicsBodyHooks::invalidate>(*this);
     m_registry.on_update<Collider>().connect<&PhysicsBodyHooks::invalidate>(*this);
 }
@@ -67,6 +68,7 @@ PhysicsBodyHooks::~PhysicsBodyHooks() {
     m_registry.on_destroy<PhysicsBody>().disconnect(this);
     m_registry.on_destroy<RigidBody>().disconnect(this);
     m_registry.on_destroy<Collider>().disconnect(this);
+    m_registry.on_construct<Disabled>().disconnect(this);
     m_registry.on_update<RigidBody>().disconnect(this);
     m_registry.on_update<Collider>().disconnect(this);
 }
@@ -143,7 +145,7 @@ void fixedUpdate(entt::registry& registry, PhysicsWorld& world, float dt) {
 
 void createPendingBodies(entt::registry& registry, PhysicsWorld& world) {
     // Collected first: adding PhysicsBody while iterating a view that excludes it would invalidate the view.
-    auto pending = registry.view<RigidBody, Collider, TransformComponent>(entt::exclude<PhysicsBody>);
+    auto pending = registry.view<RigidBody, Collider, TransformComponent>(entt::exclude<PhysicsBody, Disabled>);
     const std::vector<entt::entity> entities(pending.begin(), pending.end());
     if (entities.empty()) {
         return;

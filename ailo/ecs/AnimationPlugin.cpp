@@ -8,11 +8,13 @@
 #include "render/RenderAPI.h"
 #include "render/Renderer.h"
 
+#include "ecs/Transform.h"
+
 namespace ailo {
 
 namespace {
 
-void animate(Query<AnimatorComponent> animators, const Time& time, RenderAPI& api) {
+void animate(Query<AnimatorComponent, Exclude<Disabled>> animators, const Time& time, RenderAPI& api) {
     BonesUniform bonesData {};
     for (auto [entity, animator] : animators.each()) {
         if (!animator.boneBuffer.getHandle()) {

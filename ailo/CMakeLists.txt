@@ -255,6 +255,8 @@ target_include_directories(apptest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_executable(assetservertest
         assets/asset_server_tests.cpp
         assets/AssetServer.cpp
+        utils/Log.cpp
+        utils/Stream.cpp
 )
 target_link_libraries(assetservertest EnTT::EnTT)
 target_include_directories(assetservertest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -263,6 +265,8 @@ add_executable(embeddedassettest
         assets/embedded_asset_tests.cpp
         assets/AssetServer.cpp
         assets/MemoryAssetReader.cpp
+        utils/Log.cpp
+        utils/Stream.cpp
 )
 target_link_libraries(embeddedassettest EnTT::EnTT)
 target_include_directories(embeddedassettest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

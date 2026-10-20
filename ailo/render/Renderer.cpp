@@ -20,6 +20,7 @@
 #include "ShadowMapManager.h"
 #include "Skin.h"
 #include "ecs/AnimatorComponent.h"
+#include "ecs/Transform.h"
 
 namespace ailo {
 
@@ -388,6 +389,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
 
   uint32_t objectIndex = 0;
   for(const auto& [entity, renderable] : renderables.each()) {
+    if (scene.registry().all_of<Disabled>(entity)) continue;
     const auto tr = scene.tryGet<TransformComponent>(entity);
     auto skin = scene.tryGet<Skin>(entity);
 

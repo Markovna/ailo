@@ -14,6 +14,9 @@ bool setParent(entt::registry& reg, entt::entity child, entt::entity parent, Kee
 bool isInSubtree(const entt::registry& reg, entt::entity e, entt::entity root);
 void destroySubtree(entt::registry& reg, entt::entity root);
 
+void enableSubtree(entt::registry& reg, entt::entity e);
+void disableSubtree(entt::registry& reg, entt::entity e);
+
 template<typename F>
 void forEachChild(const entt::registry& reg, entt::entity e, F&& f) {
     for (auto child = reg.get<TransformComponent>(e).firstChild(); child != entt::null;) {

@@ -9,6 +9,9 @@
 
 namespace ailo {
 
+struct Disabled {
+};
+
 struct Transform {
     glm::vec3 position { 0.0f };
     glm::quat rotation = glm::identity<glm::quat>();

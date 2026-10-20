@@ -146,6 +146,20 @@ void destroySubtree(entt::registry& reg, entt::entity root) {
     for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) reg.destroy(*it);
 }
 
+void enableSubtree(entt::registry& reg, entt::entity root) {
+    reg.remove<Disabled>(root);
+    forEachDescendant(reg, root, [&](entt::entity e) {
+        reg.remove<Disabled>(e);
+    });
+}
+
+void disableSubtree(entt::registry& reg, entt::entity root) {
+    reg.get_or_emplace<Disabled>(root);
+    forEachDescendant(reg, root, [&](entt::entity e) {
+        reg.get_or_emplace<Disabled>(e);
+    });
+}
+
 }
 
 }

@@ -13,10 +13,6 @@ namespace ailo {
 
 class PhysicsWorld;
 
-// Keeps Jolt bodies in step with the registry. Resource inserted by PhysicsPlugin, after PhysicsWorld.
-//   on_destroy<PhysicsBody>               → removes and destroys the Jolt body
-//   on_destroy/on_update<RigidBody|Collider> → removes PhysicsBody, so the body is rebuilt (or gone for good)
-// Disconnects on destruction, i.e. before PhysicsWorld is destroyed.
 class PhysicsBodyHooks {
 public:
     PhysicsBodyHooks(entt::registry& registry, PhysicsWorld& world);

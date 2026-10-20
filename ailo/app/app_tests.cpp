@@ -39,6 +39,41 @@ void move(Query<Position, Velocity> query, const Time& time) {
     }
 }
 
+struct Frozen {};
+
+void moveUnfrozen(Query<Position, Velocity, Exclude<Frozen>> query) {
+    for (auto [entity, pos, vel] : query.each()) {
+        pos.x += vel.dx;
+    }
+}
+
+void testQueryExclude() {
+    App app;
+    Entity moving {};
+    Entity frozen {};
+    app.addSystem(Stage::Startup, [&](World& world) {
+           auto& scene = world.scene();
+           moving = scene.addEntity();
+           scene.addComponent<Position>(moving);
+           scene.addComponent<Velocity>(moving, 1.0f);
+           frozen = scene.addEntity();
+           scene.addComponent<Position>(frozen);
+           scene.addComponent<Velocity>(frozen, 1.0f);
+           scene.addComponent<Frozen>(frozen);
+       })
+       .addSystem(Stage::Update, moveUnfrozen)
+       .addSystem(Stage::Update, [&](const Query<Position, Exclude<Frozen>, Exclude<Velocity>>& query, AppControl& control) {
+           assert(!query.contains(moving));
+           assert(!query.contains(frozen));
+           control.requestExit();
+       });
+    app.run();
+
+    auto& scene = app.world().scene();
+    assert(scene.registry().get<Position>(moving).x == 1.0f);
+    assert(scene.registry().get<Position>(frozen).x == 0.0f);
+}
+
 void testWorldResources() {
     World world;
     auto& counter = world.insertResource<Counter>(5);
@@ -283,6 +318,7 @@ int main() {
     testShutdownRunsInReverseOrder();
     testFixedUpdate();
     testFixedUpdateCanRunZeroTimes();
+    testQueryExclude();
 
     std::cout << "All app tests passed" << std::endl;
     return 0;

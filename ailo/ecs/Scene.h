@@ -4,6 +4,8 @@
 
 namespace ailo {
 
+struct Disabled;
+
 using Entity = entt::entity;
 
 class Texture;
@@ -21,7 +23,7 @@ class Scene {
   void clear() { m_registry.clear(); }
 
   template<typename ...Types>
-  decltype(auto) view() { return m_registry.view<Types...>(); }
+  decltype(auto) view() { return m_registry.view<Types...>(entt::exclude<Disabled>); }
 
   template<typename Type, typename ...Args>
   decltype(auto) addComponent(entt::entity entity, Args&& ...args) {

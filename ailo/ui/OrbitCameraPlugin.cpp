@@ -146,7 +146,7 @@ void applyInput(OrbitCamera& orbit, const OrbitCameraInput& input) {
 }
 
 void updateCameras(OrbitCameraInput& input, const InputSystem& keys, const Time& time, World& world,
-    Query<OrbitCamera, TransformComponent> cameras) {
+    Query<OrbitCamera, TransformComponent, Exclude<Disabled>> cameras) {
     auto& registry = world.scene().registry();
 
     const bool flying = input.mode == DragMode::Look;
