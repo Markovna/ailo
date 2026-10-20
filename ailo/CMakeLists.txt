@@ -172,6 +172,10 @@ add_library(ailo STATIC
     render/ShadowMapManager.cpp
     render/ShadowMapManager.h
     common/AABB.h
+        utils/Log.cpp
+        utils/Log.h
+        utils/Stream.cpp
+        utils/Stream.h
 )
 
 # PUBLIC: libraries whose headers the engine's headers include.

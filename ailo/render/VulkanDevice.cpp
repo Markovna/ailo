@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <iostream>
 
+#include "utils/Log.h"
+
 namespace ailo {
 
 // Static helper to load debug extension functions
@@ -287,12 +289,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debugCallback(
     std::ostream* out = nullptr;
     auto errorMask = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     if((messageSeverity & errorMask) != 0) {
-        out = &std::cerr;
+        LOG_ERROR("[Vulkan] {}", pCallbackData->pMessage);
     } else {
-        out = &std::cout;
+        LOG_WARNING("[Vulkan] {}", pCallbackData->pMessage);
     }
 
-    *out << "[Vulkan] " << pCallbackData->pMessage << std::endl;
     return VK_FALSE;
 }
 

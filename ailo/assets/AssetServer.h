@@ -18,6 +18,7 @@
 #include "AssetReader.h"
 #include "common/slot_map.h"
 #include "entt/entt.hpp"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -218,17 +219,17 @@ public:
                 loader.load(key, bytes, context);
             }
             catch (const std::exception& e) {
-                std::cerr << "Failed to load asset '" << key << "': " << e.what() << std::endl;
+                log::error("Failed to load asset {}: {}.", key, e.what());
                 return {};
             }
             catch (...) {
-                std::cerr << "Failed to load asset '" << key << "'" << std::endl;
+                log::error("Failed to load asset {}.", key);
                 return {};
             }
 
             ptr = storage.get(key);
             if (!ptr) {
-                std::cerr << "Asset loader did not construct asset '" << key << "'" << std::endl;
+                log::error("Asset loader did not construct asset '{}'.", key);
                 return {};
             }
         }
