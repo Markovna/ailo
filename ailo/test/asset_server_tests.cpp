@@ -1,6 +1,6 @@
 #include "assets/AssetServer.h"
+#include "Testing.h"
 
-#include <cassert>
 #include <iostream>
 #include <memory>
 #include <span>
@@ -196,8 +196,8 @@ bool throws(F&& f) {
 
 void testAssetIndexDefaultIsInvalid() {
     AssetIndex<Texture> index;
-    assert(!index.isValid());
-    assert(index == AssetIndex<Texture>{});
+    CHECK(!index.isValid());
+    CHECK_EQ(index, AssetIndex<Texture>{});
 }
 
 // ---------------------------------------------------------------------------
@@ -209,47 +209,47 @@ void testEmplaceAndGet() {
     AssetStorage<Texture> storage;
     {
         auto ptr = storage.emplace("a", "albedo");
-        assert(ptr);
-        assert(ptr.index().isValid());
-        assert(ptr->name == "albedo");
-        assert((*ptr).name == "albedo");
-        assert(ptr.get() == storage.get(ptr.index()));
-        assert(ptr.useCount() == 1);
-        assert(storage.has("a"));
-        assert(storage.size() == 1);
+        REQUIRE(ptr);
+        CHECK(ptr.index().isValid());
+        CHECK_EQ(ptr->name, "albedo");
+        CHECK_EQ((*ptr).name, "albedo");
+        CHECK_EQ(ptr.get(), storage.get(ptr.index()));
+        CHECK_EQ(ptr.useCount(), 1);
+        CHECK(storage.has("a"));
+        CHECK_EQ(storage.size(), 1);
 
         auto found = storage.get("a");
-        assert(found && *found == ptr);
-        assert(ptr.useCount() == 2);
+        CHECK(found && *found == ptr);
+        CHECK_EQ(ptr.useCount(), 2);
     }
-    assert(storage.empty());
-    assert(!storage.has("a"));
-    assert(!storage.get("a"));
-    assert(g_log == std::vector<std::string>{ "~Texture albedo" });
+    CHECK(storage.empty());
+    CHECK(!storage.has("a"));
+    CHECK(!storage.get("a"));
+    CHECK_EQ(g_log, std::vector<std::string>{ "~Texture albedo" });
 }
 
 void testEmplaceDuplicateKeyThrows() {
     AssetStorage<Texture> storage;
     auto ptr = storage.emplace("a", "first");
-    assert((throws<std::invalid_argument>([&] { storage.emplace("a", "second"); })));
-    assert(storage.size() == 1);
-    assert(ptr->name == "first");
+    CHECK((throws<std::invalid_argument>([&] { storage.emplace("a", "second"); })));
+    CHECK_EQ(storage.size(), 1);
+    CHECK_EQ(ptr->name, "first");
 }
 
 void testEmplaceThrowingConstructorLeavesStorageClean() {
     AssetStorage<Throwing> storage;
-    assert((throws<std::runtime_error>([&] { storage.emplace("a", true); })));
-    assert(storage.empty());
-    assert(!storage.has("a"));
+    CHECK((throws<std::runtime_error>([&] { storage.emplace("a", true); })));
+    CHECK(storage.empty());
+    CHECK(!storage.has("a"));
 
     auto ptr = storage.emplace("a", false);
-    assert(ptr && storage.size() == 1);
+    CHECK(ptr && storage.size() == 1);
 }
 
 void testGetMissingKey() {
     AssetStorage<Texture> storage;
-    assert(!storage.has("missing"));
-    assert(!storage.get("missing"));
+    CHECK(!storage.has("missing"));
+    CHECK(!storage.get("missing"));
 }
 
 void testCopyMoveAndReset() {
@@ -257,26 +257,26 @@ void testCopyMoveAndReset() {
     auto a = storage.emplace("a", "a");
 
     AssetPtr<Texture> copy = a;
-    assert(copy == a && a.useCount() == 2);
+    CHECK(copy == a && a.useCount() == 2);
 
     AssetPtr<Texture> moved = std::move(copy);
-    assert(!copy && copy.useCount() == 0 && !copy.index().isValid());
-    assert(moved == a && a.useCount() == 2);
+    CHECK(!copy && copy.useCount() == 0 && !copy.index().isValid());
+    CHECK(moved == a && a.useCount() == 2);
 
     AssetPtr<Texture> assigned;
     assigned = a;
-    assert(a.useCount() == 3);
+    CHECK_EQ(a.useCount(), 3);
 
     assigned = std::move(moved);
-    assert(!moved);
-    assert(a.useCount() == 2);
+    CHECK(!moved);
+    CHECK_EQ(a.useCount(), 2);
 
     assigned.reset();
-    assert(!assigned && assigned.get() == nullptr);
-    assert(a.useCount() == 1);
+    CHECK(!assigned && assigned.get() == nullptr);
+    CHECK_EQ(a.useCount(), 1);
 
     assigned.reset();   // idempotent
-    assert(a.useCount() == 1);
+    CHECK_EQ(a.useCount(), 1);
 }
 
 void testSelfAssignment() {
@@ -284,9 +284,9 @@ void testSelfAssignment() {
     auto a = storage.emplace("a", "a");
     auto& alias = a;
     a = alias;
-    assert(a && a.useCount() == 1);
+    CHECK(a && a.useCount() == 1);
     a = std::move(alias);
-    assert(a && a.useCount() == 1);
+    CHECK(a && a.useCount() == 1);
 }
 
 void testSwap() {
@@ -294,8 +294,8 @@ void testSwap() {
     auto a = storage.emplace("a", "a");
     auto b = storage.emplace("b", "b");
     a.swap(b);
-    assert(a->name == "b" && b->name == "a");
-    assert(a.useCount() == 1 && b.useCount() == 1);
+    CHECK(a->name == "b" && b->name == "a");
+    CHECK(a.useCount() == 1 && b.useCount() == 1);
 }
 
 void testAssigningOverLastReferenceDestroysOldAsset() {
@@ -303,16 +303,16 @@ void testAssigningOverLastReferenceDestroysOldAsset() {
     AssetStorage<Texture> storage;
     auto ptr = storage.emplace("a", "a");
     ptr = storage.emplace("b", "b");
-    assert(g_log == std::vector<std::string>{ "~Texture a" });
-    assert(!storage.has("a") && storage.has("b"));
+    CHECK_EQ(g_log, std::vector<std::string>{ "~Texture a" });
+    CHECK(!storage.has("a") && storage.has("b"));
 }
 
 void testNullPtr() {
     AssetPtr<Texture> ptr;
-    assert(!ptr);
-    assert(ptr.get() == nullptr);
-    assert(ptr.useCount() == 0);
-    assert(ptr == AssetPtr<Texture>{});
+    CHECK(!ptr);
+    CHECK_EQ(ptr.get(), nullptr);
+    CHECK_EQ(ptr.useCount(), 0);
+    CHECK_EQ(ptr, AssetPtr<Texture>{});
 }
 
 void testStaleIndexResolvesToNothing() {
@@ -321,9 +321,9 @@ void testStaleIndexResolvesToNothing() {
     {
         auto ptr = storage.emplace("a", "a");
         stale = ptr.index();
-        assert(storage.get(stale) != nullptr);
+        CHECK_NE(storage.get(stale), nullptr);
     }
-    assert(storage.get(stale) == nullptr);
+    CHECK_EQ(storage.get(stale), nullptr);
 
     // Churn enough slots that the freed index gets recycled with a newer version
     std::vector<AssetPtr<Texture>> keep;
@@ -333,12 +333,12 @@ void testStaleIndexResolvesToNothing() {
     for (int i = 0; i < 200; ++i) {
         keep.push_back(storage.emplace("k" + std::to_string(i), "k"));
     }
-    assert(storage.get(stale) == nullptr);
+    CHECK_EQ(storage.get(stale), nullptr);
     for (const auto& p : keep) {
-        assert(!(p.index() == stale));
+        CHECK(!(p.index() == stale));
     }
     const AssetStorage<Texture>& constStorage = storage;
-    assert(constStorage.get(stale) == nullptr);
+    CHECK_EQ(constStorage.get(stale), nullptr);
 }
 
 void testKeyCanBeReusedAfterRelease() {
@@ -349,9 +349,9 @@ void testKeyCanBeReusedAfterRelease() {
         first = ptr.index();
     }
     auto ptr = storage.emplace("a", "second");
-    assert(ptr->name == "second");
-    assert(!(ptr.index() == first));
-    assert(storage.get(first) == nullptr);
+    CHECK_EQ(ptr->name, "second");
+    CHECK(!(ptr.index() == first));
+    CHECK_EQ(storage.get(first), nullptr);
 }
 
 void testDependentReleasesDependency() {
@@ -360,11 +360,11 @@ void testDependentReleasesDependency() {
     AssetStorage<Material> materials;
     {
         auto material = materials.emplace("brick", "brick", textures.emplace("t", "albedo"));
-        assert(textures.has("t"));
-        assert(material->texture.useCount() == 1);
+        CHECK(textures.has("t"));
+        CHECK_EQ(material->texture.useCount(), 1);
     }
-    assert(materials.empty() && textures.empty());
-    assert((g_log == std::vector<std::string>{ "~Material brick", "~Texture albedo" }));
+    CHECK(materials.empty() && textures.empty());
+    CHECK((g_log == std::vector<std::string>{ "~Material brick", "~Texture albedo" }));
 }
 
 void testNestedSameTypeRelease() {
@@ -374,10 +374,10 @@ void testNestedSameTypeRelease() {
         auto tail = storage.emplace("c", "c", AssetPtr<Node>{});
         auto middle = storage.emplace("b", "b", std::move(tail));
         auto head = storage.emplace("a", "a", std::move(middle));
-        assert(storage.size() == 3);
+        CHECK_EQ(storage.size(), 3);
     }
-    assert(storage.empty());
-    assert((g_log == std::vector<std::string>{ "~Node a", "~Node b", "~Node c" }));
+    CHECK(storage.empty());
+    CHECK((g_log == std::vector<std::string>{ "~Node a", "~Node b", "~Node c" }));
 }
 
 void testReportLeaks() {
@@ -389,10 +389,10 @@ void testReportLeaks() {
 
     std::ostringstream none;
     textures.reportLeaks(none);
-    assert(none.str().empty());
+    CHECK(none.str().empty());
 
     materials.reportLeaks(none);
-    assert(materials.empty());
+    CHECK(materials.empty());
 
     auto texture = textures.emplace("t", "t");
     auto copy = texture;
@@ -402,8 +402,8 @@ void testReportLeaks() {
     textures.reportLeaks(out);
     materials.reportLeaks(out);
     const std::string report = out.str();
-    assert(report.find("'t' (2 references)") != std::string::npos);
-    assert(report.find("'m' (1 references)") != std::string::npos);
+    CHECK_NE(report.find("'t' (2 references)"), std::string::npos);
+    CHECK_NE(report.find("'m' (1 references)"), std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,26 +423,26 @@ void testServerLoad() {
     registerTextureLoader(server, &calls);
     {
         auto a = server.load<Texture>("a.tex");
-        assert(a && a->name == "a.tex");
-        assert(a.useCount() == 1);
-        assert(textures.has("a.tex"));
-        assert(calls == 1);
+        CHECK(a && a->name == "a.tex");
+        CHECK_EQ(a.useCount(), 1);
+        CHECK(textures.has("a.tex"));
+        CHECK_EQ(calls, 1);
 
         auto again = server.load<Texture>("a.tex");
-        assert(again == a);
-        assert(a.useCount() == 2);
-        assert(calls == 1);
+        CHECK_EQ(again, a);
+        CHECK_EQ(a.useCount(), 2);
+        CHECK_EQ(calls, 1);
 
         auto b = server.load<Texture>("b.tex");
-        assert(!(b == a));
-        assert(calls == 2);
+        CHECK(!(b == a));
+        CHECK_EQ(calls, 2);
     }
-    assert((g_log == std::vector<std::string>{ "~Texture b.tex", "~Texture a.tex" }));
-    assert(textures.empty());
+    CHECK((g_log == std::vector<std::string>{ "~Texture b.tex", "~Texture a.tex" }));
+    CHECK(textures.empty());
 
     // Assets are not cached past their last reference
     auto a = server.load<Texture>("a.tex");
-    assert(calls == 3);
+    CHECK_EQ(calls, 3);
 }
 
 void testServerLoadsDependencies() {
@@ -458,11 +458,11 @@ void testServerLoadsDependencies() {
     {
         auto texture = server.load<Texture>("brick.mat.tex");
         auto material = server.load<Material>("brick.mat");
-        assert(material->texture == texture);
-        assert(texture.useCount() == 2);
-        assert(calls == 1);
+        CHECK_EQ(material->texture, texture);
+        CHECK_EQ(texture.useCount(), 2);
+        CHECK_EQ(calls, 1);
     }
-    assert((g_log == std::vector<std::string>{ "~Material brick.mat", "~Texture brick.mat.tex" }));
+    CHECK((g_log == std::vector<std::string>{ "~Material brick.mat", "~Texture brick.mat.tex" }));
 }
 
 void testConstructReturnsAsset() {
@@ -471,7 +471,7 @@ void testConstructReturnsAsset() {
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<RenamingTextureLoader>());
     auto texture = server.load<Texture>("renamed.tex");
-    assert(texture->name == "renamed.tex");
+    CHECK_EQ(texture->name, "renamed.tex");
 }
 
 void testLoaderWithDependencyAndSubAsset() {
@@ -490,18 +490,18 @@ void testLoaderWithDependencyAndSubAsset() {
     AssetPtr<Texture> keptSubAsset;
     {
         auto model = server.load<Model>("house.model");
-        assert(model->material->texture->name == "house.model.mat.tex");
-        assert(model->embedded->name == "embedded");
-        assert(textures.size() == 2);
+        CHECK_EQ(model->material->texture->name, "house.model.mat.tex");
+        CHECK_EQ(model->embedded->name, "embedded");
+        CHECK_EQ(textures.size(), 2);
         keptSubAsset = model->embedded;
     }
-    assert(models.empty() && materials.empty());
-    assert(textures.size() == 1);
+    CHECK(models.empty() && materials.empty());
+    CHECK_EQ(textures.size(), 1);
 
     // Re-importing while the old anonymous sub-asset is still alive creates a new one
     auto model = server.load<Model>("house.model");
-    assert(!(model->embedded == keptSubAsset));
-    assert(textures.size() == 3);
+    CHECK(!(model->embedded == keptSubAsset));
+    CHECK_EQ(textures.size(), 3);
 }
 
 void testServerReturnsAssetsAlreadyInStorage() {
@@ -513,16 +513,16 @@ void testServerReturnsAssetsAlreadyInStorage() {
 
     auto preloaded = textures.emplace("pre.tex", "preloaded");
     auto found = server.load<Texture>("pre.tex");
-    assert(found == preloaded);
-    assert(calls == 0);
+    CHECK_EQ(found, preloaded);
+    CHECK_EQ(calls, 0);
 }
 
 void testServerWithoutStorageThrows() {
     int calls = 0;
     AssetServer server { std::make_unique<TestReader>() };
     registerTextureLoader(server, &calls);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
-    assert(calls == 0);
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
+    CHECK_EQ(calls, 0);
 }
 
 void testUnregisteredDependencyStorageFailsLoad() {
@@ -534,10 +534,10 @@ void testUnregisteredDependencyStorageFailsLoad() {
     registerTextureLoader(server, &calls);
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
 
-    assert(!server.load<Material>("brick.mat"));
-    assert(calls == 0);
-    assert(materials.empty());
-    assert(g_log.empty());
+    CHECK(!server.load<Material>("brick.mat"));
+    CHECK_EQ(calls, 0);
+    CHECK(materials.empty());
+    CHECK(g_log.empty());
 }
 
 void testUnregisterStorage() {
@@ -549,15 +549,15 @@ void testUnregisterStorage() {
     server.load<Texture>("a.tex");
 
     server.registerStorage<Texture>(nullptr);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
 }
 
 void testServerWithoutLoaderThrows() {
     AssetStorage<Texture> textures;
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
-    assert(textures.empty());
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
+    CHECK(textures.empty());
 }
 
 void testRegisteringLoaderTwiceThrows() {
@@ -567,11 +567,11 @@ void testRegisteringLoaderTwiceThrows() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     registerTextureLoader(server, &first);
-    assert((throws<std::invalid_argument>([&] { registerTextureLoader(server, &second); })));
+    CHECK((throws<std::invalid_argument>([&] { registerTextureLoader(server, &second); })));
 
     // The original loader stays registered
     auto a = server.load<Texture>("a.tex");
-    assert(first == 1 && second == 0);
+    CHECK(first == 1 && second == 0);
 }
 
 void testLoaderThatDoesNotConstructReturnsNull() {
@@ -579,8 +579,8 @@ void testLoaderThatDoesNotConstructReturnsNull() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<NoConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a.tex"));
-    assert(textures.empty());
+    CHECK(!server.load<Texture>("a.tex"));
+    CHECK(textures.empty());
 }
 
 void testLoaderThrowingAfterConstructDoesNotLeak() {
@@ -589,9 +589,9 @@ void testLoaderThrowingAfterConstructDoesNotLeak() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<ThrowAfterConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a.tex"));
-    assert(g_log == std::vector<std::string>{ "~Texture a.tex" });
-    assert(textures.empty());
+    CHECK(!server.load<Texture>("a.tex"));
+    CHECK_EQ(g_log, std::vector<std::string>{ "~Texture a.tex" });
+    CHECK(textures.empty());
 }
 
 void testDoubleConstructFailsLoad() {
@@ -600,9 +600,9 @@ void testDoubleConstructFailsLoad() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<DoubleConstructLoader<Texture>>());
-    assert(!server.load<Texture>("a.tex"));
-    assert(g_log == std::vector<std::string>{ "~Texture a.tex" });
-    assert(textures.empty());
+    CHECK(!server.load<Texture>("a.tex"));
+    CHECK_EQ(g_log, std::vector<std::string>{ "~Texture a.tex" });
+    CHECK(textures.empty());
 }
 
 void testFailedLoadIsRetried() {
@@ -611,9 +611,9 @@ void testFailedLoadIsRetried() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<CountingNoConstructLoader>(&calls));
-    assert(!server.load<Texture>("a.tex"));
-    assert(!server.load<Texture>("a.tex"));
-    assert(calls == 2);
+    CHECK(!server.load<Texture>("a.tex"));
+    CHECK(!server.load<Texture>("a.tex"));
+    CHECK_EQ(calls, 2);
 }
 
 void testFailedDependencyDoesNotPropagate() {
@@ -627,12 +627,13 @@ void testFailedDependencyDoesNotPropagate() {
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
     {
         auto material = server.load<Material>("brick.mat");
-        assert(material && material->name == "brick.mat");
-        assert(!material->texture);
-        assert(textures.empty());
+        REQUIRE(material);
+        CHECK_EQ(material->name, "brick.mat");
+        CHECK(!material->texture);
+        CHECK(textures.empty());
     }
-    assert((g_log == std::vector<std::string>{ "~Texture brick.mat.tex", "~Material brick.mat" }));
-    assert(materials.empty());
+    CHECK((g_log == std::vector<std::string>{ "~Texture brick.mat.tex", "~Material brick.mat" }));
+    CHECK(materials.empty());
 }
 
 void testLoaderChosenByExtension() {
@@ -642,11 +643,11 @@ void testLoaderChosenByExtension() {
     server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("pack", std::vector<std::string_view>{ ".texpack" }));
     server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("raw", std::vector<std::string_view>{ ".png", ".JPG" }));
 
-    assert(server.load<Texture>("dir/rock.png.texpack")->name == "pack:dir/rock.png.texpack");
-    assert(server.load<Texture>("dir/rock.png")->name == "raw:dir/rock.png");
+    CHECK_EQ(server.load<Texture>("dir/rock.png.texpack")->name, "pack:dir/rock.png.texpack");
+    CHECK_EQ(server.load<Texture>("dir/rock.png")->name, "raw:dir/rock.png");
     // Extensions are compared case-insensitively.
-    assert(server.load<Texture>("dir/ROCK.PNG")->name == "raw:dir/ROCK.PNG");
-    assert(server.load<Texture>("dir/rock.jpg")->name == "raw:dir/rock.jpg");
+    CHECK_EQ(server.load<Texture>("dir/ROCK.PNG")->name, "raw:dir/ROCK.PNG");
+    CHECK_EQ(server.load<Texture>("dir/rock.jpg")->name, "raw:dir/rock.jpg");
 }
 
 void testUnknownExtensionThrows() {
@@ -655,15 +656,15 @@ void testUnknownExtensionThrows() {
     server.registerStorage(&textures);
     server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("raw", std::vector<std::string_view>{ ".png" }));
 
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock"); })));
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("rock"); })));
     // Only the file name's extension counts, not a dot in a folder name.
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("dir.png/rock"); })));
-    assert(textures.empty());
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("dir.png/rock"); })));
+    CHECK(textures.empty());
 
     // A key that is already in storage needs no loader.
     auto preloaded = textures.emplace("builtin://rock", "rock");
-    assert(server.load<Texture>("builtin://rock") == preloaded);
+    CHECK_EQ(server.load<Texture>("builtin://rock"), preloaded);
 }
 
 void testLoaderGetsReaderBytes() {
@@ -676,13 +677,13 @@ void testLoaderGetsReaderBytes() {
     server.registerLoader<Texture>(std::make_unique<BytesTextureLoader>(&calls));
 
     auto a = server.load<Texture>("dir/a.tex");
-    assert(a->name == "dir/a.tex");
-    assert(log.reads == std::vector<std::string>{ "dir/a.tex" });
+    CHECK_EQ(a->name, "dir/a.tex");
+    CHECK_EQ(log.reads, std::vector<std::string>{ "dir/a.tex" });
 
     // A live asset is not read again.
     auto again = server.load<Texture>("dir/a.tex");
-    assert(again == a);
-    assert(log.reads.size() == 1 && calls == 1);
+    CHECK_EQ(again, a);
+    CHECK(log.reads.size() == 1 && calls == 1);
 }
 
 void testReadFailureFailsLoad() {
@@ -695,10 +696,10 @@ void testReadFailureFailsLoad() {
     server.registerStorage(&textures);
     registerTextureLoader(server, &calls);
 
-    assert(!server.load<Texture>("gone.tex"));
-    assert(calls == 0);
-    assert(textures.empty());
-    assert(log.reads == std::vector<std::string>{ "gone.tex" });
+    CHECK(!server.load<Texture>("gone.tex"));
+    CHECK_EQ(calls, 0);
+    CHECK(textures.empty());
+    CHECK_EQ(log.reads, std::vector<std::string>{ "gone.tex" });
 }
 
 void testNothingReadWithoutLoaderOrForStoredAssets() {
@@ -708,10 +709,10 @@ void testNothingReadWithoutLoaderOrForStoredAssets() {
     AssetServer server { std::move(reader) };
     server.registerStorage(&textures);
 
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("a.tex"); })));
     auto preloaded = textures.emplace("builtin://rock", "rock");
-    assert(server.load<Texture>("builtin://rock") == preloaded);
-    assert(log.reads.empty());
+    CHECK_EQ(server.load<Texture>("builtin://rock"), preloaded);
+    CHECK(log.reads.empty());
 }
 
 void testAssetPathParse() {
@@ -738,14 +739,14 @@ void testReaderChosenBySource() {
 
     // The reader gets the path without its source; the asset keeps the whole key.
     auto engine = server.load<Texture>("engine:/textures/rock.tex");
-    assert(engine->name == "textures/rock.tex");
-    assert(textures.has("engine:/textures/rock.tex"));
+    CHECK_EQ(engine->name, "textures/rock.tex");
+    CHECK(textures.has("engine:/textures/rock.tex"));
     auto plain = server.load<Texture>("textures/rock.tex");
-    assert(plain->name == "textures/rock.tex");
-    assert(plain != engine);
+    CHECK_EQ(plain->name, "textures/rock.tex");
+    CHECK_NE(plain, engine);
 
-    assert(engineLog.reads == std::vector<std::string>{ "textures/rock.tex" });
-    assert(defaultLog.reads == std::vector<std::string>{ "textures/rock.tex" });
+    CHECK_EQ(engineLog.reads, std::vector<std::string>{ "textures/rock.tex" });
+    CHECK_EQ(defaultLog.reads, std::vector<std::string>{ "textures/rock.tex" });
 }
 
 void testDependencyKeepsSource() {
@@ -762,8 +763,8 @@ void testDependencyKeepsSource() {
     server.registerReader("engine", std::move(engineReader));
 
     auto brick = server.load<Material>("engine:/brick.mat");
-    assert(brick && brick->texture->name == "engine:/brick.mat.tex");
-    assert((engineLog.reads == std::vector<std::string>{ "brick.mat", "brick.mat.tex" }));
+    CHECK(brick && brick->texture->name == "engine:/brick.mat.tex");
+    CHECK((engineLog.reads == std::vector<std::string>{ "brick.mat", "brick.mat.tex" }));
 }
 
 void testUnknownSourceThrows() {
@@ -775,22 +776,22 @@ void testUnknownSourceThrows() {
     int calls = 0;
     registerTextureLoader(server, &calls);
 
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("engine:/rock.tex"); })));
-    assert(log.reads.empty() && calls == 0 && textures.empty());
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("engine:/rock.tex"); })));
+    CHECK(log.reads.empty() && calls == 0 && textures.empty());
 
     // A key already in storage needs no reader.
     auto preloaded = textures.emplace("engine:/rock.tex", "rock");
-    assert(server.load<Texture>("engine:/rock.tex") == preloaded);
+    CHECK_EQ(server.load<Texture>("engine:/rock.tex"), preloaded);
 }
 
 void testRegisterReaderValidates() {
     AssetServer server { std::make_unique<TestReader>() };
     server.registerReader("engine", std::make_unique<TestReader>());
-    assert((throws<std::invalid_argument>([&] { server.registerReader("engine", std::make_unique<TestReader>()); })));
-    assert((throws<std::invalid_argument>([&] { server.registerReader("", std::make_unique<TestReader>()); })));
-    assert((throws<std::invalid_argument>([&] { server.registerReader("a/b", std::make_unique<TestReader>()); })));
-    assert((throws<std::invalid_argument>([&] { server.registerReader("a:b", std::make_unique<TestReader>()); })));
-    assert((throws<std::invalid_argument>([&] { server.registerReader("game", nullptr); })));
+    CHECK((throws<std::invalid_argument>([&] { server.registerReader("engine", std::make_unique<TestReader>()); })));
+    CHECK((throws<std::invalid_argument>([&] { server.registerReader("", std::make_unique<TestReader>()); })));
+    CHECK((throws<std::invalid_argument>([&] { server.registerReader("a/b", std::make_unique<TestReader>()); })));
+    CHECK((throws<std::invalid_argument>([&] { server.registerReader("a:b", std::make_unique<TestReader>()); })));
+    CHECK((throws<std::invalid_argument>([&] { server.registerReader("game", nullptr); })));
 }
 
 void testLoaderExtensionsMustBeDisjoint() {
@@ -800,15 +801,15 @@ void testLoaderExtensionsMustBeDisjoint() {
     server.registerStorage(&textures);
     server.registerStorage(&materials);
     server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("a", std::vector<std::string_view>{ ".png" }));
-    assert((throws<std::invalid_argument>([&] {
+    CHECK((throws<std::invalid_argument>([&] {
         server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("b", std::vector<std::string_view>{ ".jpg", ".PNG" }));
     })));
-    assert((throws<std::invalid_argument>([&] {
+    CHECK((throws<std::invalid_argument>([&] {
         server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("c", std::vector<std::string_view>{}));
     })));
     // The rejected loader registered none of its extensions.
-    assert((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
-    assert(server.load<Texture>("rock.png")->name == "a:rock.png");
+    CHECK((throws<std::runtime_error>([&] { server.load<Texture>("rock.jpg"); })));
+    CHECK_EQ(server.load<Texture>("rock.png")->name, "a:rock.png");
 
     // Loaders of different asset types may share an extension.
     server.registerLoader<Material>(std::make_unique<MaterialLoader>());
@@ -818,49 +819,47 @@ void testLoaderExtensionsMustBeDisjoint() {
 }
 
 void runAssetServerTests() {
-    testAssetIndexDefaultIsInvalid();
+    ailo::test::run("asset_server/testAssetIndexDefaultIsInvalid", testAssetIndexDefaultIsInvalid);
 
-    testEmplaceAndGet();
-    testEmplaceDuplicateKeyThrows();
-    testEmplaceThrowingConstructorLeavesStorageClean();
-    testGetMissingKey();
-    testCopyMoveAndReset();
-    testSelfAssignment();
-    testSwap();
-    testAssigningOverLastReferenceDestroysOldAsset();
-    testNullPtr();
-    testStaleIndexResolvesToNothing();
-    testKeyCanBeReusedAfterRelease();
-    testDependentReleasesDependency();
-    testNestedSameTypeRelease();
-    testReportLeaks();
+    ailo::test::run("asset_server/testEmplaceAndGet", testEmplaceAndGet);
+    ailo::test::run("asset_server/testEmplaceDuplicateKeyThrows", testEmplaceDuplicateKeyThrows);
+    ailo::test::run("asset_server/testEmplaceThrowingConstructorLeavesStorageClean", testEmplaceThrowingConstructorLeavesStorageClean);
+    ailo::test::run("asset_server/testGetMissingKey", testGetMissingKey);
+    ailo::test::run("asset_server/testCopyMoveAndReset", testCopyMoveAndReset);
+    ailo::test::run("asset_server/testSelfAssignment", testSelfAssignment);
+    ailo::test::run("asset_server/testSwap", testSwap);
+    ailo::test::run("asset_server/testAssigningOverLastReferenceDestroysOldAsset", testAssigningOverLastReferenceDestroysOldAsset);
+    ailo::test::run("asset_server/testNullPtr", testNullPtr);
+    ailo::test::run("asset_server/testStaleIndexResolvesToNothing", testStaleIndexResolvesToNothing);
+    ailo::test::run("asset_server/testKeyCanBeReusedAfterRelease", testKeyCanBeReusedAfterRelease);
+    ailo::test::run("asset_server/testDependentReleasesDependency", testDependentReleasesDependency);
+    ailo::test::run("asset_server/testNestedSameTypeRelease", testNestedSameTypeRelease);
+    ailo::test::run("asset_server/testReportLeaks", testReportLeaks);
 
-    testServerLoad();
-    testServerLoadsDependencies();
-    testConstructReturnsAsset();
-    testLoaderWithDependencyAndSubAsset();
-    testServerReturnsAssetsAlreadyInStorage();
-    testServerWithoutStorageThrows();
-    testUnregisteredDependencyStorageFailsLoad();
-    testUnregisterStorage();
-    testServerWithoutLoaderThrows();
-    testRegisteringLoaderTwiceThrows();
-    testLoaderThatDoesNotConstructReturnsNull();
-    testLoaderThrowingAfterConstructDoesNotLeak();
-    testDoubleConstructFailsLoad();
-    testFailedLoadIsRetried();
-    testFailedDependencyDoesNotPropagate();
-    testLoaderChosenByExtension();
-    testUnknownExtensionThrows();
-    testLoaderExtensionsMustBeDisjoint();
-    testLoaderGetsReaderBytes();
-    testReadFailureFailsLoad();
-    testNothingReadWithoutLoaderOrForStoredAssets();
-    testAssetPathParse();
-    testReaderChosenBySource();
-    testDependencyKeepsSource();
-    testUnknownSourceThrows();
-    testRegisterReaderValidates();
-
-    std::cout << "All asset server tests passed" << std::endl;
+    ailo::test::run("asset_server/testServerLoad", testServerLoad);
+    ailo::test::run("asset_server/testServerLoadsDependencies", testServerLoadsDependencies);
+    ailo::test::run("asset_server/testConstructReturnsAsset", testConstructReturnsAsset);
+    ailo::test::run("asset_server/testLoaderWithDependencyAndSubAsset", testLoaderWithDependencyAndSubAsset);
+    ailo::test::run("asset_server/testServerReturnsAssetsAlreadyInStorage", testServerReturnsAssetsAlreadyInStorage);
+    ailo::test::run("asset_server/testServerWithoutStorageThrows", testServerWithoutStorageThrows);
+    ailo::test::run("asset_server/testUnregisteredDependencyStorageFailsLoad", testUnregisteredDependencyStorageFailsLoad);
+    ailo::test::run("asset_server/testUnregisterStorage", testUnregisterStorage);
+    ailo::test::run("asset_server/testServerWithoutLoaderThrows", testServerWithoutLoaderThrows);
+    ailo::test::run("asset_server/testRegisteringLoaderTwiceThrows", testRegisteringLoaderTwiceThrows);
+    ailo::test::run("asset_server/testLoaderThatDoesNotConstructReturnsNull", testLoaderThatDoesNotConstructReturnsNull);
+    ailo::test::run("asset_server/testLoaderThrowingAfterConstructDoesNotLeak", testLoaderThrowingAfterConstructDoesNotLeak);
+    ailo::test::run("asset_server/testDoubleConstructFailsLoad", testDoubleConstructFailsLoad);
+    ailo::test::run("asset_server/testFailedLoadIsRetried", testFailedLoadIsRetried);
+    ailo::test::run("asset_server/testFailedDependencyDoesNotPropagate", testFailedDependencyDoesNotPropagate);
+    ailo::test::run("asset_server/testLoaderChosenByExtension", testLoaderChosenByExtension);
+    ailo::test::run("asset_server/testUnknownExtensionThrows", testUnknownExtensionThrows);
+    ailo::test::run("asset_server/testLoaderExtensionsMustBeDisjoint", testLoaderExtensionsMustBeDisjoint);
+    ailo::test::run("asset_server/testLoaderGetsReaderBytes", testLoaderGetsReaderBytes);
+    ailo::test::run("asset_server/testReadFailureFailsLoad", testReadFailureFailsLoad);
+    ailo::test::run("asset_server/testNothingReadWithoutLoaderOrForStoredAssets", testNothingReadWithoutLoaderOrForStoredAssets);
+    ailo::test::run("asset_server/testAssetPathParse", testAssetPathParse);
+    ailo::test::run("asset_server/testReaderChosenBySource", testReaderChosenBySource);
+    ailo::test::run("asset_server/testDependencyKeepsSource", testDependencyKeepsSource);
+    ailo::test::run("asset_server/testUnknownSourceThrows", testUnknownSourceThrows);
+    ailo::test::run("asset_server/testRegisterReaderValidates", testRegisterReaderValidates);
 }

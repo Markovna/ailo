@@ -2,6 +2,7 @@
 #include "physics/PhysicsMath.h"
 #include "physics/PhysicsPlugin.h"
 #include "physics/PhysicsWorld.h"
+#include "Testing.h"
 
 #include <Jolt/Jolt.h>
 
@@ -13,7 +14,6 @@
 #include <Jolt/Physics/PhysicsSystem.h>
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <iostream>
 #include <optional>
@@ -59,19 +59,19 @@ glm::vec3 position(JPH::BodyInterface& bodies, JPH::BodyID id) {
 
 void testConversions() {
     const glm::vec3 v(1.0f, -2.0f, 3.5f);
-    assert(near(physics::toGlm(physics::toJolt(v)), v));
-    assert(near(physics::toGlm(physics::toJoltR(v)), v));
+    CHECK(near(physics::toGlm(physics::toJolt(v)), v));
+    CHECK(near(physics::toGlm(physics::toJoltR(v)), v));
 
     // Component order differs: glm::quat is (w, x, y, z), JPH::Quat is (x, y, z, w).
     const glm::quat q = glm::angleAxis(0.7f, glm::normalize(glm::vec3(1.0f, 2.0f, -0.5f)));
     const JPH::Quat jq = physics::toJolt(q);
-    assert(near(jq.GetX(), q.x) && near(jq.GetY(), q.y) && near(jq.GetZ(), q.z) && near(jq.GetW(), q.w));
+    CHECK(near(jq.GetX(), q.x) && near(jq.GetY(), q.y) && near(jq.GetZ(), q.z) && near(jq.GetW(), q.w));
 
     // Both libraries must rotate a vector the same way.
-    assert(near(physics::toGlm(jq * physics::toJolt(v)), q * v, 1e-4f));
+    CHECK(near(physics::toGlm(jq * physics::toJolt(v)), q * v, 1e-4f));
 
     const glm::quat back = physics::toGlm(jq);
-    assert(near(back.w, q.w) && near(back.x, q.x) && near(back.y, q.y) && near(back.z, q.z));
+    CHECK(near(back.w, q.w) && near(back.x, q.x) && near(back.y, q.y) && near(back.z, q.z));
 }
 
 void testSphereRestsOnFloor() {
@@ -95,21 +95,21 @@ void testSphereRestsOnFloor() {
     const glm::vec3 rest = position(bodies, sphere);
     std::cout << "sphere at rest after " << steps << " steps, y = " << rest.y << std::endl;
 
-    assert(!bodies.IsActive(sphere) && "sphere never went to sleep");
+    CHECK(!bodies.IsActive(sphere) && "sphere never went to sleep");
     // Resting contacts are allowed to sink up to the penetration slop.
     const float slop = world.system().GetPhysicsSettings().mPenetrationSlop;
-    assert(near(rest.y, kRadius, slop + 1e-3f));
-    assert(near(rest.x, 0.0f, 1e-3f) && near(rest.z, 0.0f, 1e-3f));
-    assert(lowestY > 0.0f && "sphere tunneled into the floor");
+    CHECK_NEAR(rest.y, kRadius, slop + 1e-3f);
+    CHECK(near(rest.x, 0.0f, 1e-3f) && near(rest.z, 0.0f, 1e-3f));
+    CHECK(lowestY > 0.0f && "sphere tunneled into the floor");
 
-    assert(world.stats().numBodies == 2);
-    assert(world.stats().numActiveBodies == 0);
+    CHECK_EQ(world.stats().numBodies, 2);
+    CHECK_EQ(world.stats().numActiveBodies, 0);
 
     bodies.RemoveBody(sphere);
     bodies.DestroyBody(sphere);
     bodies.RemoveBody(floor);
     bodies.DestroyBody(floor);
-    assert(world.system().GetNumBodies() == 0);
+    CHECK_EQ(world.system().GetNumBodies(), 0);
 }
 
 // A world that simulates a falling sphere for a few steps: needs the registered collision dispatch.
@@ -120,7 +120,7 @@ void simulateCollision(PhysicsWorld& world) {
     for (int i = 0; i < 30; i++) {
         world.step(kStep);
     }
-    assert(position(bodies, sphere).y > 0.4f && "contact did not push the sphere out");
+    CHECK(position(bodies, sphere).y > 0.4f && "contact did not push the sphere out");
     bodies.RemoveBody(sphere);
     bodies.DestroyBody(sphere);
     bodies.RemoveBody(floor);
@@ -140,19 +140,19 @@ void testRuntimeIsRefCounted() {
 
 void testGravity() {
     PhysicsWorld world(PhysicsSettings { .gravity = { 0.0f, 0.0f, 0.0f } });
-    assert(near(world.gravity(), glm::vec3(0.0f)));
+    CHECK(near(world.gravity(), glm::vec3(0.0f)));
 
     auto& bodies = world.bodiesNoLock();
     const JPH::BodyID sphere = addSphere(bodies, { 0.0f, 10.0f, 0.0f }, 0.5f);
     for (int i = 0; i < 10; i++) {
         world.step(kStep);
     }
-    assert(near(position(bodies, sphere), { 0.0f, 10.0f, 0.0f }));
+    CHECK(near(position(bodies, sphere), { 0.0f, 10.0f, 0.0f }));
 
     world.setGravity({ 2.0f, 0.0f, 0.0f });
-    assert(near(world.gravity(), { 2.0f, 0.0f, 0.0f }));
+    CHECK(near(world.gravity(), { 2.0f, 0.0f, 0.0f }));
     world.step(kStep);
-    assert(position(bodies, sphere).x > 0.0f);
+    CHECK(position(bodies, sphere).x > 0.0f);
 
     bodies.RemoveBody(sphere);
     bodies.DestroyBody(sphere);
@@ -182,9 +182,9 @@ void testPluginStepsOncePerFixedTick() {
 
     // 2 frames x 2.25 steps: 2 steps per frame, 0.5 steps left over.
     // (Not 2.5: the second frame would end exactly on a step boundary and float rounding decides the count.)
-    assert(fixedTicks == 4);
+    CHECK_EQ(fixedTicks, 4);
     const float expected = -9.81f * 4.0f * kStep;   // undamped free fall: v = g * t
-    assert(near(velocity.y, expected, 1e-3f));
+    CHECK_NEAR(velocity.y, expected, 1e-3f);
 
     app.resource<PhysicsWorld>().bodiesNoLock().RemoveBody(sphere);
     app.resource<PhysicsWorld>().bodiesNoLock().DestroyBody(sphere);
@@ -244,22 +244,22 @@ const RigidBody kFloating { .linearDamping = 0.0f, .angularDamping = 0.0f, .grav
 void testBodiesAreCreatedOnNextStep() {
     Fixture f;
     const entt::entity e = f.spawn({}, {}, {});
-    assert(!f.reg.all_of<PhysicsBody>(e));
+    CHECK(!f.reg.all_of<PhysicsBody>(e));
 
     f.tick();
-    assert(f.reg.all_of<PhysicsBody>(e));
+    REQUIRE(f.reg.all_of<PhysicsBody>(e));
     const PhysicsBody& body = f.reg.get<PhysicsBody>(e);
-    assert(!body.id.IsInvalid());
-    assert(physics::entityOf(f.world, body.id) == e);
-    assert(f.numBodies() == 1);
+    CHECK(!body.id.IsInvalid());
+    CHECK_EQ(physics::entityOf(f.world, body.id), e);
+    CHECK_EQ(f.numBodies(), 1);
 
     // Entities missing a Collider are not bodies.
     const entt::entity noCollider = f.reg.create();
     f.reg.emplace<TransformComponent>(noCollider);
     f.reg.emplace<RigidBody>(noCollider);
     f.tick();
-    assert(!f.reg.all_of<PhysicsBody>(noCollider));
-    assert(f.numBodies() == 1);
+    CHECK(!f.reg.all_of<PhysicsBody>(noCollider));
+    CHECK_EQ(f.numBodies(), 1);
 }
 
 void testBoxFallsAndRestsOnFloor() {
@@ -267,11 +267,11 @@ void testBoxFallsAndRestsOnFloor() {
     f.spawnFloor();
     const entt::entity box = f.spawn(Transform { .position = { 0.0f, 3.0f, 0.0f } }, {},
                                      Collider { .shape = BoxShape { .halfExtents = glm::vec3(0.5f) } });
-    assert(f.settle(box));
+    CHECK(f.settle(box));
 
     // Written back to the ECS, resting on the floor.
-    assert(near(f.pose(box).position.y, 0.5f, f.slop() + 1e-3f));
-    assert(near(f.pose(box).position, f.bodyPosition(box), 1e-4f));
+    CHECK_NEAR(f.pose(box).position.y, 0.5f, f.slop() + 1e-3f);
+    CHECK(near(f.pose(box).position, f.bodyPosition(box), 1e-4f));
 }
 
 void testChildrenFollowBody() {
@@ -283,10 +283,10 @@ void testChildrenFollowBody() {
     f.reg.emplace<TransformComponent>(child, Transform { .position = { 0.0f, 1.0f, 0.0f } });
     hierarchy::setParent(f.reg, child, root, hierarchy::Keep::Local);
 
-    assert(f.settle(root));
+    CHECK(f.settle(root));
     const Transform& r = f.pose(root);
-    assert(r.position.y < 1.0f);
-    assert(near(f.pose(child).position, r.position + r.rotation * glm::vec3(0.0f, 1.0f, 0.0f), 1e-4f));
+    CHECK(r.position.y < 1.0f);
+    CHECK(near(f.pose(child).position, r.position + r.rotation * glm::vec3(0.0f, 1.0f, 0.0f), 1e-4f));
 }
 
 void testRemovingComponentsRemovesBody() {
@@ -295,27 +295,27 @@ void testRemovingComponentsRemovesBody() {
     const entt::entity b = f.spawn({}, kFloating, {});
     const entt::entity c = f.spawn({}, kFloating, {});
     f.tick();
-    assert(f.numBodies() == 3);
+    CHECK_EQ(f.numBodies(), 3);
 
     f.reg.destroy(a);
-    assert(f.numBodies() == 2);
+    CHECK_EQ(f.numBodies(), 2);
 
     f.reg.remove<RigidBody>(b);
-    assert(!f.reg.all_of<PhysicsBody>(b));
-    assert(f.numBodies() == 1);
+    CHECK(!f.reg.all_of<PhysicsBody>(b));
+    CHECK_EQ(f.numBodies(), 1);
     f.tick();
-    assert(!f.reg.all_of<PhysicsBody>(b));   // not recreated without a RigidBody
+    CHECK(!f.reg.all_of<PhysicsBody>(b));   // not recreated without a RigidBody
 
     f.reg.emplace<RigidBody>(b, kFloating);  // and back
     f.tick();
-    assert(f.reg.all_of<PhysicsBody>(b));
-    assert(f.numBodies() == 2);
+    CHECK(f.reg.all_of<PhysicsBody>(b));
+    CHECK_EQ(f.numBodies(), 2);
 
     f.reg.remove<Collider>(c);
-    assert(f.numBodies() == 1);
+    CHECK_EQ(f.numBodies(), 1);
 
     f.reg.clear();
-    assert(f.numBodies() == 0);
+    CHECK_EQ(f.numBodies(), 0);
 }
 
 void testPatchRebuildsBody() {
@@ -323,18 +323,18 @@ void testPatchRebuildsBody() {
     const entt::entity e = f.spawn(Transform { .position = { 0.0f, 10.0f, 0.0f } }, {}, {});
     f.tick(10);
     const float y = f.pose(e).position.y;
-    assert(y < 10.0f);
+    CHECK(y < 10.0f);
 
     f.reg.patch<RigidBody>(e, [](RigidBody& rb) { rb.motionType = MotionType::Static; });
-    assert(!f.reg.all_of<PhysicsBody>(e));
+    CHECK(!f.reg.all_of<PhysicsBody>(e));
     f.tick(10);
-    assert(f.reg.get<PhysicsBody>(e).motionType == MotionType::Static);
-    assert(f.pose(e).position.y == y);   // static now: stays where it was
-    assert(f.numBodies() == 1);
+    CHECK_EQ(f.reg.get<PhysicsBody>(e).motionType, MotionType::Static);
+    CHECK_EQ(f.pose(e).position.y, y);   // static now: stays where it was
+    CHECK_EQ(f.numBodies(), 1);
 
     f.reg.patch<Collider>(e, [](Collider& c) { c.shape = SphereShape { .radius = 2.0f }; });
     f.tick();
-    assert(f.numBodies() == 1);
+    CHECK_EQ(f.numBodies(), 1);
 }
 
 void testKinematicFollowsTransform() {
@@ -344,13 +344,13 @@ void testKinematicFollowsTransform() {
 
     hierarchy::setWorld(f.reg, e, Transform { .position = { 3.0f, 0.0f, 0.0f } });
     f.tick();
-    assert(near(f.bodyPosition(e), { 3.0f, 0.0f, 0.0f }, 1e-4f));
+    CHECK(near(f.bodyPosition(e), { 3.0f, 0.0f, 0.0f }, 1e-4f));
     // It moved with a velocity (so it pushes dynamic bodies), and stops once the target stops changing.
     f.tick();
     const JPH::BodyID id = f.reg.get<PhysicsBody>(e).id;
-    assert(f.world.bodiesNoLock().GetLinearVelocity(id).IsNearZero());
+    CHECK(f.world.bodiesNoLock().GetLinearVelocity(id).IsNearZero());
     // The ECS transform stays the source of truth.
-    assert(f.pose(e).position == glm::vec3(3.0f, 0.0f, 0.0f));
+    CHECK_EQ(f.pose(e).position, glm::vec3(3.0f, 0.0f, 0.0f));
 }
 
 void testKinematicPushesDynamic() {
@@ -364,7 +364,7 @@ void testKinematicPushesDynamic() {
         hierarchy::setWorld(f.reg, pusher, Transform { .position = { -2.0f + 0.05f * i, 0.0f, 0.0f } });
         f.tick();
     }
-    assert(f.pose(ball).position.x > 1.0f);
+    CHECK(f.pose(ball).position.x > 1.0f);
 }
 
 void testTeleport() {
@@ -374,15 +374,15 @@ void testTeleport() {
 
     hierarchy::setWorld(f.reg, e, Transform { .position = { 5.0f, 5.0f, 5.0f } });
     f.tick();
-    assert(near(f.bodyPosition(e), { 5.0f, 5.0f, 5.0f }, 1e-4f));
-    assert(near(f.pose(e).position, { 5.0f, 5.0f, 5.0f }, 1e-4f));
+    CHECK(near(f.bodyPosition(e), { 5.0f, 5.0f, 5.0f }, 1e-4f));
+    CHECK(near(f.pose(e).position, { 5.0f, 5.0f, 5.0f }, 1e-4f));
 
     // Static bodies move too (rarely needed: it is expensive for the broad phase).
     const entt::entity wall = f.spawn({}, RigidBody { .motionType = MotionType::Static }, {});
     f.tick();
     hierarchy::setWorld(f.reg, wall, Transform { .position = { 0.0f, 0.0f, 9.0f } });
     f.tick();
-    assert(near(f.bodyPosition(wall), { 0.0f, 0.0f, 9.0f }, 1e-4f));
+    CHECK(near(f.bodyPosition(wall), { 0.0f, 0.0f, 9.0f }, 1e-4f));
 }
 
 void testInterpolation() {
@@ -393,15 +393,15 @@ void testInterpolation() {
 
     f.tick();   // x: 0 -> 1
     physics::interpolate(f.reg, 0.25f);
-    assert(near(f.pose(e).position.x, 0.25f, 1e-4f));
+    CHECK_NEAR(f.pose(e).position.x, 0.25f, 1e-4f);
     physics::interpolate(f.reg, 0.75f);
-    assert(near(f.pose(e).position.x, 0.75f, 1e-4f));
+    CHECK_NEAR(f.pose(e).position.x, 0.75f, 1e-4f);
 
     // Writing the interpolated pose is not mistaken for a teleport.
     f.tick();   // x: 1 -> 2
-    assert(near(f.pose(e).position.x, 2.0f, 1e-4f));
+    CHECK_NEAR(f.pose(e).position.x, 2.0f, 1e-4f);
     physics::interpolate(f.reg, 0.5f);
-    assert(near(f.pose(e).position.x, 1.5f, 1e-4f));
+    CHECK_NEAR(f.pose(e).position.x, 1.5f, 1e-4f);
 }
 
 void testScale() {
@@ -409,23 +409,23 @@ void testScale() {
     f.spawnFloor();
     const entt::entity e = f.spawn(Transform { .position = { 0.0f, 3.0f, 0.0f }, .scale = glm::vec3(2.0f) }, {},
                                    Collider { .shape = SphereShape { .radius = 0.5f } });
-    assert(f.settle(e));
-    assert(near(f.pose(e).position.y, 1.0f, f.slop() + 1e-3f));   // radius 0.5 at scale 2
+    CHECK(f.settle(e));
+    CHECK_NEAR(f.pose(e).position.y, 1.0f, f.slop() + 1e-3f);   // radius 0.5 at scale 2
 
     // A changed scale rebuilds the shape.
     Transform bigger = f.pose(e);
     bigger.scale = glm::vec3(4.0f);
     bigger.position.y = 3.0f;
     hierarchy::setWorld(f.reg, e, bigger);
-    assert(f.settle(e));
-    assert(near(f.pose(e).position.y, 2.0f, f.slop() + 1e-3f));
+    CHECK(f.settle(e));
+    CHECK_NEAR(f.pose(e).position.y, 2.0f, f.slop() + 1e-3f);
 
     // Offsets are scaled with the shape: at scale 2 a sphere 1 unit above the origin sits 2 units above it,
     // so resting on the floor (radius 1) puts the origin at y = 1 - 2 = -1.
     const entt::entity offset = f.spawn(Transform { .position = { 10.0f, 5.0f, 0.0f }, .scale = glm::vec3(2.0f) }, {},
                                         Collider { .shape = SphereShape { .radius = 0.5f }, .offset = { 0.0f, 1.0f, 0.0f } });
-    assert(f.settle(offset));
-    assert(near(f.pose(offset).position.y, -1.0f, f.slop() + 1e-3f));
+    CHECK(f.settle(offset));
+    CHECK_NEAR(f.pose(offset).position.y, -1.0f, f.slop() + 1e-3f);
 }
 
 void testInvalidColliderIsSkipped() {
@@ -435,16 +435,16 @@ void testInvalidColliderIsSkipped() {
     f.tick(3);
 
     // A PhysicsBody without a body, so the error is reported once instead of every step.
-    assert(f.reg.get<PhysicsBody>(flat).id.IsInvalid());
-    assert(f.reg.get<PhysicsBody>(point).id.IsInvalid());
-    assert(f.numBodies() == 0);
+    CHECK(f.reg.get<PhysicsBody>(flat).id.IsInvalid());
+    CHECK(f.reg.get<PhysicsBody>(point).id.IsInvalid());
+    CHECK_EQ(f.numBodies(), 0);
 
     // Fixing the collider retries.
     f.reg.patch<Collider>(flat, [](Collider& c) { c.shape = BoxShape { .halfExtents = glm::vec3(1.0f) }; });
     f.tick();
-    assert(!f.reg.get<PhysicsBody>(flat).id.IsInvalid());
+    CHECK(!f.reg.get<PhysicsBody>(flat).id.IsInvalid());
     f.reg.destroy(point);   // destroying a body-less PhysicsBody is fine
-    assert(f.numBodies() == 1);
+    CHECK_EQ(f.numBodies(), 1);
 }
 
 void testMassOverride() {
@@ -457,8 +457,8 @@ void testMassOverride() {
         JPH::BodyLockRead lock(f.world.system().GetBodyLockInterfaceNoLock(), f.reg.get<PhysicsBody>(entity).id);
         return lock.GetBody().GetMotionProperties()->GetInverseMass();
     };
-    assert(near(inverseMass(heavy), 1.0f / 50.0f));
-    assert(near(inverseMass(defaultMass), 1.0f / 1000.0f, 1e-6f));   // 1 m^3 at the default density
+    CHECK_NEAR(inverseMass(heavy), 1.0f / 50.0f, 1e-5f);
+    CHECK_NEAR(inverseMass(defaultMass), 1.0f / 1000.0f, 1e-6f);   // 1 m^3 at the default density
 }
 
 // Through the real plugin: bodies are created, simulated and written back as the App runs.
@@ -488,35 +488,33 @@ void testPluginSimulatesEntities() {
        });
     app.run();
 
-    assert(frames < 1000 && "box never came to rest");
+    CHECK(frames < 1000 && "box never came to rest");
     const float y = app.world().scene().get<TransformComponent>(box).world().position.y;
     const float slop = app.resource<PhysicsWorld>().system().GetPhysicsSettings().mPenetrationSlop;
-    assert(near(y, 0.5f, slop + 1e-3f));
+    CHECK_NEAR(y, 0.5f, slop + 1e-3f);
     // The App tears down with live bodies: the hooks remove them while clearing the scene.
 }
 
 }
 
 void runPhysicsTests() {
-    testConversions();
-    testSphereRestsOnFloor();
-    testRuntimeIsRefCounted();
-    testGravity();
-    testPluginStepsOncePerFixedTick();
+    ailo::test::run("physics/testConversions", testConversions);
+    ailo::test::run("physics/testSphereRestsOnFloor", testSphereRestsOnFloor);
+    ailo::test::run("physics/testRuntimeIsRefCounted", testRuntimeIsRefCounted);
+    ailo::test::run("physics/testGravity", testGravity);
+    ailo::test::run("physics/testPluginStepsOncePerFixedTick", testPluginStepsOncePerFixedTick);
 
-    testBodiesAreCreatedOnNextStep();
-    testBoxFallsAndRestsOnFloor();
-    testChildrenFollowBody();
-    testRemovingComponentsRemovesBody();
-    testPatchRebuildsBody();
-    testKinematicFollowsTransform();
-    testKinematicPushesDynamic();
-    testTeleport();
-    testInterpolation();
-    testScale();
-    testInvalidColliderIsSkipped();
-    testMassOverride();
-    testPluginSimulatesEntities();
-
-    std::cout << "physicstest: all passed\n";
+    ailo::test::run("physics/testBodiesAreCreatedOnNextStep", testBodiesAreCreatedOnNextStep);
+    ailo::test::run("physics/testBoxFallsAndRestsOnFloor", testBoxFallsAndRestsOnFloor);
+    ailo::test::run("physics/testChildrenFollowBody", testChildrenFollowBody);
+    ailo::test::run("physics/testRemovingComponentsRemovesBody", testRemovingComponentsRemovesBody);
+    ailo::test::run("physics/testPatchRebuildsBody", testPatchRebuildsBody);
+    ailo::test::run("physics/testKinematicFollowsTransform", testKinematicFollowsTransform);
+    ailo::test::run("physics/testKinematicPushesDynamic", testKinematicPushesDynamic);
+    ailo::test::run("physics/testTeleport", testTeleport);
+    ailo::test::run("physics/testInterpolation", testInterpolation);
+    ailo::test::run("physics/testScale", testScale);
+    ailo::test::run("physics/testInvalidColliderIsSkipped", testInvalidColliderIsSkipped);
+    ailo::test::run("physics/testMassOverride", testMassOverride);
+    ailo::test::run("physics/testPluginSimulatesEntities", testPluginSimulatesEntities);
 }

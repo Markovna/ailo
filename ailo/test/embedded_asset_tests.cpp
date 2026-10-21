@@ -1,9 +1,9 @@
 #include "assets/AssetServer.h"
 #include "assets/MemoryAssetReader.h"
+#include "Testing.h"
 
 #include "embedded/test_assets.h"
 
-#include <cassert>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -53,25 +53,25 @@ MemoryAssetReader testReader() {
 void testPackageIsAligned() {
     using namespace embedded::test_assets;
     for (const auto data : { kHello, kNestedWorld, kMaterialsUnlit }) {
-        assert(reinterpret_cast<std::uintptr_t>(data.data()) % 16 == 0);
-        assert(data.data() >= kPackage.data() && data.data() + data.size() <= kPackage.data() + kPackage.size());
+        CHECK_EQ(reinterpret_cast<std::uintptr_t>(data.data()) % 16, 0);
+        CHECK(data.data() >= kPackage.data() && data.data() + data.size() <= kPackage.data() + kPackage.size());
     }
-    assert(text(kHello) == "hello");
+    CHECK_EQ(text(kHello), "hello");
 }
 
 void testCompiledAssetIsEmbedded() {
     const auto reader = testReader();
     const auto material = reader.find("materials/unlit.matpack");
-    assert(material && text(*material).starts_with("AMAT"));
+    CHECK(material && text(*material).starts_with("AMAT"));
     // Only the listed keys are found.
-    assert(!reader.find("materials/unlit.mat"));
-    assert(!reader.find("unlisted.txt"));
+    CHECK(!reader.find("materials/unlit.mat"));
+    CHECK(!reader.find("unlisted.txt"));
 }
 
 void testReadCopiesBytes() {
     auto reader = testReader();
     const auto bytes = reader.read("nested/world.txt");
-    assert(std::string(bytes.begin(), bytes.end()) == "world");
+    CHECK_EQ(std::string(bytes.begin(), bytes.end()), "world");
 
     bool threw = false;
     try {
@@ -80,7 +80,7 @@ void testReadCopiesBytes() {
     catch (const std::runtime_error&) {
         threw = true;
     }
-    assert(threw);
+    CHECK(threw);
 }
 
 void testFindOnHandWrittenList() {
@@ -88,20 +88,20 @@ void testFindOnHandWrittenList() {
     static constexpr std::uint8_t kB[] = { 'b' };
     // Unsorted: the reader sorts its copy.
     MemoryAssetReader reader { { "b/c", kB }, { "a", kA } };
-    assert(reader.find("a")->data() == kA);
-    assert(reader.find("b/c")->data() == kB);
-    assert(!reader.find(""));
-    assert(!reader.find("b"));
-    assert(!reader.find("c"));
+    CHECK_EQ(reader.find("a")->data(), kA);
+    CHECK_EQ(reader.find("b/c")->data(), kB);
+    CHECK(!reader.find(""));
+    CHECK(!reader.find("b"));
+    CHECK(!reader.find("c"));
 
     // Keys are copied, so they may be temporaries.
     std::string key = "temp";
     MemoryAssetReader copied { { key, kA } };
     key = "gone";
-    assert(copied.find("temp"));
+    CHECK(copied.find("temp"));
 
     MemoryAssetReader empty { std::span<const MemoryAssetReader::Asset>{} };
-    assert(!empty.find("a"));
+    CHECK(!empty.find("a"));
 
     bool threw = false;
     try {
@@ -110,7 +110,7 @@ void testFindOnHandWrittenList() {
     catch (const std::invalid_argument&) {
         threw = true;
     }
-    assert(threw);
+    CHECK(threw);
 }
 
 void testServerLoadsFromEmbeddedSource() {
@@ -122,23 +122,21 @@ void testServerLoadsFromEmbeddedSource() {
         server.registerReader("embedded", std::make_unique<MemoryAssetReader>(testReader()));
 
         auto hello = server.load<Text>("embedded:/hello.txt");
-        assert(hello && hello->value == "hello");
-        assert(texts.has("embedded:/hello.txt"));
+        CHECK(hello && hello->value == "hello");
+        CHECK(texts.has("embedded:/hello.txt"));
         auto world = server.load<Text>("embedded:/nested/world.txt");
-        assert(world && world->value == "world");
+        CHECK(world && world->value == "world");
         // A failed read logs and returns null.
-        assert(!server.load<Text>("embedded:/missing.txt"));
+        CHECK(!server.load<Text>("embedded:/missing.txt"));
     }
 }
 
 }
 
 void runEmbeddedAssetTests() {
-    testPackageIsAligned();
-    testCompiledAssetIsEmbedded();
-    testReadCopiesBytes();
-    testFindOnHandWrittenList();
-    testServerLoadsFromEmbeddedSource();
-
-    std::cout << "All embedded asset tests passed" << std::endl;
+    ailo::test::run("embedded_asset/testPackageIsAligned", testPackageIsAligned);
+    ailo::test::run("embedded_asset/testCompiledAssetIsEmbedded", testCompiledAssetIsEmbedded);
+    ailo::test::run("embedded_asset/testReadCopiesBytes", testReadCopiesBytes);
+    ailo::test::run("embedded_asset/testFindOnHandWrittenList", testFindOnHandWrittenList);
+    ailo::test::run("embedded_asset/testServerLoadsFromEmbeddedSource", testServerLoadsFromEmbeddedSource);
 }

@@ -1,6 +1,6 @@
 #include "render/model/ModelPackage.h"
+#include "Testing.h"
 
-#include <cassert>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -89,68 +89,71 @@ std::optional<ModelPackage> roundTrip(const ModelPackage& pkg, std::string& erro
 
 void testRoundTrip() {
     ModelPackage pkg = makePackage();
-    assert(pkg.validate().empty());
+    CHECK(pkg.validate().empty());
 
     std::string error;
     auto out = roundTrip(pkg, error);
-    assert(out && error.empty());
+    REQUIRE(out && error.empty());
 
-    assert(out->meshes.size() == 2);
-    assert(out->meshes[0].layout == VertexLayout::Static);
-    assert(out->meshes[0].vertexCount == 4);
-    assert(out->meshes[0].vertices == pkg.meshes[0].vertices);
-    assert(out->meshes[0].indices == pkg.meshes[0].indices);
-    assert(out->meshes[1].layout == VertexLayout::Skinned);
-    assert(out->meshes[1].vertices == pkg.meshes[1].vertices);
+    REQUIRE_EQ(out->meshes.size(), 2);
+    CHECK_EQ(out->meshes[0].layout, VertexLayout::Static);
+    CHECK_EQ(out->meshes[0].vertexCount, 4);
+    CHECK_EQ(out->meshes[0].vertices, pkg.meshes[0].vertices);
+    CHECK_EQ(out->meshes[0].indices, pkg.meshes[0].indices);
+    CHECK_EQ(out->meshes[1].layout, VertexLayout::Skinned);
+    CHECK_EQ(out->meshes[1].vertices, pkg.meshes[1].vertices);
 
-    assert(out->materials.size() == 2);
+    REQUIRE_EQ(out->materials.size(), 2);
     const auto& lit = out->materials[0];
-    assert(lit.name == "Stone" && lit.material == "assets/materials/lit.matpack");
-    assert(lit.floats.size() == 2);
-    assert(lit.floats[0].name == "baseColorFactor" && lit.floats[0].components == 4);
-    assert(lit.floats[0].value[1] == 0.25f);
-    assert(lit.floats[1].components == 1 && lit.floats[1].value[0] == 0.75f);
-    assert(lit.textures.size() == 3);
-    assert(lit.textures[0].texture.source == TextureSource::Uri && lit.textures[0].texture.path == "textures/stone.png");
-    assert(lit.textures[1].texture.source == TextureSource::Embedded && lit.textures[1].texture.embeddedIndex == 0);
-    assert(lit.textures[2].texture.source == TextureSource::Key);
-    assert(out->materials[1].floats.empty() && out->materials[1].textures.empty());
+    CHECK(lit.name == "Stone" && lit.material == "assets/materials/lit.matpack");
+    REQUIRE_EQ(lit.floats.size(), 2);
+    CHECK(lit.floats[0].name == "baseColorFactor" && lit.floats[0].components == 4);
+    CHECK_EQ(lit.floats[0].value[1], 0.25f);
+    CHECK(lit.floats[1].components == 1 && lit.floats[1].value[0] == 0.75f);
+    REQUIRE_EQ(lit.textures.size(), 3);
+    CHECK(lit.textures[0].texture.source == TextureSource::Uri && lit.textures[0].texture.path == "textures/stone.png");
+    CHECK(lit.textures[1].texture.source == TextureSource::Embedded && lit.textures[1].texture.embeddedIndex == 0);
+    CHECK_EQ(lit.textures[2].texture.source, TextureSource::Key);
+    CHECK(out->materials[1].floats.empty() && out->materials[1].textures.empty());
 
-    assert(out->instances.size() == 2);
-    assert(out->instances[1].mesh == 1 && out->instances[1].material == 1);
-    assert(out->instances[1].transform == glm::mat4(2.0f));
+    REQUIRE_EQ(out->instances.size(), 2);
+    CHECK(out->instances[1].mesh == 1 && out->instances[1].material == 1);
+    CHECK_EQ(out->instances[1].transform, glm::mat4(2.0f));
 
-    assert(out->skeleton.size() == 3);
-    assert(out->skeleton[1].name == "Hips" && out->skeleton[1].parent == 0);
-    assert(out->skeleton[1].localTransform == glm::mat4(3.0f));
-    assert(out->skeleton[1].inverseBindPose == glm::mat4(0.5f));
-    assert(out->skeleton[0].boneOutputIndex == -1 && out->skeleton[2].boneOutputIndex == 1);
+    REQUIRE_EQ(out->skeleton.size(), 3);
+    CHECK(out->skeleton[1].name == "Hips" && out->skeleton[1].parent == 0);
+    CHECK_EQ(out->skeleton[1].localTransform, glm::mat4(3.0f));
+    CHECK_EQ(out->skeleton[1].inverseBindPose, glm::mat4(0.5f));
+    CHECK(out->skeleton[0].boneOutputIndex == -1 && out->skeleton[2].boneOutputIndex == 1);
 
-    assert(out->clips.size() == 1);
+    REQUIRE_EQ(out->clips.size(), 1);
     const auto& clip = out->clips[0];
-    assert(clip.name == "Kick" && clip.ticksPerSecond == 30.0f && clip.duration == 2.0f);
-    assert(clip.channels.size() == 1 && clip.channels[0].node == "Hips");
-    assert(clip.channels[0].positions.size() == 2 && clip.channels[0].positions[1].value == glm::vec3(4, 5, 6));
-    assert(clip.channels[0].rotations[0].time == 0.5f);
-    assert(clip.channels[0].rotations[0].value == glm::quat(0.5f, 0.1f, 0.2f, 0.3f));
-    assert(clip.channels[0].scales.size() == 1);
+    CHECK(clip.name == "Kick" && clip.ticksPerSecond == 30.0f && clip.duration == 2.0f);
+    REQUIRE_EQ(clip.channels.size(), 1);
+    CHECK_EQ(clip.channels[0].node, "Hips");
+    REQUIRE_EQ(clip.channels[0].positions.size(), 2);
+    CHECK_EQ(clip.channels[0].positions[1].value, glm::vec3(4, 5, 6));
+    REQUIRE_EQ(clip.channels[0].rotations.size(), 1);
+    CHECK_EQ(clip.channels[0].rotations[0].time, 0.5f);
+    CHECK_EQ(clip.channels[0].rotations[0].value, glm::quat(0.5f, 0.1f, 0.2f, 0.3f));
+    CHECK_EQ(clip.channels[0].scales.size(), 1);
 
-    assert(out->textures.size() == 1);
-    assert(out->textures[0].data == pkg.textures[0].data && out->textures[0].generateMipmaps);
+    REQUIRE_EQ(out->textures.size(), 1);
+    CHECK(out->textures[0].data == pkg.textures[0].data && out->textures[0].generateMipmaps);
 }
 
 void testIndexWidth() {
     ModelPackage pkg;
     pkg.meshes.push_back(makeMesh(VertexLayout::Static, std::vector<StaticVertex>(65536), { 0, 1, 65535 }));
     pkg.meshes.push_back(makeMesh(VertexLayout::Static, std::vector<StaticVertex>(65537), { 0, 1, 65536 }));
-    assert(fitsUint16Indices(pkg.meshes[0]) && !fitsUint16Indices(pkg.meshes[1]));
-    assert(pkg.validate().empty());
+    CHECK(fitsUint16Indices(pkg.meshes[0]) && !fitsUint16Indices(pkg.meshes[1]));
+    CHECK(pkg.validate().empty());
 
     std::string error;
     auto out = roundTrip(pkg, error);
-    assert(out && error.empty());
-    assert(out->meshes[0].indices == pkg.meshes[0].indices);
-    assert(out->meshes[1].indices == pkg.meshes[1].indices);
+    REQUIRE(out && error.empty());
+    CHECK_EQ(out->meshes[0].indices, pkg.meshes[0].indices);
+    CHECK_EQ(out->meshes[1].indices, pkg.meshes[1].indices);
 
     // One more vertex switches the mesh to 32-bit indices, 2 more bytes per index.
     ModelPackage wide = pkg;
@@ -158,65 +161,65 @@ void testIndexWidth() {
     ModelPackage narrow = wide;
     wide.meshes[0].vertices.resize(size_t(65537) * sizeof(StaticVertex));
     wide.meshes[0].vertexCount = 65537;
-    assert(wide.serialize().size() - narrow.serialize().size() == sizeof(StaticVertex) + 3 * sizeof(uint16_t));
+    CHECK_EQ(wide.serialize().size() - narrow.serialize().size(), sizeof(StaticVertex) + 3 * sizeof(uint16_t));
 }
 
 void testEmptyPackage() {
     std::string error;
     auto out = roundTrip(ModelPackage {}, error);
-    assert(out && out->meshes.empty() && out->instances.empty() && out->skeleton.empty());
+    CHECK(out && out->meshes.empty() && out->instances.empty() && out->skeleton.empty());
 }
 
 void testValidate() {
     {
         auto pkg = makePackage();
         pkg.meshes[0].indices.push_back(0);
-        assert(contains(pkg.validate(), "multiple of 3"));
+        CHECK(contains(pkg.validate(), "multiple of 3"));
     }
     {
         auto pkg = makePackage();
         pkg.meshes[0].indices[0] = 4;
-        assert(contains(pkg.validate(), "out of range"));
+        CHECK(contains(pkg.validate(), "out of range"));
     }
     {
         auto pkg = makePackage();
         pkg.meshes[0].vertices.pop_back();
-        assert(contains(pkg.validate(), "vertex data"));
+        CHECK(contains(pkg.validate(), "vertex data"));
     }
     {
         auto pkg = makePackage();
         pkg.skeleton.clear();
-        assert(contains(pkg.validate(), "no skeleton"));
+        CHECK(contains(pkg.validate(), "no skeleton"));
     }
     {
         auto pkg = makePackage();
         pkg.skeleton[1].parent = 2;
-        assert(contains(pkg.validate(), "parents must come first"));
+        CHECK(contains(pkg.validate(), "parents must come first"));
     }
     {
         auto pkg = makePackage();
         pkg.instances[0].material = 7;
-        assert(contains(pkg.validate(), "uses material 7"));
+        CHECK(contains(pkg.validate(), "uses material 7"));
     }
     {
         auto pkg = makePackage();
         pkg.materials[0].textures[1].texture.embeddedIndex = 1;
-        assert(contains(pkg.validate(), "embedded texture 1"));
+        CHECK(contains(pkg.validate(), "embedded texture 1"));
     }
     {
         auto pkg = makePackage();
         pkg.materials[0].textures[0].texture.path.clear();
-        assert(contains(pkg.validate(), "empty path"));
+        CHECK(contains(pkg.validate(), "empty path"));
     }
     {
         auto pkg = makePackage();
         pkg.materials[1].material.clear();
-        assert(contains(pkg.validate(), "names no material"));
+        CHECK(contains(pkg.validate(), "names no material"));
     }
     {
         auto pkg = makePackage();
         pkg.textures[0].data.pop_back();
-        assert(contains(pkg.validate(), "embedded texture 0"));
+        CHECK(contains(pkg.validate(), "embedded texture 0"));
     }
 }
 
@@ -225,32 +228,31 @@ void testDeserializeRejectsBadPackages() {
     auto bytes = makePackage().serialize();
 
     std::vector<uint8_t> notAPackage = { 'n', 'o', 'p', 'e', 0, 0, 0, 0 };
-    assert(!ModelPackage::deserialize(notAPackage, error) && contains(error, "not a model package"));
+    CHECK(!ModelPackage::deserialize(notAPackage, error) && contains(error, "not a model package"));
 
     auto wrongVersion = bytes;
     wrongVersion[4] = uint8_t(kModelPackageVersion + 1);
-    assert(!ModelPackage::deserialize(wrongVersion, error) && contains(error, "version"));
+    CHECK(!ModelPackage::deserialize(wrongVersion, error) && contains(error, "version"));
 
     auto truncated = bytes;
     truncated.resize(truncated.size() - 3);
-    assert(!ModelPackage::deserialize(truncated, error) && contains(error, "truncated"));
+    CHECK(!ModelPackage::deserialize(truncated, error) && contains(error, "truncated"));
 
     // Unknown chunks are skipped.
     auto withUnknown = bytes;
     const uint8_t unknown[] = { 'X', 'T', 'R', 'A', 2, 0, 0, 0, 0xAB, 0xCD };
     withUnknown.insert(withUnknown.end(), std::begin(unknown), std::end(unknown));
     auto out = ModelPackage::deserialize(withUnknown, error);
-    assert(out && out->meshes.size() == 2);
+    REQUIRE(out);
+    CHECK_EQ(out->meshes.size(), 2);
 }
 
 }
 
 void runModelTests() {
-    testRoundTrip();
-    testIndexWidth();
-    testEmptyPackage();
-    testValidate();
-    testDeserializeRejectsBadPackages();
-
-    std::cout << "All model tests passed" << std::endl;
+    ailo::test::run("model/testRoundTrip", testRoundTrip);
+    ailo::test::run("model/testIndexWidth", testIndexWidth);
+    ailo::test::run("model/testEmptyPackage", testEmptyPackage);
+    ailo::test::run("model/testValidate", testValidate);
+    ailo::test::run("model/testDeserializeRejectsBadPackages", testDeserializeRejectsBadPackages);
 }

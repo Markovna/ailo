@@ -1,8 +1,8 @@
 #include "Cubemap.h"
 #include "SphericalHarmonics.h"
+#include "Testing.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <iostream>
 
@@ -44,7 +44,7 @@ void testConstantEnvironment() {
     auto sh = lightc::projectIrradianceSH(makeCubemap(32, [&](const glm::vec3&) { return radiance; }));
     for (int face = 0; face < 6; face++) {
         const glm::vec3 n = lightc::cubemapToDirection(face, 0.3f, 0.7f);
-        assert(near(lightc::evaluateIrradianceSH(sh, n), radiance, 1e-4f));
+        CHECK(near(lightc::evaluateIrradianceSH(sh, n), radiance, 1e-4f));
     }
 }
 
@@ -54,10 +54,10 @@ void testHemisphere() {
     auto sh = lightc::projectIrradianceSH(makeCubemap(64, [](const glm::vec3& dir) {
         return glm::vec3(dir.y > 0.0f ? 1.0f : 0.0f);
     }));
-    assert(near(lightc::evaluateIrradianceSH(sh, { 0.0f, 1.0f, 0.0f }), glm::vec3(1.0f), 1e-2f));
-    assert(near(lightc::evaluateIrradianceSH(sh, { 0.0f, -1.0f, 0.0f }), glm::vec3(0.0f), 1e-2f));
-    assert(near(lightc::evaluateIrradianceSH(sh, { 1.0f, 0.0f, 0.0f }), glm::vec3(0.5f), 1e-2f));
-    assert(near(lightc::evaluateIrradianceSH(sh, { 0.0f, 0.0f, -1.0f }), glm::vec3(0.5f), 1e-2f));
+    CHECK(near(lightc::evaluateIrradianceSH(sh, { 0.0f, 1.0f, 0.0f }), glm::vec3(1.0f), 1e-2f));
+    CHECK(near(lightc::evaluateIrradianceSH(sh, { 0.0f, -1.0f, 0.0f }), glm::vec3(0.0f), 1e-2f));
+    CHECK(near(lightc::evaluateIrradianceSH(sh, { 1.0f, 0.0f, 0.0f }), glm::vec3(0.5f), 1e-2f));
+    CHECK(near(lightc::evaluateIrradianceSH(sh, { 0.0f, 0.0f, -1.0f }), glm::vec3(0.5f), 1e-2f));
 }
 
 // A light from one direction peaks there: the SH must use the same directions as the cubemap's texels.
@@ -69,25 +69,18 @@ void testOrientation() {
     const float towards = lightc::evaluateIrradianceSH(sh, lightDir).x;
     const float away = lightc::evaluateIrradianceSH(sh, -lightDir).x;
     const float side = lightc::evaluateIrradianceSH(sh, glm::normalize(glm::cross(lightDir, glm::vec3(0, 1, 0)))).x;
-    assert(towards > side && side > away);
+    CHECK(towards > side && side > away);
 }
 
 }
 
 void runSphericalHarmonicsTests() {
-    testConstantEnvironment();
-    testHemisphere();
-    testOrientation();
-    std::cout << "All spherical harmonics tests passed" << std::endl;
+    ailo::test::run("spherical_harmonics/testConstantEnvironment", testConstantEnvironment);
+    ailo::test::run("spherical_harmonics/testHemisphere", testHemisphere);
+    ailo::test::run("spherical_harmonics/testOrientation", testOrientation);
 }
 
 int main() {
-#ifdef NDEBUG
-    std::cerr << "lightc_tests must be built without NDEBUG: the tests are asserts" << std::endl;
-    return 1;
-#endif
     runSphericalHarmonicsTests();
-
-    std::cout << "All lightc tests passed" << std::endl;
-    return 0;
+    return ailo::test::finish();
 }

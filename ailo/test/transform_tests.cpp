@@ -1,8 +1,8 @@
 #include "ecs/Transform.h"
 #include "ecs/Hierarchy.h"
+#include "Testing.h"
 
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -52,28 +52,28 @@ Transform sample() {
 }
 
 void testDefaultIsIdentity() {
-    assert(Transform {}.toMatrix() == glm::mat4(1.0f));
+    CHECK_EQ(Transform {}.toMatrix(), glm::mat4(1.0f));
 }
 
 void testTrsMatchesGlmComposition() {
     const Transform t = sample();
     const glm::mat4 expected =
         glm::translate(glm::mat4(1.0f), t.position) * glm::mat4_cast(t.rotation) * glm::scale(glm::mat4(1.0f), t.scale);
-    assert(near(t.toMatrix(), expected));
+    CHECK(near(t.toMatrix(), expected));
 }
 
 void testTrsIsAffine() {
-    assert(isAffine(sample().toMatrix()));
-    assert(isAffine(sample().toMatrix() * Transform { .position = { 5, 6, 7 } }.toMatrix()));
-    assert(!isAffine(glm::perspective(glm::radians(60.0f), 1.5f, 0.1f, 100.0f)));
+    CHECK(isAffine(sample().toMatrix()));
+    CHECK(isAffine(sample().toMatrix() * Transform { .position = { 5, 6, 7 } }.toMatrix()));
+    CHECK(!isAffine(glm::perspective(glm::radians(60.0f), 1.5f, 0.1f, 100.0f)));
 }
 
 void testRoundTrip() {
     const Transform t = sample();
     const Transform back = Transform::fromMatrix(t.toMatrix());
-    assert(near(back.position, t.position));
-    assert(near(back.scale, t.scale));
-    assert(sameRotation(back.rotation, t.rotation));
+    CHECK(near(back.position, t.position));
+    CHECK(near(back.scale, t.scale));
+    CHECK(sameRotation(back.rotation, t.rotation));
 }
 
 // A mirrored basis is folded into scale.x; the matrix must still round-trip exactly.
@@ -82,8 +82,8 @@ void testNegativeScale() {
     t.scale = { 1.0f, -2.0f, 1.5f };
     const glm::mat4 m = t.toMatrix();
     const Transform back = Transform::fromMatrix(m);
-    assert(back.scale.x < 0.0f);
-    assert(near(back.toMatrix(), m));
+    CHECK(back.scale.x < 0.0f);
+    CHECK(near(back.toMatrix(), m));
 }
 
 // Shear can't be represented: translation survives, the rotation stays orthonormal.
@@ -91,19 +91,19 @@ void testShearIsDropped() {
     glm::mat4 m = sample().toMatrix();
     m[1] += m[0] * 0.5f;  // shear Y along X
     const Transform back = Transform::fromMatrix(m);
-    assert(finite(back));
-    assert(near(back.position, glm::vec3(m[3])));
-    assert(near(glm::length(back.rotation), 1.0f));
-    assert(isAffine(back.toMatrix()));
+    CHECK(finite(back));
+    CHECK(near(back.position, glm::vec3(m[3])));
+    CHECK(near(glm::length(back.rotation), 1.0f));
+    CHECK(isAffine(back.toMatrix()));
 }
 
 void testZeroScaleIsFinite() {
     Transform t = sample();
     t.scale = { 0.0f, 1.0f, 0.0f };
     const Transform back = Transform::fromMatrix(t.toMatrix());
-    assert(finite(back));
-    assert(near(back.scale, glm::vec3(0.0f, 1.0f, 0.0f)));
-    assert(near(back.position, t.position));
+    CHECK(finite(back));
+    CHECK(near(back.scale, glm::vec3(0.0f, 1.0f, 0.0f)));
+    CHECK(near(back.position, t.position));
 }
 
 // The sandbox character: glm::scale(0.01) then glm::rotate(90°, Y).
@@ -111,9 +111,9 @@ void testSandboxCharacterDecomposes() {
     glm::mat4 m = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
     m = glm::rotate(m, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     const Transform t = Transform::fromMatrix(m);
-    assert(near(t.scale, glm::vec3(0.01f)));
-    assert(sameRotation(t.rotation, glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))));
-    assert(near(t.toMatrix(), m));
+    CHECK(near(t.scale, glm::vec3(0.01f)));
+    CHECK(sameRotation(t.rotation, glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))));
+    CHECK(near(t.toMatrix(), m));
 }
 
 bool near(const Transform& a, const Transform& b) {
@@ -135,16 +135,16 @@ void testComposeMatchesMatricesForUniformScale() {
     Transform parent = sample();
     parent.scale = glm::vec3(2.5f);
     const Transform world = compose(parent, kRotatedChild);
-    assert(near(world.toMatrix(), parent.toMatrix() * kRotatedChild.toMatrix()));
+    CHECK(near(world.toMatrix(), parent.toMatrix() * kRotatedChild.toMatrix()));
 }
 
 // Under a non-uniform parent the matrix product shears a rotated child; compose doesn't.
 void testComposeHasNoShear() {
     const Transform parent = sample();
-    assert(!orthogonalBasis(parent.toMatrix() * kRotatedChild.toMatrix()));
+    CHECK(!orthogonalBasis(parent.toMatrix() * kRotatedChild.toMatrix()));
     const Transform world = compose(parent, kRotatedChild);
-    assert(orthogonalBasis(world.toMatrix()));
-    assert(isAffine(world.toMatrix()));
+    CHECK(orthogonalBasis(world.toMatrix()));
+    CHECK(isAffine(world.toMatrix()));
 }
 
 // Position is scaled along the parent's axes, scale multiplies per component on the child's own axes.
@@ -156,19 +156,19 @@ void testComposeScalesPerComponent() {
         .scale = { 1, 4, 1 },
     };
     const Transform world = compose(parent, child);
-    assert(near(world.position, glm::vec3(12, 1, 0)));
-    assert(near(world.scale, glm::vec3(2, 4, 1)));
-    assert(sameRotation(world.rotation, child.rotation));
+    CHECK(near(world.position, glm::vec3(12, 1, 0)));
+    CHECK(near(world.scale, glm::vec3(2, 4, 1)));
+    CHECK(sameRotation(world.rotation, child.rotation));
 }
 
 void testRelativeToInvertsCompose() {
     const Transform parent = sample();
-    assert(near(relativeTo(parent, compose(parent, kRotatedChild)), kRotatedChild));
-    assert(near(compose(parent, relativeTo(parent, kRotatedChild)), kRotatedChild));
+    CHECK(near(relativeTo(parent, compose(parent, kRotatedChild)), kRotatedChild));
+    CHECK(near(compose(parent, relativeTo(parent, kRotatedChild)), kRotatedChild));
 
     Transform mirrored = parent;
     mirrored.scale = { -1.0f, 2.0f, 0.5f };
-    assert(near(relativeTo(mirrored, compose(mirrored, kRotatedChild)), kRotatedChild));
+    CHECK(near(relativeTo(mirrored, compose(mirrored, kRotatedChild)), kRotatedChild));
 }
 
 // Documents why the hierarchy must compose top-down.
@@ -176,7 +176,7 @@ void testComposeIsNotAssociative() {
     const Transform a = sample();
     const Transform b = kRotatedChild;
     const Transform c { .position = { 1, 2, 3 } };
-    assert(!near(compose(compose(a, b), c).position, compose(a, compose(b, c)).position));
+    CHECK(!near(compose(compose(a, b), c).position, compose(a, compose(b, c)).position));
 }
 
 void testRelativeToZeroScaleUsesFallback() {
@@ -184,10 +184,10 @@ void testRelativeToZeroScaleUsesFallback() {
     parent.scale = { 0.0f, 1.0f, 2.0f };
     const Transform fallback { .position = { 7, 7, 7 }, .scale = { 3, 3, 3 } };
     const Transform local = relativeTo(parent, compose(parent, kRotatedChild), fallback);
-    assert(finite(local));
-    assert(near(local.position.x, 7.0f) && near(local.scale.x, 3.0f));
-    assert(near(local.position.y, kRotatedChild.position.y) && near(local.scale.y, kRotatedChild.scale.y));
-    assert(near(local.position.z, kRotatedChild.position.z) && near(local.scale.z, kRotatedChild.scale.z));
+    CHECK(finite(local));
+    CHECK(near(local.position.x, 7.0f) && near(local.scale.x, 3.0f));
+    CHECK(near(local.position.y, kRotatedChild.position.y) && near(local.scale.y, kRotatedChild.scale.y));
+    CHECK(near(local.position.z, kRotatedChild.position.z) && near(local.scale.z, kRotatedChild.scale.z));
 }
 
 // -----------------------------------------------------------------------------------------------------------------
@@ -205,8 +205,8 @@ struct Tree {
     }
 
     void reparent(entt::entity child, entt::entity parent, hierarchy::Keep keep = hierarchy::Keep::World) {
-        [[maybe_unused]] const bool linked = hierarchy::setParent(reg, child, parent, keep);
-        assert(linked);
+        const bool linked = hierarchy::setParent(reg, child, parent, keep);
+        CHECK(linked);
     }
 
     const TransformComponent& operator[](entt::entity e) const { return reg.get<TransformComponent>(e); }
@@ -221,17 +221,17 @@ struct Tree {
     void check() const {
         for (auto [e, tc] : reg.view<const TransformComponent>().each()) {
             if (tc.prevSibling() != entt::null) {
-                assert((*this)[tc.prevSibling()].nextSibling() == e);
+                CHECK_EQ((*this)[tc.prevSibling()].nextSibling(), e);
             } else if (tc.parent() != entt::null) {
-                assert((*this)[tc.parent()].firstChild() == e);
+                CHECK_EQ((*this)[tc.parent()].firstChild(), e);
             }
-            if (tc.nextSibling() != entt::null) assert((*this)[tc.nextSibling()].prevSibling() == e);
-            hierarchy::forEachChild(reg, e, [&](entt::entity c) { assert((*this)[c].parent() == e); });
+            if (tc.nextSibling() != entt::null) CHECK_EQ((*this)[tc.nextSibling()].prevSibling(), e);
+            hierarchy::forEachChild(reg, e, [&](entt::entity c) { CHECK_EQ((*this)[c].parent(), e); });
 
             if (tc.parent() == entt::null) {
-                assert(near(tc.world(), tc.local()));
+                CHECK(near(tc.world(), tc.local()));
             } else {
-                assert(near(tc.world(), compose((*this)[tc.parent()].world(), tc.local())));
+                CHECK(near(tc.world(), compose((*this)[tc.parent()].world(), tc.local())));
             }
         }
     }
@@ -245,7 +245,7 @@ void testSetLocalPropagatesToGrandchildren() {
 
     hierarchy::setLocal(t.reg, root, sample());
     t.check();
-    assert(near(t[grandchild].world(), compose(compose(sample(), kRotatedChild), { .position = { 0, 1, 0 } })));
+    CHECK(near(t[grandchild].world(), compose(compose(sample(), kRotatedChild), { .position = { 0, 1, 0 } })));
 }
 
 void testSetWorldKeepsChildrenLocal() {
@@ -257,10 +257,10 @@ void testSetWorldKeepsChildrenLocal() {
     const Transform target { .position = { -4, 5, 6 }, .rotation = glm::angleAxis(0.3f, glm::vec3(1, 0, 0)) };
     hierarchy::setWorld(t.reg, middle, target);
     t.check();
-    assert(near(t[middle].world(), target));
-    assert(near(t[middle].local(), relativeTo(sample(), target)));
-    assert(near(t[leaf].local(), Transform { .position = { 1, 2, 3 } }));
-    assert(near(t[leaf].world(), compose(target, t[leaf].local())));
+    CHECK(near(t[middle].world(), target));
+    CHECK(near(t[middle].local(), relativeTo(sample(), target)));
+    CHECK(near(t[leaf].local(), Transform { .position = { 1, 2, 3 } }));
+    CHECK(near(t[leaf].world(), compose(target, t[leaf].local())));
 }
 
 void testSetParentKeepWorldOrLocal() {
@@ -274,18 +274,18 @@ void testSetParentKeepWorldOrLocal() {
     const Transform leafWorld = t[leaf].world();
     t.reparent(node, b, hierarchy::Keep::World);
     t.check();
-    assert(near(t[node].world(), nodeWorld));
-    assert(near(t[leaf].world(), leafWorld));
-    assert(t.children(a).empty() && t.children(b) == std::vector({ node }));
+    CHECK(near(t[node].world(), nodeWorld));
+    CHECK(near(t[leaf].world(), leafWorld));
+    CHECK(t.children(a).empty() && t.children(b) == std::vector({ node }));
 
     t.reparent(node, a, hierarchy::Keep::Local);
     t.check();
-    assert(near(t[node].world(), compose(sample(), t[node].local())));
+    CHECK(near(t[node].world(), compose(sample(), t[node].local())));
 
     t.reparent(node, entt::null);
     t.check();
-    assert(t[node].parent() == entt::null);
-    assert(near(t[node].local(), t[node].world()));
+    CHECK_EQ(t[node].parent(), entt::null);
+    CHECK(near(t[node].local(), t[node].world()));
 }
 
 void testSetParentRejectsCycles() {
@@ -294,11 +294,11 @@ void testSetParentRejectsCycles() {
     const auto child = t.node(kRotatedChild, root);
     const auto grandchild = t.node({}, child);
 
-    assert(!hierarchy::setParent(t.reg, root, root));
-    assert(!hierarchy::setParent(t.reg, root, grandchild));
-    assert(!hierarchy::setParent(t.reg, child, grandchild));
+    CHECK(!hierarchy::setParent(t.reg, root, root));
+    CHECK(!hierarchy::setParent(t.reg, root, grandchild));
+    CHECK(!hierarchy::setParent(t.reg, child, grandchild));
     t.check();
-    assert(t[root].parent() == entt::null && t[child].parent() == root && t[grandchild].parent() == child);
+    CHECK(t[root].parent() == entt::null && t[child].parent() == root && t[grandchild].parent() == child);
 }
 
 void testChildrenKeepAppendOrder() {
@@ -307,14 +307,14 @@ void testChildrenKeepAppendOrder() {
     const auto c0 = t.node({}, root);
     const auto c1 = t.node({}, root);
     const auto c2 = t.node({}, root);
-    assert(t.children(root) == std::vector({ c0, c1, c2 }));
+    CHECK_EQ(t.children(root), std::vector({ c0, c1, c2 }));
 
     t.reparent(c1, entt::null);
-    assert(t.children(root) == std::vector({ c0, c2 }));
+    CHECK_EQ(t.children(root), std::vector({ c0, c2 }));
     t.reparent(c0, entt::null);
-    assert(t.children(root) == std::vector({ c2 }));
+    CHECK_EQ(t.children(root), std::vector({ c2 }));
     t.reparent(c1, root);
-    assert(t.children(root) == std::vector({ c2, c1 }));
+    CHECK_EQ(t.children(root), std::vector({ c2, c1 }));
     t.check();
 }
 
@@ -329,11 +329,11 @@ void testForEachDescendantIsPreOrder() {
 
     std::vector<entt::entity> visited;
     hierarchy::forEachDescendant(t.reg, root, [&](entt::entity e) { visited.push_back(e); });
-    assert(visited == std::vector({ a, a0, a1, a1x, b }));
+    CHECK_EQ(visited, std::vector({ a, a0, a1, a1x, b }));
 
     visited.clear();
     hierarchy::forEachDescendant(t.reg, a1, [&](entt::entity e) { visited.push_back(e); });
-    assert(visited == std::vector({ a1x }));
+    CHECK_EQ(visited, std::vector({ a1x }));
 }
 
 void testDestroyOrphansChildren() {
@@ -347,13 +347,13 @@ void testDestroyOrphansChildren() {
 
     t.reg.destroy(middle);
     t.check();
-    assert(t.children(root) == std::vector({ c0, c2 }));
-    assert(t[leaf].parent() == entt::null);
-    assert(near(t[leaf].world(), leafWorld));
+    CHECK_EQ(t.children(root), std::vector({ c0, c2 }));
+    CHECK_EQ(t[leaf].parent(), entt::null);
+    CHECK(near(t[leaf].world(), leafWorld));
 
     t.reg.remove<TransformComponent>(c0);
     t.check();
-    assert(t.children(root) == std::vector({ c2 }));
+    CHECK_EQ(t.children(root), std::vector({ c2 }));
 }
 
 void testDestroySubtree() {
@@ -366,9 +366,9 @@ void testDestroySubtree() {
 
     hierarchy::destroySubtree(t.reg, doomed);
     t.check();
-    assert(!t.reg.valid(doomed) && !t.reg.valid(doomedChild));
-    assert(t.children(root) == std::vector({ keep }));
-    assert(t.reg.storage<TransformComponent>().size() == 2);
+    CHECK(!t.reg.valid(doomed) && !t.reg.valid(doomedChild));
+    CHECK_EQ(t.children(root), std::vector({ keep }));
+    CHECK_EQ(t.reg.storage<TransformComponent>().size(), 2);
 }
 
 // Deep enough that a recursive propagation would overflow the stack.
@@ -380,10 +380,10 @@ void testDeepChainAndClear() {
     for (int i = 0; i < kDepth; i++) last = t.node({ .position = { 0, 1, 0 } }, last);
 
     hierarchy::setLocal(t.reg, root, { .position = { 5, 0, 0 } });
-    assert(near(t[last].world().position, glm::vec3(5, kDepth, 0)));
+    CHECK(near(t[last].world().position, glm::vec3(5, kDepth, 0)));
 
     t.reg.clear();
-    assert(t.reg.storage<TransformComponent>().empty());
+    CHECK(t.reg.storage<TransformComponent>().empty());
 }
 
 // -----------------------------------------------------------------------------------------------------------------
@@ -438,10 +438,10 @@ void testIterationIsReversePacked() {
 
     const auto order = iterationOrder(set);
     for (size_t k = 0; k < n; k++) {
-        assert(set.index(created[k]) == k);         // packed order is insertion order
-        assert(order[k] == created[n - 1 - k]);     // iteration is the reverse of it
+        CHECK_EQ(set.index(created[k]), k);         // packed order is insertion order
+        CHECK_EQ(order[k], created[n - 1 - k]);     // iteration is the reverse of it
     }
-    assert(order.front() == created.back());        // the newest element iterates first
+    CHECK_EQ(order.front(), created.back());        // the newest element iterates first
 }
 
 void testStorageIteratorIsRandomAccess() {
@@ -454,9 +454,9 @@ void testStorageIteratorIsRandomAccess() {
     auto components = storage.begin();
     auto entities = set.begin();
     for (std::ptrdiff_t k = 0; k < n; k++) {
-        assert(&components[k] == &storage.get(entities[k]));
-        assert(&*(components + k) == &components[k]);
-        assert(set.index(entities[k]) == static_cast<size_t>(n - 1 - k));
+        CHECK_EQ(&components[k], &storage.get(entities[k]));
+        CHECK_EQ(&*(components + k), &components[k]);
+        CHECK_EQ(set.index(entities[k]), static_cast<size_t>(n - 1 - k));
     }
 }
 
@@ -468,8 +468,8 @@ void testSortByDepthIsStable() {
     std::ranges::stable_sort(expected, {}, [&](entt::entity e) { return reg.get<Depth>(e).value; });
 
     sortByDepth(reg);
-    assert(std::ranges::is_sorted(iteratedDepths(reg)));
-    assert(iterationOrder(reg.storage<Depth>()) == expected);
+    CHECK(std::ranges::is_sorted(iteratedDepths(reg)));
+    CHECK_EQ(iterationOrder(reg.storage<Depth>()), expected);
 }
 
 void testNewElementBreaksOrder() {
@@ -480,22 +480,22 @@ void testNewElementBreaksOrder() {
     // A child added below the first root: appended to the packed array, so it iterates before every parent.
     const auto child = reg.create();
     reg.emplace<Depth>(child, 1);
-    assert(iterationOrder(reg.storage<Depth>()).front() == child);
-    assert(!std::ranges::is_sorted(iteratedDepths(reg)));
+    CHECK_EQ(iterationOrder(reg.storage<Depth>()).front(), child);
+    CHECK(!std::ranges::is_sorted(iteratedDepths(reg)));
 
     sortByDepth(reg);
-    assert(std::ranges::is_sorted(iteratedDepths(reg)));
+    CHECK(std::ranges::is_sorted(iteratedDepths(reg)));
 }
 
 void testRemovalBreaksOrder() {
     entt::registry reg;
     createWithDepths(reg, { 2, 1, 0, 2, 1, 0 });
     sortByDepth(reg);
-    assert(iteratedDepths(reg) == std::vector<int>({ 0, 0, 1, 1, 2, 2 }));
+    CHECK_EQ(iteratedDepths(reg), std::vector<int>({ 0, 0, 1, 1, 2, 2 }));
 
     // Removing the last-iterated element swaps the first-iterated root into its place.
     reg.erase<Depth>(iterationOrder(reg.storage<Depth>()).back());
-    assert(iteratedDepths(reg) == std::vector<int>({ 0, 1, 1, 2, 0 }));
+    CHECK_EQ(iteratedDepths(reg), std::vector<int>({ 0, 1, 1, 2, 0 }));
 }
 
 void testSortAsFollowsAnotherPool() {
@@ -510,11 +510,11 @@ void testSortAsFollowsAnotherPool() {
     reg.sort<Payload, Depth>();
 
     const auto order = iterationOrder(reg.storage<Depth>());
-    assert(iterationOrder(reg.storage<Payload>()) == order);
+    CHECK_EQ(iterationOrder(reg.storage<Payload>()), order);
 
     auto payloads = reg.storage<Payload>().begin();
     for (size_t k = 0; k < order.size(); k++) {
-        assert(payloads[static_cast<std::ptrdiff_t>(k)].owner == order[k]);   // components moved with entities
+        CHECK_EQ(payloads[static_cast<std::ptrdiff_t>(k)].owner, order[k]);   // components moved with entities
     }
 }
 
@@ -530,21 +530,21 @@ void testOnUpdateFiresOnlyOnPatchAndReplace() {
 
     const auto e = reg.create();
     reg.emplace<Depth>(e, 1);
-    assert(counter.calls == 0);
+    CHECK_EQ(counter.calls, 0);
 
     reg.get<Depth>(e).value = 2;                     // raw writes are invisible to signals
-    assert(counter.calls == 0);
+    CHECK_EQ(counter.calls, 0);
 
     reg.patch<Depth>(e, [](Depth& d) { d.value = 3; });
-    assert(counter.calls == 1);
+    CHECK_EQ(counter.calls, 1);
     reg.replace<Depth>(e, 4);
-    assert(counter.calls == 2);
+    CHECK_EQ(counter.calls, 2);
     reg.emplace_or_replace<Depth>(e, 5);
-    assert(counter.calls == 3);
+    CHECK_EQ(counter.calls, 3);
 
     reg.on_update<Depth>().disconnect(&counter);
     reg.patch<Depth>(e);
-    assert(counter.calls == 3);
+    CHECK_EQ(counter.calls, 3);
 }
 
 struct DestroyProbe {
@@ -571,52 +571,50 @@ void testOnDestroyRunsBeforeRemoval() {
     const auto extra = reg.create();
     reg.emplace<Depth>(extra, 0);
     reg.destroy(extra);
-    assert(probe.calls == 1);
-    assert(probe.componentsAlive);
+    CHECK_EQ(probe.calls, 1);
+    CHECK(probe.componentsAlive);
 
     // clear(): every handler runs while the whole pool is still intact.
     reg.clear();
-    assert(probe.calls == 4);
-    assert(probe.componentsAlive);
-    assert(reg.storage<Depth>().empty());
+    CHECK_EQ(probe.calls, 4);
+    CHECK(probe.componentsAlive);
+    CHECK(reg.storage<Depth>().empty());
 }
 
 }
 
 void runTransformTests() {
-    testDefaultIsIdentity();
-    testTrsMatchesGlmComposition();
-    testTrsIsAffine();
-    testRoundTrip();
-    testNegativeScale();
-    testShearIsDropped();
-    testZeroScaleIsFinite();
-    testSandboxCharacterDecomposes();
-    testComposeMatchesMatricesForUniformScale();
-    testComposeHasNoShear();
-    testComposeScalesPerComponent();
-    testRelativeToInvertsCompose();
-    testComposeIsNotAssociative();
-    testRelativeToZeroScaleUsesFallback();
+    ailo::test::run("transform/testDefaultIsIdentity", testDefaultIsIdentity);
+    ailo::test::run("transform/testTrsMatchesGlmComposition", testTrsMatchesGlmComposition);
+    ailo::test::run("transform/testTrsIsAffine", testTrsIsAffine);
+    ailo::test::run("transform/testRoundTrip", testRoundTrip);
+    ailo::test::run("transform/testNegativeScale", testNegativeScale);
+    ailo::test::run("transform/testShearIsDropped", testShearIsDropped);
+    ailo::test::run("transform/testZeroScaleIsFinite", testZeroScaleIsFinite);
+    ailo::test::run("transform/testSandboxCharacterDecomposes", testSandboxCharacterDecomposes);
+    ailo::test::run("transform/testComposeMatchesMatricesForUniformScale", testComposeMatchesMatricesForUniformScale);
+    ailo::test::run("transform/testComposeHasNoShear", testComposeHasNoShear);
+    ailo::test::run("transform/testComposeScalesPerComponent", testComposeScalesPerComponent);
+    ailo::test::run("transform/testRelativeToInvertsCompose", testRelativeToInvertsCompose);
+    ailo::test::run("transform/testComposeIsNotAssociative", testComposeIsNotAssociative);
+    ailo::test::run("transform/testRelativeToZeroScaleUsesFallback", testRelativeToZeroScaleUsesFallback);
 
-    testSetLocalPropagatesToGrandchildren();
-    testSetWorldKeepsChildrenLocal();
-    testSetParentKeepWorldOrLocal();
-    testSetParentRejectsCycles();
-    testChildrenKeepAppendOrder();
-    testForEachDescendantIsPreOrder();
-    testDestroyOrphansChildren();
-    testDestroySubtree();
-    testDeepChainAndClear();
+    ailo::test::run("transform/testSetLocalPropagatesToGrandchildren", testSetLocalPropagatesToGrandchildren);
+    ailo::test::run("transform/testSetWorldKeepsChildrenLocal", testSetWorldKeepsChildrenLocal);
+    ailo::test::run("transform/testSetParentKeepWorldOrLocal", testSetParentKeepWorldOrLocal);
+    ailo::test::run("transform/testSetParentRejectsCycles", testSetParentRejectsCycles);
+    ailo::test::run("transform/testChildrenKeepAppendOrder", testChildrenKeepAppendOrder);
+    ailo::test::run("transform/testForEachDescendantIsPreOrder", testForEachDescendantIsPreOrder);
+    ailo::test::run("transform/testDestroyOrphansChildren", testDestroyOrphansChildren);
+    ailo::test::run("transform/testDestroySubtree", testDestroySubtree);
+    ailo::test::run("transform/testDeepChainAndClear", testDeepChainAndClear);
 
-    testIterationIsReversePacked();
-    testStorageIteratorIsRandomAccess();
-    testSortByDepthIsStable();
-    testNewElementBreaksOrder();
-    testRemovalBreaksOrder();
-    testSortAsFollowsAnotherPool();
-    testOnUpdateFiresOnlyOnPatchAndReplace();
-    testOnDestroyRunsBeforeRemoval();
-
-    std::cout << "All transform tests passed" << std::endl;
+    ailo::test::run("transform/testIterationIsReversePacked", testIterationIsReversePacked);
+    ailo::test::run("transform/testStorageIteratorIsRandomAccess", testStorageIteratorIsRandomAccess);
+    ailo::test::run("transform/testSortByDepthIsStable", testSortByDepthIsStable);
+    ailo::test::run("transform/testNewElementBreaksOrder", testNewElementBreaksOrder);
+    ailo::test::run("transform/testRemovalBreaksOrder", testRemovalBreaksOrder);
+    ailo::test::run("transform/testSortAsFollowsAnotherPool", testSortAsFollowsAnotherPool);
+    ailo::test::run("transform/testOnUpdateFiresOnlyOnPatchAndReplace", testOnUpdateFiresOnlyOnPatchAndReplace);
+    ailo::test::run("transform/testOnDestroyRunsBeforeRemoval", testOnDestroyRunsBeforeRemoval);
 }

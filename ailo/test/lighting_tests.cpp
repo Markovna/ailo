@@ -1,6 +1,6 @@
 #include "render/lighting/LightingPackage.h"
+#include "Testing.h"
 
-#include <cassert>
 #include <cmath>
 #include <cstring>
 #include <iostream>
@@ -43,30 +43,30 @@ LightingPackage makePackage() {
 
 void testRoundTrip() {
     LightingPackage pkg = makePackage();
-    assert(pkg.validate().empty());
+    CHECK(pkg.validate().empty());
 
     auto data = pkg.serialize();
     std::string error;
     auto loaded = LightingPackage::deserialize(data, error);
-    assert(loaded && error.empty());
-    assert(loaded->irradianceSH == pkg.irradianceSH);
-    assert(loaded->reflections.type == texture::TextureType::Cubemap);
-    assert(loaded->reflections.width == 2);
-    assert(loaded->reflections.data == pkg.reflections.data);
+    REQUIRE(loaded && error.empty());
+    CHECK_EQ(loaded->irradianceSH, pkg.irradianceSH);
+    CHECK_EQ(loaded->reflections.type, texture::TextureType::Cubemap);
+    CHECK_EQ(loaded->reflections.width, 2);
+    CHECK_EQ(loaded->reflections.data, pkg.reflections.data);
 }
 
 void testValidate() {
     LightingPackage pkg = makePackage();
     pkg.reflections.type = texture::TextureType::Texture2D;
-    assert(contains(pkg.validate(), "cubemap"));
+    CHECK(contains(pkg.validate(), "cubemap"));
 
     pkg = makePackage();
     pkg.irradianceSH[4].y = NAN;
-    assert(contains(pkg.validate(), "non-finite"));
+    CHECK(contains(pkg.validate(), "non-finite"));
 
     pkg = makePackage();
     pkg.reflections.data.pop_back();
-    assert(contains(pkg.validate(), "reflections"));
+    CHECK(contains(pkg.validate(), "reflections"));
 }
 
 void testDeserializeRejectsBadPackages() {
@@ -75,30 +75,29 @@ void testDeserializeRejectsBadPackages() {
 
     std::vector<uint8_t> wrongMagic = data;
     wrongMagic[0] ^= 0xff;
-    assert(!LightingPackage::deserialize(wrongMagic, error));
-    assert(contains(error, "not a lighting package"));
+    CHECK(!LightingPackage::deserialize(wrongMagic, error));
+    CHECK(contains(error, "not a lighting package"));
 
     std::vector<uint8_t> wrongVersion = data;
     uint32_t version = kLightingPackageVersion + 1;
     std::memcpy(wrongVersion.data() + 4, &version, sizeof(version));
-    assert(!LightingPackage::deserialize(wrongVersion, error));
-    assert(contains(error, "version"));
+    CHECK(!LightingPackage::deserialize(wrongVersion, error));
+    CHECK(contains(error, "version"));
 
     std::vector<uint8_t> truncated(data.begin(), data.end() - 3);
-    assert(!LightingPackage::deserialize(truncated, error));
-    assert(contains(error, "truncated"));
+    CHECK(!LightingPackage::deserialize(truncated, error));
+    CHECK(contains(error, "truncated"));
 
     // The header alone: valid chunks, but none of them.
     std::vector<uint8_t> empty(data.begin(), data.begin() + 8);
-    assert(!LightingPackage::deserialize(empty, error));
-    assert(contains(error, "no irradiance SH"));
+    CHECK(!LightingPackage::deserialize(empty, error));
+    CHECK(contains(error, "no irradiance SH"));
 }
 
 }
 
 void runLightingTests() {
-    testRoundTrip();
-    testValidate();
-    testDeserializeRejectsBadPackages();
-    std::cout << "All lighting tests passed" << std::endl;
+    ailo::test::run("lighting/testRoundTrip", testRoundTrip);
+    ailo::test::run("lighting/testValidate", testValidate);
+    ailo::test::run("lighting/testDeserializeRejectsBadPackages", testDeserializeRejectsBadPackages);
 }

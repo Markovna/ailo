@@ -106,6 +106,7 @@ set(JPH_USE_CPU_COMPUTE OFF CACHE BOOL "" FORCE)
 add_subdirectory(third_party/JoltPhysics/Build)
 
 add_subdirectory(libs/fileio)
+add_subdirectory(libs/testing)
 
 # Asset builds (build/README.md) run Ninja on manifests written by the scripts in build/, which run the tools named
 # in config.json from AILO_ASSET_TOOLS_DIR. Set before the engine, whose tests embed assets.

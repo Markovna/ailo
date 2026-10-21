@@ -1,7 +1,7 @@
 #include "app/App.h"
 #include "ecs/Transform.h"
+#include "Testing.h"
 
-#include <cassert>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -64,38 +64,38 @@ void testQueryExclude() {
        })
        .addSystem(Stage::Update, moveUnfrozen)
        .addSystem(Stage::Update, [&](const Query<Position, Exclude<Frozen>, Exclude<Velocity>>& query, AppControl& control) {
-           assert(!query.contains(moving));
-           assert(!query.contains(frozen));
+           CHECK(!query.contains(moving));
+           CHECK(!query.contains(frozen));
            control.requestExit();
        });
     app.run();
 
     auto& scene = app.world().scene();
-    assert(scene.registry().get<Position>(moving).x == 1.0f);
-    assert(scene.registry().get<Position>(frozen).x == 0.0f);
+    CHECK_EQ(scene.registry().get<Position>(moving).x, 1.0f);
+    CHECK_EQ(scene.registry().get<Position>(frozen).x, 0.0f);
 }
 
 void testWorldResources() {
     World world;
     auto& counter = world.insertResource<Counter>(5);
-    assert(counter.value == 5);
-    assert(world.hasResource<Counter>());
-    assert(!world.hasResource<Time>());
-    assert(world.tryResource<Time>() == nullptr);
+    CHECK_EQ(counter.value, 5);
+    CHECK(world.hasResource<Counter>());
+    CHECK(!world.hasResource<Time>());
+    CHECK_EQ(world.tryResource<Time>(), nullptr);
 
     auto* before = &world.resource<Counter>();
     world.insertResource<Position>();
     world.insertResource<Velocity>();
     world.insertResource<std::vector<int>>();
-    assert(before == &world.resource<Counter>());  // references stay stable across inserts
+    CHECK_EQ(before, &world.resource<Counter>());  // references stay stable across inserts
 
     bool threw = false;
     try { world.insertResource<Counter>(); } catch (const std::runtime_error&) { threw = true; }
-    assert(threw);
+    CHECK(threw);
 
     threw = false;
     try { world.resource<Time>(); } catch (const std::runtime_error&) { threw = true; }
-    assert(threw);
+    CHECK(threw);
 }
 
 void testDestructionOrder() {
@@ -112,7 +112,7 @@ void testDestructionOrder() {
         }>();
     }
     const std::vector<std::string> expected { "Device()", "Renderer()", "~Position", "~Renderer()", "~Device()" };
-    assert(g_log == expected);
+    CHECK_EQ(g_log, expected);
 }
 
 void testSystemsAndStages() {
@@ -136,14 +136,14 @@ void testSystemsAndStages() {
            world.scene().addComponent<Velocity>(e, 10.0f);
        })
        .addSystem(Stage::Shutdown, [&order](const Counter* c, Device* optional) {
-           assert(c && c->value == 3);
-           assert(optional == nullptr);
+           CHECK(c && c->value == 3);
+           CHECK_EQ(optional, nullptr);
            order.push_back("Shutdown");
        });
 
     app.run();
 
-    assert(app.resource<Counter>().value == 3);
+    CHECK_EQ(app.resource<Counter>().value, 3);
     const std::vector<std::string> expected {
         "Startup",
         "First", "Update", "Last",
@@ -151,11 +151,11 @@ void testSystemsAndStages() {
         "First", "Update", "Last",
         "Shutdown"
     };
-    assert(order == expected);
+    CHECK_EQ(order, expected);
 
     auto& time = app.resource<Time>();
     for (auto [e, pos] : app.world().scene().view<Position>().each()) {
-        assert(std::abs(pos.x - 10.0f * time.delta * 3) < 1e-4f);
+        CHECK_NEAR(pos.x, 10.0f * time.delta * 3, 1e-4f);
     }
 }
 
@@ -165,7 +165,7 @@ void testStartupCanInsertResources() {
     app.addSystem(Stage::Startup, [](World& world) { world.insertResource<Counter>(42); })
        .addSystem(Stage::Update, [&seen](Counter& c, AppControl& control) { seen = c.value; control.requestExit(); });
     app.run();
-    assert(seen == 42);
+    CHECK_EQ(seen, 42);
 }
 
 void testMissingResourceIsReported() {
@@ -174,9 +174,9 @@ void testMissingResourceIsReported() {
 
     std::string message;
     try { app.run(); } catch (const std::runtime_error& e) { message = e.what(); }
-    assert(message.find("needsStuff") != std::string::npos);
-    assert(message.find("Counter") != std::string::npos);   // first missing param only
-    assert(message.find("Time") == std::string::npos);
+    CHECK_NE(message.find("needsStuff"), std::string::npos);
+    CHECK_NE(message.find("Counter"), std::string::npos);   // first missing param only
+    CHECK_EQ(message.find("Time"), std::string::npos);
 }
 
 struct CounterPlugin {
@@ -207,12 +207,12 @@ void testPlugins() {
        .addPlugin(DependentPlugin {})
        .addPlugin(CounterPlugin { .start = 99 });   // duplicate, ignored
 
-    assert(app.hasPlugin<CounterPlugin>());
-    assert(app.hasPlugin<DependentPlugin>());
+    CHECK(app.hasPlugin<CounterPlugin>());
+    CHECK(app.hasPlugin<DependentPlugin>());
 
     app.run();
     // frame 1: 10 → 11 → 1011; frame 2: 1012 ≥ 12 → exit, then Last → 2012
-    assert(app.resource<Counter>().value == 2012);
+    CHECK_EQ(app.resource<Counter>().value, 2012);
 }
 
 void testCannotAddSystemsWhileRunning() {
@@ -223,7 +223,7 @@ void testCannotAddSystemsWhileRunning() {
     });
     app.addSystem(Stage::First, [](AppControl& c) { c.requestExit(); });
     app.run();
-    assert(threw);
+    CHECK(threw);
 }
 
 void testAppTeardownOrder() {
@@ -236,7 +236,7 @@ void testAppTeardownOrder() {
         app.run();
     }
     const std::vector<std::string> expected { "Device()", "Renderer()", "~Renderer()", "~Device()" };
-    assert(g_log == expected);
+    CHECK_EQ(g_log, expected);
 }
 
 void testShutdownRunsInReverseOrder() {
@@ -247,7 +247,7 @@ void testShutdownRunsInReverseOrder() {
        .addSystem(Stage::First, [](AppControl& c) { c.requestExit(); });
     app.run();
     const std::vector<std::string> expected { "second registered", "first registered" };
-    assert(order == expected);
+    CHECK_EQ(order, expected);
 }
 
 void testFixedUpdate() {
@@ -270,7 +270,7 @@ void testFixedUpdate() {
        .addSystem(Stage::FixedUpdate, [&](const FixedTime& f) {
            order.push_back("Fixed");
            stepsPerFrame.back()++;
-           assert(f.alpha >= 0.0f && f.alpha < 1.0f);
+           CHECK(f.alpha >= 0.0f && f.alpha < 1.0f);
        })
        .addSystem(Stage::PostUpdate, [&order] { order.push_back("PostUpdate"); })
        .addSystem(Stage::Last, [&](const FixedTime& f, AppControl& control) {
@@ -280,16 +280,17 @@ void testFixedUpdate() {
     app.run();
 
     // 0.625 → 2 steps (0.125 left); +0.125 → 1 step; +0.25 → 1 step; 10 clamped to 1 → 4 steps.
-    assert((stepsPerFrame == std::vector { 2, 1, 1, 4 }));
-    assert((alphas == std::vector { 0.5f, 0.0f, 0.0f, 0.0f }));
-    assert(fixed.tick == 8);
-    assert(fixed.elapsed == 2.0f);
+    CHECK((stepsPerFrame == std::vector { 2, 1, 1, 4 }));
+    CHECK((alphas == std::vector { 0.5f, 0.0f, 0.0f, 0.0f }));
+    CHECK_EQ(fixed.tick, 8);
+    CHECK_EQ(fixed.elapsed, 2.0f);
 
     const std::vector<std::string> firstFrames {
         "Update", "Fixed", "Fixed", "PostUpdate",
         "Update", "Fixed", "PostUpdate",
     };
-    assert(std::equal(firstFrames.begin(), firstFrames.end(), order.begin()));
+    REQUIRE(order.size() >= firstFrames.size());
+    CHECK(std::equal(firstFrames.begin(), firstFrames.end(), order.begin()));
 }
 
 void testFixedUpdateCanRunZeroTimes() {
@@ -301,25 +302,23 @@ void testFixedUpdateCanRunZeroTimes() {
        .addSystem(Stage::FixedUpdate, [&steps] { steps++; })
        .addSystem(Stage::Last, [](AppControl& control) { control.requestExit(); });
     app.run();
-    assert(steps == 0);
-    assert(fixed.alpha == 0.5f);
+    CHECK_EQ(steps, 0);
+    CHECK_EQ(fixed.alpha, 0.5f);
 }
 
 }
 
 void runAppTests() {
-    testWorldResources();
-    testDestructionOrder();
-    testSystemsAndStages();
-    testStartupCanInsertResources();
-    testMissingResourceIsReported();
-    testPlugins();
-    testCannotAddSystemsWhileRunning();
-    testAppTeardownOrder();
-    testShutdownRunsInReverseOrder();
-    testFixedUpdate();
-    testFixedUpdateCanRunZeroTimes();
-    testQueryExclude();
-
-    std::cout << "All app tests passed" << std::endl;
+    ailo::test::run("app/testWorldResources", testWorldResources);
+    ailo::test::run("app/testDestructionOrder", testDestructionOrder);
+    ailo::test::run("app/testSystemsAndStages", testSystemsAndStages);
+    ailo::test::run("app/testStartupCanInsertResources", testStartupCanInsertResources);
+    ailo::test::run("app/testMissingResourceIsReported", testMissingResourceIsReported);
+    ailo::test::run("app/testPlugins", testPlugins);
+    ailo::test::run("app/testCannotAddSystemsWhileRunning", testCannotAddSystemsWhileRunning);
+    ailo::test::run("app/testAppTeardownOrder", testAppTeardownOrder);
+    ailo::test::run("app/testShutdownRunsInReverseOrder", testShutdownRunsInReverseOrder);
+    ailo::test::run("app/testFixedUpdate", testFixedUpdate);
+    ailo::test::run("app/testFixedUpdateCanRunZeroTimes", testFixedUpdateCanRunZeroTimes);
+    ailo::test::run("app/testQueryExclude", testQueryExclude);
 }

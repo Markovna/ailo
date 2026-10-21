@@ -45,5 +45,5 @@ add_executable(lightc_tests
         test/spherical_harmonics_tests.cpp
         src/SphericalHarmonics.cpp
 )
-target_link_libraries(lightc_tests PRIVATE ailo_texture glm::glm)
+target_link_libraries(lightc_tests PRIVATE ailo_texture glm::glm ailo_testing)
 target_include_directories(lightc_tests PRIVATE src)
