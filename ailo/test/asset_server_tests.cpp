@@ -1,4 +1,4 @@
-#include "AssetServer.h"
+#include "assets/AssetServer.h"
 
 #include <cassert>
 #include <iostream>
@@ -817,7 +817,7 @@ void testLoaderExtensionsMustBeDisjoint() {
 
 }
 
-int main() {
+void runAssetServerTests() {
     testAssetIndexDefaultIsInvalid();
 
     testEmplaceAndGet();
@@ -863,5 +863,4 @@ int main() {
     testRegisterReaderValidates();
 
     std::cout << "All asset server tests passed" << std::endl;
-    return 0;
 }

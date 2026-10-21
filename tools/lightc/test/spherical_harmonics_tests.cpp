@@ -1,23 +1,16 @@
-#include "LightingPackage.h"
-
-#include <cassert>
-#include <cmath>
-#include <cstring>
-#include <iostream>
-#include <string>
-#include <vector>
-
 #include "Cubemap.h"
 #include "SphericalHarmonics.h"
 
+#include <algorithm>
+#include <cassert>
+#include <cmath>
+#include <iostream>
+
+#include "render/texture/TexturePackage.h"
+
 using namespace ailo;
-using namespace ailo::lighting;
 
 namespace {
-
-bool contains(const std::string& text, const std::string& part) {
-    return text.find(part) != std::string::npos;
-}
 
 bool near(const glm::vec3& a, const glm::vec3& b, float tolerance) {
     return glm::all(glm::lessThanEqual(glm::abs(a - b), glm::vec3(tolerance)));
@@ -43,68 +36,6 @@ texture::TexturePackage makeCubemap(uint32_t dim, F radiance) {
         }
     }
     return pkg;
-}
-
-LightingPackage makePackage() {
-    LightingPackage pkg;
-    for (size_t i = 0; i < pkg.irradianceSH.size(); i++) {
-        pkg.irradianceSH[i] = glm::vec3(float(i), -float(i) * 0.5f, 0.25f);
-    }
-    pkg.reflections = makeCubemap(2, [](const glm::vec3& dir) { return dir; });
-    return pkg;
-}
-
-void testRoundTrip() {
-    LightingPackage pkg = makePackage();
-    assert(pkg.validate().empty());
-
-    auto data = pkg.serialize();
-    std::string error;
-    auto loaded = LightingPackage::deserialize(data, error);
-    assert(loaded && error.empty());
-    assert(loaded->irradianceSH == pkg.irradianceSH);
-    assert(loaded->reflections.type == texture::TextureType::Cubemap);
-    assert(loaded->reflections.width == 2);
-    assert(loaded->reflections.data == pkg.reflections.data);
-}
-
-void testValidate() {
-    LightingPackage pkg = makePackage();
-    pkg.reflections.type = texture::TextureType::Texture2D;
-    assert(contains(pkg.validate(), "cubemap"));
-
-    pkg = makePackage();
-    pkg.irradianceSH[4].y = NAN;
-    assert(contains(pkg.validate(), "non-finite"));
-
-    pkg = makePackage();
-    pkg.reflections.data.pop_back();
-    assert(contains(pkg.validate(), "reflections"));
-}
-
-void testDeserializeRejectsBadPackages() {
-    std::string error;
-    auto data = makePackage().serialize();
-
-    std::vector<uint8_t> wrongMagic = data;
-    wrongMagic[0] ^= 0xff;
-    assert(!LightingPackage::deserialize(wrongMagic, error));
-    assert(contains(error, "not a lighting package"));
-
-    std::vector<uint8_t> wrongVersion = data;
-    uint32_t version = kLightingPackageVersion + 1;
-    std::memcpy(wrongVersion.data() + 4, &version, sizeof(version));
-    assert(!LightingPackage::deserialize(wrongVersion, error));
-    assert(contains(error, "version"));
-
-    std::vector<uint8_t> truncated(data.begin(), data.end() - 3);
-    assert(!LightingPackage::deserialize(truncated, error));
-    assert(contains(error, "truncated"));
-
-    // The header alone: valid chunks, but none of them.
-    std::vector<uint8_t> empty(data.begin(), data.begin() + 8);
-    assert(!LightingPackage::deserialize(empty, error));
-    assert(contains(error, "no irradiance SH"));
 }
 
 // A uniform environment of radiance L reflects L from every direction.
@@ -143,13 +74,20 @@ void testOrientation() {
 
 }
 
-int main() {
-    testRoundTrip();
-    testValidate();
-    testDeserializeRejectsBadPackages();
+void runSphericalHarmonicsTests() {
     testConstantEnvironment();
     testHemisphere();
     testOrientation();
-    std::cout << "lighting tests passed\n";
+    std::cout << "All spherical harmonics tests passed" << std::endl;
+}
+
+int main() {
+#ifdef NDEBUG
+    std::cerr << "lightc_tests must be built without NDEBUG: the tests are asserts" << std::endl;
+    return 1;
+#endif
+    runSphericalHarmonicsTests();
+
+    std::cout << "All lightc tests passed" << std::endl;
     return 0;
 }

@@ -1,7 +1,7 @@
-#include "PhysicsBodies.h"
-#include "PhysicsMath.h"
-#include "PhysicsPlugin.h"
-#include "PhysicsWorld.h"
+#include "physics/PhysicsBodies.h"
+#include "physics/PhysicsMath.h"
+#include "physics/PhysicsPlugin.h"
+#include "physics/PhysicsWorld.h"
 
 #include <Jolt/Jolt.h>
 
@@ -497,7 +497,7 @@ void testPluginSimulatesEntities() {
 
 }
 
-int main() {
+void runPhysicsTests() {
     testConversions();
     testSphereRestsOnFloor();
     testRuntimeIsRefCounted();
@@ -519,5 +519,4 @@ int main() {
     testPluginSimulatesEntities();
 
     std::cout << "physicstest: all passed\n";
-    return 0;
 }

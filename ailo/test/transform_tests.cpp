@@ -1,5 +1,5 @@
-#include "Transform.h"
-#include "Hierarchy.h"
+#include "ecs/Transform.h"
+#include "ecs/Hierarchy.h"
 
 #include <algorithm>
 #include <cassert>
@@ -583,7 +583,7 @@ void testOnDestroyRunsBeforeRemoval() {
 
 }
 
-int main() {
+void runTransformTests() {
     testDefaultIsIdentity();
     testTrsMatchesGlmComposition();
     testTrsIsAffine();
@@ -619,5 +619,4 @@ int main() {
     testOnDestroyRunsBeforeRemoval();
 
     std::cout << "All transform tests passed" << std::endl;
-    return 0;
 }

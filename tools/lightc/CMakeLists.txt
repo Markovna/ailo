@@ -40,3 +40,10 @@ if(OpenMP_CXX_FOUND)
     # so also pass the flag at link time to pull in libgomp
     target_link_options(lightc PRIVATE ${OpenMP_CXX_FLAGS})
 endif()
+
+add_executable(lightc_tests
+        test/spherical_harmonics_tests.cpp
+        src/SphericalHarmonics.cpp
+)
+target_link_libraries(lightc_tests PRIVATE ailo_texture glm::glm)
+target_include_directories(lightc_tests PRIVATE src)

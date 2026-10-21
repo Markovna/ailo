@@ -1,5 +1,5 @@
-#include "AssetServer.h"
-#include "MemoryAssetReader.h"
+#include "assets/AssetServer.h"
+#include "assets/MemoryAssetReader.h"
 
 #include "embedded/test_assets.h"
 
@@ -133,7 +133,7 @@ void testServerLoadsFromEmbeddedSource() {
 
 }
 
-int main() {
+void runEmbeddedAssetTests() {
     testPackageIsAligned();
     testCompiledAssetIsEmbedded();
     testReadCopiesBytes();
@@ -141,5 +141,4 @@ int main() {
     testServerLoadsFromEmbeddedSource();
 
     std::cout << "All embedded asset tests passed" << std::endl;
-    return 0;
 }

@@ -1,4 +1,4 @@
-#include "di.h"
+#include "di/di.h"
 #include <iostream>
 #include <cassert>
 #include <type_traits>
@@ -278,7 +278,7 @@ void test_injector_builder() {
 
 }
 
-int main() {
+void runDiTests() {
     test_basic_binding();
     test_transitive_dependencies();
     test_deep_graph();
@@ -291,5 +291,4 @@ int main() {
     test_injector_builder();
 
     std::cout << "All tests passed!\n";
-    return 0;
 }

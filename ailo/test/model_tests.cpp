@@ -1,4 +1,4 @@
-#include "ModelPackage.h"
+#include "render/model/ModelPackage.h"
 
 #include <cassert>
 #include <cstring>
@@ -245,7 +245,7 @@ void testDeserializeRejectsBadPackages() {
 
 }
 
-int main() {
+void runModelTests() {
     testRoundTrip();
     testIndexWidth();
     testEmptyPackage();
@@ -253,5 +253,4 @@ int main() {
     testDeserializeRejectsBadPackages();
 
     std::cout << "All model tests passed" << std::endl;
-    return 0;
 }

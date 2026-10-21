@@ -1,5 +1,5 @@
-#include "TexturePackage.h"
-#include "TexturePacker.h"
+#include "render/texture/TexturePackage.h"
+#include "render/texture/TexturePacker.h"
 
 #include <algorithm>
 #include <array>
@@ -500,7 +500,7 @@ void testOfflineMipmaps() {
     assert(!generateMipLevels(*pkg, error));
 }
 
-int main() {
+void runTextureTests() {
     testMipLevelCount();
     testLayout();
     testRoundTrip();
@@ -517,5 +517,4 @@ int main() {
     testOfflineMipmaps();
 
     std::cout << "All texture tests passed" << std::endl;
-    return 0;
 }

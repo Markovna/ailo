@@ -1,4 +1,5 @@
-#include "App.h"
+#include "app/App.h"
+#include "ecs/Transform.h"
 
 #include <cassert>
 #include <iostream>
@@ -306,7 +307,7 @@ void testFixedUpdateCanRunZeroTimes() {
 
 }
 
-int main() {
+void runAppTests() {
     testWorldResources();
     testDestructionOrder();
     testSystemsAndStages();
@@ -321,5 +322,4 @@ int main() {
     testQueryExclude();
 
     std::cout << "All app tests passed" << std::endl;
-    return 0;
 }
