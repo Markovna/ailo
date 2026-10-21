@@ -10,6 +10,8 @@ void InputSystem::processEvents() {
     m_mouseDeltaY = 0.0;
     m_keysPressedThisFrame = {};
     m_keysReleasedThisFrame = {};
+    m_mouseButtonPressedThisFrame = {};
+    m_mouseButtonReleasedThisFrame = {};
 
     Event event;
     while (pollEvent(event)) {
@@ -58,6 +60,7 @@ void InputSystem::onMouseButtonPressed(MouseButtonPressedEvent& e) {
   uint8_t buttonIndex = static_cast<uint8_t>(e.button);
   if (buttonIndex < m_mouseButtonStates.size()) {
     m_mouseButtonStates[buttonIndex] = true;
+    m_mouseButtonPressedThisFrame[buttonIndex] = true;
   }
 }
 
@@ -65,6 +68,7 @@ void InputSystem::onMouseButtonReleased(MouseButtonReleasedEvent& e) {
   uint8_t buttonIndex = static_cast<uint8_t>(e.button);
   if (buttonIndex < m_mouseButtonStates.size()) {
     m_mouseButtonStates[buttonIndex] = false;
+    m_mouseButtonReleasedThisFrame[buttonIndex] = true;
   }
 }
 
@@ -115,6 +119,22 @@ bool InputSystem::isMouseButtonPressed(MouseButton button) const {
         return false;
     }
     return m_mouseButtonStates[buttonIndex];
+}
+
+bool InputSystem::mouseButtonPressedThisFrame(MouseButton button) const {
+  uint8_t buttonIndex = static_cast<uint8_t>(button);
+  if (buttonIndex >= m_mouseButtonPressedThisFrame.size()) {
+    return false;
+  }
+  return m_mouseButtonPressedThisFrame[buttonIndex];
+}
+
+bool InputSystem::mouseButtonReleasedThisFrame(MouseButton button) const {
+  uint8_t buttonIndex = static_cast<uint8_t>(button);
+  if (buttonIndex >= m_mouseButtonReleasedThisFrame.size()) {
+    return false;
+  }
+  return m_mouseButtonReleasedThisFrame[buttonIndex];
 }
 
 void InputSystem::getMousePosition(double& x, double& y) const {

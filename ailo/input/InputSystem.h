@@ -26,6 +26,8 @@ public:
     bool pressedThisFrame(KeyCode key) const;
     bool releasedThisFrame(KeyCode key) const;
     bool isMouseButtonPressed(MouseButton button) const;
+    bool mouseButtonPressedThisFrame(MouseButton button) const;
+    bool mouseButtonReleasedThisFrame(MouseButton button) const;
     void getMousePosition(double& x, double& y) const;
     void getMouseDelta(double& deltaX, double& deltaY) const;
 
@@ -47,6 +49,8 @@ private:
     std::array<bool, 512> m_keysPressedThisFrame{};
     std::array<bool, 512> m_keysReleasedThisFrame{};
     std::array<bool, 8> m_mouseButtonStates{};
+    std::array<bool, 8> m_mouseButtonPressedThisFrame{};
+    std::array<bool, 8> m_mouseButtonReleasedThisFrame{};
     double m_mouseX = 0.0;
     double m_mouseY = 0.0;
     bool m_hasMousePosition = false;
