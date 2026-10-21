@@ -24,11 +24,12 @@ add_custom_command(
         COMMENT "Generating build_assets.ninja"
 )
 
-# cleandead removes the outputs of assets that no longer exist. -f takes the manifest's path relative to the build
-# folder: ninja regenerates it only if the path matches its build edge (build_assets.ninja) exactly.
+# run.py runs ninja, then cleandead, which removes the outputs of assets that no longer exist, and rebuilds assets whose
+# inputs were replaced by older files. The manifest's path is relative to the build folder: ninja regenerates it only
+# if the path matches its build edge (build_assets.ninja) exactly.
 add_custom_target(sandbox_assets ALL
-        COMMAND ${AILO_NINJA} -f build_assets.ninja
-        COMMAND ${AILO_NINJA} -f build_assets.ninja -t cleandead
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/run.py --ninja ${AILO_NINJA}
+                --manifest build_assets.ninja --state asset_build/inputs.json
         DEPENDS ${SANDBOX_ASSET_MANIFEST}
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Building sandbox assets"

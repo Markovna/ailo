@@ -11,19 +11,23 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   read by a tool.
 - **Ninja** compares timestamps and runs only what is out of date, on all cores. Its log and deps live in
   `<build>/asset_build/`, apart from CMake's.
+- **Runner** (`run.py`): runs Ninja and `ninja -t cleandead`. Ninja misses an input replaced by an older file (renamed,
+  copied or restored with its mtime), so the runner records every input's mtime and size after each build, in
+  `<build>/asset_build/inputs.json`, and before the next one deletes the outputs of every input whose mtime or size
+  changed, so Ninja rebuilds them.
 - **Tools** (e.g. `texc`) are built by CMake into `<build>/asset_tools/`, which is passed to the generator as
   `--tools-dir`. They compile a single asset and can write a depfile with the extra inputs they read (source images,
   includes), so editing one of those rebuilds the asset.
 
 CMake runs `gen.py` once, when `build_assets.ninja` is missing or `gen.py`/`config.json` change. The game's assets
-target runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
+target runs `run.py`, which runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
 outputs of assets that no longer exist. The manifest depends on every folder in `assets/`, so Ninja reruns `gen.py`
 itself when a file is added or removed.
 
-By hand, from the build folder:
+By hand, from the build folder (plain `ninja -f build_assets.ninja` works too, but misses inputs replaced by older files):
 
 ```
-ninja -f build_assets.ninja
+python <repo>/build/run.py --ninja ninja --manifest build_assets.ninja --state asset_build/inputs.json
 ```
 
 ## Config
@@ -115,7 +119,7 @@ A file's span is named after its built path, with the output extension dropped: 
 that is missing or outside the root, an empty list, or two files with the same output or symbol fail the generation or
 bin2cpp. bin2cpp rewrites the header and source only when their content changes (`restat`), so rebuilding an asset to the
 same bytes recompiles nothing. The manifest regenerates itself when the list, the config or the scripts change, and
-has its own log in `<build>/package_build/<name>/`. The package name must be unique in the build.
+has its own log and `run.py` state in `<build>/package_build/<name>/`. The package name must be unique in the build.
 
 The engine reads a package with `MemoryAssetReader` (`ailo/assets/MemoryAssetReader.h`), which is given every
 asset's key and span explicitly, and usually registered as a source:

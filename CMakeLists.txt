@@ -162,8 +162,8 @@ function(embed_assets TARGET)
     # Runs every build, like the asset build: only Ninja knows whether an asset changed. bin2cpp rewrites the header and
     # source only when their content changes, so an up-to-date package recompiles nothing.
     add_custom_target(embed_${EMB_PACKAGE}
-            COMMAND ${AILO_NINJA} -f ${MANIFEST}
-            COMMAND ${AILO_NINJA} -f ${MANIFEST} -t cleandead
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/build/run.py --ninja ${AILO_NINJA}
+                    --manifest ${MANIFEST} --state package_build/${EMB_PACKAGE}/inputs.json
             BYPRODUCTS ${HEADER} ${SOURCE}
             DEPENDS ${CMAKE_BINARY_DIR}/${MANIFEST}
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
@@ -190,5 +190,4 @@ add_subdirectory(tools/bin2cpp)
 # The generator expression keeps multi-config generators from adding a per-config subfolder.
 set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
 
-# The demo game
 add_subdirectory(sandbox)
