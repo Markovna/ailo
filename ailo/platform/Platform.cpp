@@ -45,6 +45,14 @@ void Platform::getWindowSize(WindowHandle handle, int& width, int& height) {
     glfwGetWindowSize(static_cast<GLFWwindow*>(handle), &width, &height);
 }
 
+void Platform::setCursorCaptured(WindowHandle window, bool captured) {
+    auto* handle = static_cast<GLFWwindow*>(window);
+    glfwSetInputMode(handle, GLFW_CURSOR, captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    if (glfwRawMouseMotionSupported()) {
+        glfwSetInputMode(handle, GLFW_RAW_MOUSE_MOTION, captured ? GLFW_TRUE : GLFW_FALSE);
+    }
+}
+
 void Platform::pumpEvents(WindowHandle handle, InputSystem* inputSystem) {
     glfwSetWindowUserPointer(static_cast<GLFWwindow*>(handle), inputSystem);
 

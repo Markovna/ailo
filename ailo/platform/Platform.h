@@ -20,6 +20,7 @@ public:
     void destroyWindow(WindowHandle handle);
     void getFramebufferSize(WindowHandle handle, int& width, int& height);
     void getWindowSize(WindowHandle handle, int& width, int& height);
+    void setCursorCaptured(WindowHandle window, bool captured);
 
     void pumpEvents(WindowHandle, InputSystem*);
     void waitEvents(WindowHandle, InputSystem*);
