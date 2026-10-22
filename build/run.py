@@ -12,6 +12,7 @@ run, deletes the outputs of every input whose mtime or size differs, so ninja re
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -109,7 +110,7 @@ def save_state(path, graph):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--ninja", required=True, help="ninja executable")
+    parser.add_argument("--ninja", help="ninja executable (default: ninja from PATH)")
     parser.add_argument("--manifest", default=gen.MANIFEST,
                         help="manifest, relative to the build folder (the working directory)")
     parser.add_argument("--state", default="asset_build/inputs.json",
@@ -118,6 +119,11 @@ def main():
     parser.add_argument("--config", help="extension -> tool config (JSON), for gen.py")
     parser.add_argument("--tools-dir", help="folder with the tools named in the config, for gen.py")
     args = parser.parse_args()
+
+    if args.ninja is None:
+        args.ninja = shutil.which("ninja")
+        if args.ninja is None:
+            sys.exit("run.py: error: ninja was not found in PATH; add ninja to PATH or pass its path with --ninja")
 
     gen_args = (args.source, args.config, args.tools_dir)
     if any(gen_args):

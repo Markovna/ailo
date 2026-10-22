@@ -29,9 +29,10 @@ reruns `gen.py` itself when a file is added or removed or one of those changes.
 By hand, from the build folder:
 
 ```
-python <repo>/build/run.py --ninja ninja --source <game>/assets --config <repo>/build/config.json --tools-dir asset_tools
+python <repo>/build/run.py --source <game>/assets --config <repo>/build/config.json --tools-dir asset_tools
 ```
 
+`--ninja` names the Ninja executable; without it, `run.py` uses `ninja` from `PATH` and fails if there is none.
 Without `--source`, `--config` and `--tools-dir`, `run.py` only runs an existing manifest, by default
 `build_assets.ninja` (`--manifest`), keeping its state in `asset_build/inputs.json` (`--state`). Once the manifest
 exists, plain `ninja -f build_assets.ninja` works too, but misses inputs replaced by older files.
