@@ -191,4 +191,4 @@ add_subdirectory(tools/bin2cpp)
 # The generator expression keeps multi-config generators from adding a per-config subfolder.
 set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
 
-add_subdirectory(sandbox)
+add_subdirectory(samples/sandbox)
