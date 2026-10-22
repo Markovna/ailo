@@ -17,6 +17,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Keeps Python from writing build/__pycache__ for gen.
+sys.dont_write_bytecode = True
+
 import gen
 
 # Edges that are never deleted: the manifest's own and the phony ones.

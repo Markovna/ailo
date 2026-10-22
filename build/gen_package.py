@@ -12,6 +12,9 @@ import argparse
 import sys
 from pathlib import Path
 
+# Keeps Python from writing build/__pycache__ for gen.
+sys.dont_write_bytecode = True
+
 from gen import EXE_SUFFIX, escape_path, escape_value, load_json, posix, quote
 
 
