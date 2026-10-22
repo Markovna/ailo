@@ -10,7 +10,7 @@ FrameBuffer::FrameBuffer(
     uint32_t width, uint32_t height)
         : m_device(device), m_deletionQueue(deletionQueue) {
 
-    std::array<vk::ImageView, 2 * views.color.size() + 1> attachments;
+    std::array<vk::ImageView, 2 * kMaxColorAttachments + 1> attachments;
     uint32_t attachmentCount = 0;
     for (auto i : views.color) {
         if (i != VK_NULL_HANDLE) {

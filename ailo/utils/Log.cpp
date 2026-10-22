@@ -30,7 +30,7 @@ Loggers const slog = {
     cout, cerr, cwarn, cinfo, cverbose
 };
 
-void log::write(Loggers::ostream& out, std::string_view fmt, std::format_args args) {
+void write(Loggers::ostream& out, std::string_view fmt, std::format_args args) {
     out.emit(fmt, args);
 }
 

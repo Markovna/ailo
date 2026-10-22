@@ -98,6 +98,10 @@ void testWorldResources() {
     CHECK(threw);
 }
 
+void logPositionDestroyed(entt::registry&, entt::entity) {
+    g_log.push_back("~Position");
+}
+
 void testDestructionOrder() {
     g_log.clear();
     {
@@ -107,9 +111,7 @@ void testDestructionOrder() {
 
         auto entity = world.scene().addEntity();
         world.scene().addComponent<Position>(entity);
-        world.scene().onDestroy<Position>().connect<+[](entt::registry&, entt::entity) {
-            g_log.push_back("~Position");
-        }>();
+        world.scene().onDestroy<Position>().connect<&logPositionDestroyed>();
     }
     const std::vector<std::string> expected { "Device()", "Renderer()", "~Position", "~Renderer()", "~Device()" };
     CHECK_EQ(g_log, expected);
