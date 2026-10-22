@@ -136,7 +136,6 @@ add_library(ailo STATIC
     ecs/Spawn.h
     platform/Platform.cpp
     platform/Platform.h
-    di/di.h
     app/App.cpp
     app/App.h
     app/System.h

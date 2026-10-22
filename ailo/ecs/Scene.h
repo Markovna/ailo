@@ -31,6 +31,11 @@ class Scene {
   }
 
   template<typename Type>
+  decltype(auto) addComponent(entt::entity entity, Type&& component) {
+      m_registry.emplace<std::remove_cvref_t<Type>>(entity, std::forward<Type>(component));
+  }
+
+  template<typename Type>
   void removeComponent(entt::entity entity) {
     m_registry.remove<Type>(entity);
   }
