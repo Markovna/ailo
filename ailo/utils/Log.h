@@ -38,8 +38,15 @@ void error(std::format_string<Args...> fmt, Args&&... args) {
 
 }
 
-#define LOG_INFO(fmt, ...) log::info(fmt, __VA_ARGS__)
-#define LOG_WARNING(fmt, ...) log::warn(fmt, __VA_ARGS__)
-#define LOG_ERROR(fmt, ...) log::error(fmt, __VA_ARGS__)
+#ifdef NDEBUG
+// The dead branch keeps the format string and arguments checked (and used) without evaluating them.
+#define LOG_INFO(...) (false ? ::ailo::log::info(__VA_ARGS__) : void())
+#define LOG_WARNING(...) (false ? ::ailo::log::warn(__VA_ARGS__) : void())
+#define LOG_ERROR(...) (false ? ::ailo::log::error(__VA_ARGS__) : void())
+#else
+#define LOG_INFO(...) ::ailo::log::info(__VA_ARGS__)
+#define LOG_WARNING(...) ::ailo::log::warn(__VA_ARGS__)
+#define LOG_ERROR(...) ::ailo::log::error(__VA_ARGS__)
+#endif
 
 }
