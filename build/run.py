@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Runs ninja on an asset manifest, then ninja -t cleandead, rebuilding the outputs of every input whose file changed.
 
+Given an assets folder (--source, --config, --tools-dir), it first writes build_assets.ninja with gen.py when the
+manifest is missing or was generated with other arguments.
+
 Ninja only rebuilds an output older than one of its inputs, so an input replaced by a file with an older mtime (a
 renamed, copied or restored file) is missed. This records each input's mtime and size after the build and, on the next
 run, deletes the outputs of every input whose mtime or size differs, so ninja rebuilds them. See README.md.
@@ -12,6 +15,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+import gen
 
 # Edges that are never deleted: the manifest's own and the phony ones.
 SKIPPED_RULES = {"phony", "regen"}
@@ -105,9 +110,25 @@ def save_state(path, graph):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--ninja", required=True, help="ninja executable")
-    parser.add_argument("--manifest", required=True, help="manifest, relative to the build folder (the working directory)")
-    parser.add_argument("--state", required=True, help="where the inputs' signatures are kept between builds")
+    parser.add_argument("--manifest", default=gen.MANIFEST,
+                        help="manifest, relative to the build folder (the working directory)")
+    parser.add_argument("--state", default="asset_build/inputs.json",
+                        help="where the inputs' signatures are kept between builds")
+    parser.add_argument("--source", help="assets folder: generates the manifest with gen.py when needed")
+    parser.add_argument("--config", help="extension -> tool config (JSON), for gen.py")
+    parser.add_argument("--tools-dir", help="folder with the tools named in the config, for gen.py")
     args = parser.parse_args()
+
+    gen_args = (args.source, args.config, args.tools_dir)
+    if any(gen_args):
+        if not all(gen_args):
+            parser.error("--source, --config and --tools-dir go together")
+        if args.manifest != gen.MANIFEST:
+            parser.error(f"gen.py writes {gen.MANIFEST}, not {args.manifest}")
+        # After the first build ninja regenerates the manifest itself when assets are added or removed or gen.py or the
+        # config change. Only a change of these arguments is left to the runner.
+        if gen.read_args(args.manifest) != gen.generator_args(args.source, ".", args.config, args.tools_dir):
+            gen.generate(args.source, ".", args.config, args.tools_dir)
 
     state_path = Path(args.state)
     state = load_state(state_path)

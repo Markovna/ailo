@@ -11,7 +11,8 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   read by a tool.
 - **Ninja** compares timestamps and runs only what is out of date, on all cores. Its log and deps live in
   `<build>/asset_build/`, apart from CMake's.
-- **Runner** (`run.py`): runs Ninja and `ninja -t cleandead`. Ninja misses an input replaced by an older file (renamed,
+- **Runner** (`run.py`): writes the manifest with the generator when it is missing or was generated with other
+  arguments, then runs Ninja and `ninja -t cleandead`. Ninja misses an input replaced by an older file (renamed,
   copied or restored with its mtime), so the runner records every input's mtime and size after each build, in
   `<build>/asset_build/inputs.json`, and before the next one deletes the outputs of every input whose mtime or size
   changed, so Ninja rebuilds them.
@@ -19,16 +20,21 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   `--tools-dir`. They compile a single asset and can write a depfile with the extra inputs they read (source images,
   includes), so editing one of those rebuilds the asset.
 
-CMake runs `gen.py` once, when `build_assets.ninja` is missing or `gen.py`/`config.json` change. The game's assets
-target runs `run.py`, which runs `ninja -f build_assets.ninja` and then `ninja -t cleandead`, which deletes the
-outputs of assets that no longer exist. The manifest depends on every folder in `assets/`, so Ninja reruns `gen.py`
-itself when a file is added or removed.
+The game's assets target runs `run.py` from the build folder with the assets folder, the config and the tools folder.
+It runs `gen.py` when `build_assets.ninja` is missing or was generated with other arguments (the manifest records
+them), then runs `ninja -f build_assets.ninja` and `ninja -t cleandead`, which deletes the outputs of assets that no
+longer exist. The manifest depends on every folder in `assets/`, `gen.py`, the config and the ignore file, so Ninja
+reruns `gen.py` itself when a file is added or removed or one of those changes.
 
-By hand, from the build folder (plain `ninja -f build_assets.ninja` works too, but misses inputs replaced by older files):
+By hand, from the build folder:
 
 ```
-python <repo>/build/run.py --ninja ninja --manifest build_assets.ninja --state asset_build/inputs.json
+python <repo>/build/run.py --ninja ninja --source <game>/assets --config <repo>/build/config.json --tools-dir asset_tools
 ```
+
+Without `--source`, `--config` and `--tools-dir`, `run.py` only runs an existing manifest, by default
+`build_assets.ninja` (`--manifest`), keeping its state in `asset_build/inputs.json` (`--state`). Once the manifest
+exists, plain `ninja -f build_assets.ninja` works too, but misses inputs replaced by older files.
 
 ## Config
 
