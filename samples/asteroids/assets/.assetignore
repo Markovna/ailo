@@ -1,0 +1,3 @@
+# Not built into <build>/assets/. Syntax: build/README.md.
+# Source files (images, models, the sky HDR), read by the tools through the asset files next to the folder.
+.source/

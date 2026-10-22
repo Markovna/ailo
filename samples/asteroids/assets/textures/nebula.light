@@ -1,0 +1,5 @@
+{
+    "source": ".source/nebula.hdr",
+    "size": 512,
+    "samples": 512
+}

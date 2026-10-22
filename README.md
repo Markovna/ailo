@@ -16,7 +16,10 @@ ailo is a physically based renderer and small game engine written in C++23 on Vu
 
 ## Samples
 
+The samples live in `samples/`.
+
 - `sandbox`: a demo scene with Sponza, an animated character and physics cubes, drawn with PBR materials.
+- `asteroids`: a 3D Asteroids game.
 
 ## Building
 

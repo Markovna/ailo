@@ -1,0 +1,4 @@
+{
+    "source": ".source/asteroid_pack_01.obj",
+    "material": "engine:/materials/lit.matpack"
+}

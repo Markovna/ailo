@@ -1,0 +1,39 @@
+material {
+    "name": "AsteroidsPbr",
+    "shadingModel": "lit",
+    // color: the meshes provide it, and declaring it keeps the vertex inputs matching the pipeline layout
+    "requires": ["color", "uv0", "tangents"],
+    // Separate single-channel maps (read from red), as the asset packs ship them.
+    "parameters": [
+        { "type": "sampler2d", "name": "baseColorMap", "default": "white" },
+        { "type": "sampler2d", "name": "normalMap", "default": "normal" },
+        { "type": "sampler2d", "name": "metallicMap", "default": "white" },
+        { "type": "sampler2d", "name": "roughnessMap", "default": "white" },
+        { "type": "sampler2d", "name": "occlusionMap", "default": "white" },
+        { "type": "sampler2d", "name": "emissiveMap", "default": "white" },
+        { "type": "float4", "name": "baseColorFactor", "default": [1, 1, 1, 1] },
+        { "type": "float", "name": "metallicFactor", "default": 1 },
+        { "type": "float", "name": "roughnessFactor", "default": 1 },
+        { "type": "float3", "name": "emissiveFactor", "default": [0, 0, 0] },
+        // -1 for DirectX normal maps (green points down)
+        { "type": "float", "name": "normalGreenSign", "default": 1 }
+    ],
+    "blending": "opaque",
+    "culling": "back"
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        vec3 normal = unpackNormalMap(texture(materialParams_normalMap, getUV0()));
+        normal.y *= materialParams.normalGreenSign;
+        material.normal = normal;
+        prepareMaterial(material);
+
+        vec2 uv = getUV0();
+        material.baseColor = texture(materialParams_baseColorMap, uv) * materialParams.baseColorFactor;
+        material.metallic = texture(materialParams_metallicMap, uv).r * materialParams.metallicFactor;
+        material.roughness = texture(materialParams_roughnessMap, uv).r * materialParams.roughnessFactor;
+        material.ambientOcclusion = texture(materialParams_occlusionMap, uv).r;
+        material.emissive = texture(materialParams_emissiveMap, uv).rgb * materialParams.emissiveFactor;
+    }
+}

@@ -1,0 +1,20 @@
+material {
+    "name": "AsteroidsGlow",
+    "shadingModel": "unlit",
+    // Unused, but declaring them keeps the vertex inputs matching the pipeline layout of the built-in meshes.
+    "requires": ["color", "uv0", "tangents"],
+    // Linear HDR color: values above 1 stay bright after tonemapping. Lasers and explosion sparks.
+    "parameters": [
+        { "type": "float4", "name": "color", "default": [1, 1, 1, 1] }
+    ],
+    "variantFilter": ["skinning", "shadowReceiver"],
+    "blending": "opaque",
+    "culling": "back"
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = materialParams.color;
+    }
+}
