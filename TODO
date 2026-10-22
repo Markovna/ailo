@@ -1,3 +1,11 @@
 TODO:
 
-*  Optimization: do not bind descriptor set if it's already bound
+*  Sort render data by material in Renderer to reduce number of descriptor set bindings
+
+*  Frustum culling: color pass + per shadow cascade
+
+*  Async asset loading
+
+*  Instancing
+
+*  Support post-process materials - re-write tonemapping as post-process material
