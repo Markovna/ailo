@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.22)
 project(ailo)
 
 set(CMAKE_CXX_STANDARD 23)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
 
 # Find Vulkan package
 find_package(Vulkan REQUIRED)
@@ -77,6 +76,7 @@ add_subdirectory(third_party/imgui)
 
 # Only the offline model compiler (tools/modelc) links it.
 set(BUILD_SHARED_LIBS OFF)
+set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)   # -Werror breaks on newer compilers (GCC's maybe-uninitialized in stb_image)
 add_subdirectory(third_party/assimp)
 unset(BUILD_SHARED_LIBS)
 # On MinGW assimp forces "-static-libstdc++ -Wl,-Bstatic -lstdc++ -lwinpthread" onto its consumers. The static
