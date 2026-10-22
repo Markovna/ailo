@@ -2,12 +2,9 @@
 
 #include <filesystem>
 
-
-#include <iostream>
-#include <ostream>
-
 #include "render/texture/TexturePackage.h"
 #include "stb_image/stb_image.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -100,7 +97,7 @@ void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> byt
 
         stbi_uc* pixels = stbi_load_from_memory(data, size, &texWidth, &texHeight, &texChannels, desiredChannels);
         if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << key << "'! Reason " << stbi_failure_reason() << std::endl;
+            log::error("Failed to load texture image at '{}'! Reason {}", key, stbi_failure_reason());
             throw std::runtime_error("failed to load texture image!");
         }
 
@@ -115,7 +112,7 @@ void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> byt
 
         float* pixels = stbi_loadf_from_memory(data, size, &texWidth, &texHeight, &texChannels, desiredChannels);
         if (!pixels) {
-            std::cerr << "Failed to load texture image at '" << key << "'! Reason " << stbi_failure_reason() << std::endl;
+            log::error("Failed to load texture image at '{}'! Reason {}", key, stbi_failure_reason());
             throw std::runtime_error("failed to load texture image!");
         }
 

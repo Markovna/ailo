@@ -1,7 +1,6 @@
 #include "ImGuiRenderer.h"
 #include "embedded/shaders.h"
 #include <cstring>
-#include <iostream>
 
 namespace ailo {
 

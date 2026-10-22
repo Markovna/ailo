@@ -1,6 +1,5 @@
 #include "VulkanDevice.h"
 #include <algorithm>
-#include <iostream>
 
 #include "utils/Log.h"
 

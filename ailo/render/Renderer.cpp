@@ -1,6 +1,5 @@
 #include "Renderer.h"
 
-#include <iostream>
 #include <ecs/Scene.h>
 
 #include "app/System.h"
@@ -10,6 +9,7 @@
 #include "embedded/shaders.h"
 #include "MaterialInstance.h"
 #include "Skybox.h"
+#include "utils/Log.h"
 #include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
@@ -408,7 +408,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
       auto& [indexOffset, indexCount] = mesh->faces[i];
       auto& instance = renderable.materials[i];
       if (!instance) {
-        std::cerr << "Renderable " << entt::to_integral(entity) << ": face " << i << " has no material instance, skipped" << std::endl;
+        log::error("Renderable {}: face {} has no material instance, skipped", entt::to_integral(entity), i);
         continue;
       }
       instance->commit(backend);

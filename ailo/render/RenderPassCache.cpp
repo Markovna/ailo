@@ -1,6 +1,5 @@
 #include "RenderPassCache.h"
 
-#include <iostream>
 #include <ostream>
 
 namespace ailo {

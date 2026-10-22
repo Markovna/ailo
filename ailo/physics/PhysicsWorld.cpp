@@ -12,13 +12,12 @@
 #include <chrono>
 #include <cstdarg>
 #include <cstdio>
-#include <format>
-#include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
 
 #include "PhysicsMath.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -33,12 +32,12 @@ void trace(const char* fmt, ...) {
     va_start(args, fmt);
     std::vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
-    std::cerr << "[Jolt] " << buffer << std::endl;
+    log::warn("[Jolt] {}", buffer);
 }
 
 #ifdef JPH_ENABLE_ASSERTS
 bool assertFailed(const char* expr, const char* msg, const char* file, JPH::uint line) {
-    std::cerr << std::format("[Jolt] assert failed: {}:{}: ({}) {}", file, line, expr, msg ? msg : "") << std::endl;
+    log::error("[Jolt] assert failed: {}:{}: ({}) {}", file, line, expr, msg ? msg : "");
     return true;   // break into the debugger
 }
 #endif
@@ -111,7 +110,7 @@ void PhysicsWorld::step(float dt) {
         m_system->Update(dt, m_settings.collisionSteps, m_tempAllocator.get(), m_jobSystem.get());
     if (error != JPH::EPhysicsUpdateError::None) {
         // The step still completes, but some contacts were dropped: objects may sink into each other.
-        std::cerr << "[Physics] step: " << describe(error) << std::endl;
+        log::error("[Physics] step: {}", describe(error));
     }
 
     m_stats.stepMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();

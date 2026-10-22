@@ -4,7 +4,6 @@
 #include <iostream>
 #include <memory>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -380,30 +379,28 @@ void testNestedSameTypeRelease() {
     CHECK((g_log == std::vector<std::string>{ "~Node a", "~Node b", "~Node c" }));
 }
 
-void testReportLeaks() {
+void testLiveAssetCount() {
     AssetStorage<Texture> textures;
     AssetStorage<Material> materials;
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
     server.registerStorage(&materials);
 
-    std::ostringstream none;
-    textures.reportLeaks(none);
-    CHECK(none.str().empty());
-
-    materials.reportLeaks(none);
+    CHECK(textures.empty());
     CHECK(materials.empty());
 
     auto texture = textures.emplace("t", "t");
     auto copy = texture;
     auto material = materials.emplace("m", "m", AssetPtr<Texture>{});
+    CHECK_EQ(textures.size(), 1u);
+    CHECK_EQ(materials.size(), 1u);
 
-    std::ostringstream out;
-    textures.reportLeaks(out);
-    materials.reportLeaks(out);
-    const std::string report = out.str();
-    CHECK_NE(report.find("'t' (2 references)"), std::string::npos);
-    CHECK_NE(report.find("'m' (1 references)"), std::string::npos);
+    texture = {};
+    CHECK_EQ(textures.size(), 1u);
+    copy = {};
+    material = {};
+    CHECK(textures.empty());
+    CHECK(materials.empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -834,7 +831,7 @@ void runAssetServerTests() {
     ailo::test::run("asset_server/testKeyCanBeReusedAfterRelease", testKeyCanBeReusedAfterRelease);
     ailo::test::run("asset_server/testDependentReleasesDependency", testDependentReleasesDependency);
     ailo::test::run("asset_server/testNestedSameTypeRelease", testNestedSameTypeRelease);
-    ailo::test::run("asset_server/testReportLeaks", testReportLeaks);
+    ailo::test::run("asset_server/testLiveAssetCount", testLiveAssetCount);
 
     ailo::test::run("asset_server/testServerLoad", testServerLoad);
     ailo::test::run("asset_server/testServerLoadsDependencies", testServerLoadsDependencies);

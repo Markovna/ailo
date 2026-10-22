@@ -2,10 +2,10 @@
 
 #include <algorithm>
 #include <cstring>
-#include <iostream>
 
 #include "DefaultAssetFactory.h"
 #include "Renderer.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -54,7 +54,7 @@ MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetServer& server, As
 void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler) {
     const auto* p = m_material->findParameter(name);
     if (!p || !material::isSampler(p->type)) {
-        std::cerr << "Material '" << m_material->getName() << "' has no sampler parameter '" << name << "'" << std::endl;
+        log::error("Material '{}' has no sampler parameter '{}'", m_material->getName(), name);
         return;
     }
     if (!texture) {
@@ -73,12 +73,12 @@ void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> tex
 void MaterialInstance::setUniform(std::string_view name, material::ParameterType type, std::span<const uint32_t> words, uint32_t firstElement) {
     const auto* p = m_material->findParameter(name);
     if (!p || material::isSampler(p->type)) {
-        std::cerr << "Material '" << m_material->getName() << "' has no uniform parameter '" << name << "'" << std::endl;
+        log::error("Material '{}' has no uniform parameter '{}'", m_material->getName(), name);
         return;
     }
     if (p->type != type) {
-        std::cerr << "Material '" << m_material->getName() << "': parameter '" << name << "' is "
-                  << material::toString(p->type) << ", not " << material::toString(type) << std::endl;
+        log::error("Material '{}': parameter '{}' is {}, not {}", m_material->getName(), name,
+                   material::toString(p->type), material::toString(type));
         return;
     }
 
@@ -86,8 +86,8 @@ void MaterialInstance::setUniform(std::string_view name, material::ParameterType
     const uint32_t elements = uint32_t(words.size()) / components;
     const uint32_t arraySize = std::max(p->arraySize, 1u);
     if (firstElement + elements > arraySize) {
-        std::cerr << "Material '" << m_material->getName() << "': writing elements [" << firstElement << ", "
-                  << firstElement + elements << ") of '" << name << "', which has " << arraySize << std::endl;
+        log::error("Material '{}': writing elements [{}, {}) of '{}', which has {}", m_material->getName(),
+                   firstElement, firstElement + elements, name, arraySize);
         return;
     }
 

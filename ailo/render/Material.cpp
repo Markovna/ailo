@@ -1,8 +1,7 @@
 #include "Material.h"
 
-#include <iostream>
-
 #include "Renderer.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -80,8 +79,7 @@ ProgramHandle Material::getProgram(material::Variant variant) const {
     auto vertex = m_package.getShader(material::ShaderStage::Vertex, filtered);
     auto fragment = m_package.getShader(material::ShaderStage::Fragment, filtered);
     if (vertex.empty() || fragment.empty()) {
-        std::cerr << "Material '" << m_package.name << "' has no shaders for variant 0x" << std::hex
-                  << uint32_t(filtered.key) << std::dec << std::endl;
+        log::error("Material '{}' has no shaders for variant 0x{:x}", m_package.name, uint32_t(filtered.key));
         m_missingVariants.set(filtered.key);
         return {};
     }

@@ -2,7 +2,6 @@
 #include <cassert>
 #include <cstdint>
 #include <format>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -113,8 +112,6 @@ public:
 
     std::size_t size() const { return m_map.size(); }
     bool empty() const { return m_map.empty(); }
-
-    void reportLeaks(std::ostream& out) const;
 
 private:
 
@@ -274,8 +271,9 @@ private:
 
 template<class T>
 AssetStorage<T>::~AssetStorage() {
-    // Storages outlive every resource inserted after them, so whatever is still here is a real leak.
-    reportLeaks(std::cerr);
+    for (const Entry& entry : m_map) {
+        log::error("[AssetServer] leaked {} '{}' ({} references)", entt::type_name<T>::value(), entry.key, entry.refCount);
+    }
     assert(m_map.empty() && "AssetStorage destroyed while AssetPtrs still reference it");
 }
 
@@ -348,15 +346,6 @@ AssetPtr<T> AssetStorage<T>::emplace(noname_t, Args&&... args) {
     }
 
     return AssetPtr<T>(this, AssetIndex { slot });
-}
-
-template<class T>
-void AssetStorage<T>::reportLeaks(std::ostream& out) const {
-    for (const Entry& entry : m_map) {
-        out << "[AssetServer] leaked " << entt::type_name<T>::value()
-            << " '" << entry.key << "'"
-            << " (" << entry.refCount << " references)" << std::endl;
-    }
 }
 
 template<class T>

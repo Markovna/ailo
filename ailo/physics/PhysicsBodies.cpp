@@ -8,12 +8,12 @@
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 
 #include <algorithm>
-#include <iostream>
 #include <vector>
 
 #include "PhysicsMath.h"
 #include "PhysicsWorld.h"
 #include "ecs/Hierarchy.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -46,7 +46,7 @@ JPH::Quat toJoltRotation(const glm::quat& q) {
 
 JPH::ShapeRefC unwrap(const JPH::ShapeSettings::ShapeResult& result, const char* what) {
     if (result.HasError()) {
-        std::cerr << "[Physics] invalid " << what << ": " << result.GetError() << std::endl;
+        log::error("[Physics] invalid {}: {}", what, result.GetError().c_str());
         return nullptr;
     }
     return result.Get();
@@ -95,7 +95,7 @@ JPH::ShapeRefC buildShape(const Collider& collider, const glm::vec3& scale) {
             // The convex radius rounds the corners and may not exceed the smallest half extent.
             const float smallest = std::min({ box.halfExtents.x, box.halfExtents.y, box.halfExtents.z });
             if (!(smallest > 0.0f)) {   // Jolt accepts a flat box with a zero convex radius; it has no volume
-                std::cerr << "[Physics] invalid box collider: half extents must be positive" << std::endl;
+                log::error("[Physics] invalid box collider: half extents must be positive");
                 return JPH::ShapeRefC();
             }
             const float convexRadius = std::clamp(smallest, 0.0f, JPH::cDefaultConvexRadius);
@@ -188,7 +188,7 @@ void createPendingBodies(entt::registry& registry, PhysicsWorld& world) {
                 ? JPH::EActivation::DontActivate : JPH::EActivation::Activate;
             body.id = bodies.CreateAndAddBody(settings, activation);
             if (body.id.IsInvalid()) {
-                std::cerr << "[Physics] out of bodies (raise PhysicsSettings::maxBodies)" << std::endl;
+                log::error("[Physics] out of bodies (raise PhysicsSettings::maxBodies)");
             }
         }
 

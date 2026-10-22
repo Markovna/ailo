@@ -3,7 +3,6 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
-#include <iostream>
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
@@ -11,6 +10,7 @@
 #include "MaterialInstance.h"
 #include "Texture.h"
 #include "render/model/ModelPackage.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
@@ -97,7 +97,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         auto& material = loadedMaterials[src.material];
         if (!material) material = ctx.load<Material>(src.material);
         if (!material) {
-            std::cerr << "Failed to load material '" << src.material << "'" << std::endl;
+            log::error("Failed to load material '{}'", src.material);
             materials.emplace_back();
             continue;
         }
@@ -127,8 +127,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
     }
 
     for (const auto& [material, parameter] : skipped) {
-        std::cerr << "Model '" << key << "': material '" << material << "' has no parameter '" << parameter
-                  << "', skipped" << std::endl;
+        log::warn("Model '{}': material '{}' has no parameter '{}', skipped", key, material, parameter);
     }
 
     std::vector<AssetPtr<Mesh>> meshes;

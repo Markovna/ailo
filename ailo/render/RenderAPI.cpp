@@ -2,7 +2,7 @@
 #include "RenderAPI.h"
 #include "vulkan/VulkanUtils.h"
 #include "SwapChain.h"
-#include <iostream>
+#include "utils/Log.h"
 #include <numeric>
 #include <stdexcept>
 
@@ -36,7 +36,7 @@ RenderAPI::~RenderAPI() {
     try {
         m_device->waitIdle();
     } catch (const vk::SystemError& e) {
-        std::cerr << "RenderAPI: waitIdle failed during destruction: " << e.what() << std::endl;
+        log::error("RenderAPI: waitIdle failed during destruction: {}", e.what());
     }
 
     if (m_swapChain) {

@@ -1,6 +1,5 @@
 #include "SwapChain.h"
 
-#include <iostream>
 #include <ostream>
 
 #include "vulkan/VulkanUtils.h"
