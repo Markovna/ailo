@@ -638,7 +638,7 @@ void RenderAPI::handleWindowResize() {
     m_framebufferResized = true;
 }
 
-vk::Extent2D RenderAPI::getSwapchainExtent() const {
+glm::ivec2 RenderAPI::getSwapchainExtent() const {
     const auto& rt = m_swapChain->getCurrentRenderTarget();
     return { rt->width, rt->height };
 }

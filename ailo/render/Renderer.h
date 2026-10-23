@@ -258,7 +258,7 @@ private:
   Unique<gpu::Texture> m_hdrColor;
   Unique<gpu::Texture> m_hdrDepth;
   Unique<gpu::RenderTarget> m_hdrRenderTarget;
-  vk::Extent2D m_hdrExtent;
+  glm::ivec2 m_hdrExtent;
   Unique<gpu::DescriptorSetLayout> m_tonemapDescriptorSetLayout;
   Unique<gpu::DescriptorSet> m_tonemapDescriptorSet;
   Unique<gpu::Buffer> m_tonemapUniformBuffer;

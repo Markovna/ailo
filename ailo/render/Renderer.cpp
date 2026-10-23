@@ -258,20 +258,20 @@ void Renderer::tonemapPass() {
 void Renderer::updateHdrTarget() {
   RenderAPI* backend = m_renderAPI;
 
-  const vk::Extent2D extent = backend->getSwapchainExtent();
+  const glm::ivec2 extent = backend->getSwapchainExtent();
   if (m_hdrRenderTarget && extent == m_hdrExtent) {
     return;
   }
   m_hdrExtent = extent;
 
   m_hdrColor = backend->createTexture(TextureType::Texture2D, TextureFormat::RGBA16F,
-    TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.width, extent.height);
+    TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.x, extent.y);
   m_hdrDepth = backend->createTexture(TextureType::Texture2D, TextureFormat::DEPTH32F,
-    TextureUsage::DepthStencilAttachment, extent.width, extent.height);
+    TextureUsage::DepthStencilAttachment, extent.x, extent.y);
 
   PerColorAttachment<TextureHandle> colors {};
   colors[0] = m_hdrColor;
-  m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.width, extent.height,
+  m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.x, extent.y,
     vk::SampleCountFlagBits::e1);
 
   backend->updateDescriptorSetTexture(m_tonemapDescriptorSet, m_hdrColor, 0, kClampToEdgeSampler);

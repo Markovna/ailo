@@ -85,7 +85,7 @@ public:
     std::span<const GpuTiming> gpuTimings() const { return m_gpuTimer.timings(); }
 
     void handleWindowResize();
-    vk::Extent2D getSwapchainExtent() const;
+    glm::ivec2 getSwapchainExtent() const;
 
 private:
     using Buffer = gpu::Buffer;
