@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "Color.h"
 #include "Renderable.h"
 #include "ShadowMapManager.h"
 #include "render/lighting/LightingPackage.h"
@@ -97,7 +98,7 @@ struct RendererSettings {
   // Resolution of one cascade; the atlas is kShadowAtlasTiles times larger on each side.
   uint32_t shadowMapSize = 1024;
   ShadowSettings shadows;
-  glm::vec4 clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
+  Color clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
 };
 
 enum class DescriptorSetBindingPoints : uint8_t {

@@ -453,12 +453,12 @@ Unique<gpu::Program> RenderAPI::createProgram(const ShaderDescription& descripti
     return m_programs.make(*m_device, description);
 }
 
-void RenderAPI::beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor) {
+void RenderAPI::beginRenderPass(const RenderPassDescription& description, const Color& clearColor) {
     beginRenderPass(m_swapChain->getCurrentRenderTarget().getHandle(), description, clearColor);
 }
 
 void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassDescription& description,
-    vk::ClearColorValue clearColor) {
+    const Color& clearColor) {
     m_currentRenderPassState = {};
     m_currentRenderPassState.renderTarget = m_renderTargets.share(rth);
     auto& rt = *m_currentRenderPassState.renderTarget;
@@ -508,14 +508,15 @@ void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassD
 
     std::array<vk::ClearValue, 2 * fbImageView.color.size() + 1> clearValues;
     uint32_t clearValuesCount = 0;
+    const vk::ClearColorValue clearColorValue { clearColor.r, clearColor.g, clearColor.b, clearColor.a };
     for (size_t i = 0; i < fbImageView.color.size(); i++) {
         if (fbImageView.color[i] != VK_NULL_HANDLE) {
-            clearValues[clearValuesCount++].color = clearColor;
+            clearValues[clearValuesCount++].color = clearColorValue;
         }
     }
     for (size_t i = 0; i < fbImageView.resolve.size(); i++) {
         if (fbImageView.resolve[i] != VK_NULL_HANDLE) {
-            clearValues[clearValuesCount++].color = clearColor;
+            clearValues[clearValuesCount++].color = clearColorValue;
         }
     }
     const vk::ClearDepthStencilValue depthStencilClearValue { 1.0f, 0 };

@@ -176,6 +176,7 @@ add_library(ailo STATIC
         utils/Log.h
         utils/Stream.cpp
         utils/Stream.h
+        render/Color.h
 )
 
 # PUBLIC: libraries whose headers the engine's headers include.

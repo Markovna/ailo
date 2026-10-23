@@ -7,6 +7,7 @@
 #include <vector>
 #include <optional>
 
+#include "Color.h"
 #include "render/vulkan/Resources.h"
 #include "VulkanDevice.h"
 #include "vulkan/Texture.h"
@@ -67,8 +68,8 @@ public:
     Unique<gpu::Program> createProgram(const ShaderDescription& description);
 
     // Command recording (call between beginFrame and endFrame)
-    void beginRenderPass(const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
-    void beginRenderPass(const RenderTargetHandle&, const RenderPassDescription& description, vk::ClearColorValue clearColor = vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    void beginRenderPass(const RenderPassDescription& description, const Color& clearColor = Color {0.0f, 0.0f, 0.0f, 1.0f});
+    void beginRenderPass(const RenderTargetHandle&, const RenderPassDescription& description, const Color& clearColor = Color {0.0f, 0.0f, 0.0f, 1.0f});
     void endRenderPass();
     void bindPipeline(const PipelineState& state);
     void bindVertexBuffer(const BufferHandle& handle);

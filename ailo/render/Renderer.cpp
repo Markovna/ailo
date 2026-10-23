@@ -208,8 +208,7 @@ void Renderer::colorPass() {
 
   updateHdrTarget();
   const auto& clearColor = m_settings.clearColor;
-  backend->beginRenderPass(m_hdrRenderTarget, renderPass,
-    vk::ClearColorValue(clearColor.r, clearColor.g, clearColor.b, clearColor.a));
+  backend->beginRenderPass(m_hdrRenderTarget, renderPass, clearColor);
 
   PipelineState pipelineState {};
 
