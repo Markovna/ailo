@@ -28,7 +28,7 @@ Mesh makeMesh(VertexLayout layout, const std::vector<V>& vertices, std::vector<u
 
 texture::TexturePackage makeTexture() {
     texture::TexturePackage tex;
-    tex.format = texture::TextureFormat::RGBA8;
+    tex.format = TextureFormat::RGBA8;
     tex.width = 2;
     tex.height = 1;
     tex.generateMipmaps = true;

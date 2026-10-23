@@ -3,7 +3,7 @@
 #include <span>
 #include <stdexcept>
 
-using ailo::texture::TextureFormat;
+using ailo::TextureFormat;
 
 namespace texc {
 
@@ -89,7 +89,7 @@ std::optional<TextureFormat> parseFormat(std::string_view name) {
     for (auto format : { TextureFormat::RGBA8, TextureFormat::RGBA16F, TextureFormat::RGBA32F, TextureFormat::BC1,
                          TextureFormat::BC3, TextureFormat::BC4, TextureFormat::BC5, TextureFormat::BC6H,
                          TextureFormat::BC7 }) {
-        if (name == ailo::texture::toString(format)) return format;
+        if (name == ailo::toString(format)) return format;
     }
     return std::nullopt;
 }
@@ -100,7 +100,7 @@ std::optional<TextureFormat> withSrgb(TextureFormat format) {
         case TextureFormat::BC1:   return TextureFormat::BC1_SRGB;
         case TextureFormat::BC3:   return TextureFormat::BC3_SRGB;
         case TextureFormat::BC7:   return TextureFormat::BC7_SRGB;
-        default:                   return ailo::texture::isSrgb(format) ? std::optional(format) : std::nullopt;
+        default:                   return ailo::isSrgb(format) ? std::optional(format) : std::nullopt;
     }
 }
 

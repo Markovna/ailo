@@ -15,6 +15,7 @@
 #include "transcoder/basisu_transcoder_uastc.h"
 
 using namespace ailo::texture;
+using ailo::TextureFormat;
 
 namespace texc {
 

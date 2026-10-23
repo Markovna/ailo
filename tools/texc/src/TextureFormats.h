@@ -3,7 +3,7 @@
 #include <optional>
 #include <string_view>
 
-#include "render/texture/TexturePackage.h"
+#include "render/RenderApiEnums.h"
 
 namespace texc {
 
@@ -33,15 +33,15 @@ std::optional<Quality> parseQuality(std::string_view name);
 std::optional<Target> parseTarget(std::string_view name);
 
 // A "format" property ("bc7", "rgba8", ...): the format without its sRGB variant, which withSrgb() picks.
-std::optional<ailo::texture::TextureFormat> parseFormat(std::string_view name);
+std::optional<ailo::TextureFormat> parseFormat(std::string_view name);
 
 // The sRGB variant of format, or nullopt if it has none.
-std::optional<ailo::texture::TextureFormat> withSrgb(ailo::texture::TextureFormat format);
+std::optional<ailo::TextureFormat> withSrgb(ailo::TextureFormat format);
 
 // The format the target's table picks for a texture's usage and quality, and for whether it has alpha. sRGB is not
 // part of the table: the caller applies withSrgb() to color textures that are sRGB.
-ailo::texture::TextureFormat chooseFormat(Target target, Usage usage, Quality quality, bool alpha);
+ailo::TextureFormat chooseFormat(Target target, Usage usage, Quality quality, bool alpha);
 
-bool supports(Target target, ailo::texture::TextureFormat format);
+bool supports(Target target, ailo::TextureFormat format);
 
 }

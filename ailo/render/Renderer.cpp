@@ -149,7 +149,7 @@ void Renderer::shadowPass() {
 
   if (!m_shadowMapTexture) {
     m_shadowMapTexture = backend->createTexture(
-        TextureType::Texture2D, vk::Format::eD32Sfloat,
+        TextureType::Texture2D, TextureFormat::DEPTH32F,
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
         atlasSize, atlasSize);
 
@@ -265,9 +265,9 @@ void Renderer::updateHdrTarget() {
   }
   m_hdrExtent = extent;
 
-  m_hdrColor = backend->createTexture(TextureType::Texture2D, vk::Format::eR16G16B16A16Sfloat,
+  m_hdrColor = backend->createTexture(TextureType::Texture2D, TextureFormat::RGBA16F,
     TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.width, extent.height);
-  m_hdrDepth = backend->createTexture(TextureType::Texture2D, vk::Format::eD32Sfloat,
+  m_hdrDepth = backend->createTexture(TextureType::Texture2D, TextureFormat::DEPTH32F,
     TextureUsage::DepthStencilAttachment, extent.width, extent.height);
 
   PerColorAttachment<TextureHandle> colors {};

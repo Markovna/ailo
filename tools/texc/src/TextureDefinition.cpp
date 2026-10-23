@@ -5,6 +5,7 @@
 #include "Json.h"
 
 using namespace ailo::texture;
+using ailo::TextureFormat;
 using ailo::TextureType;
 namespace json = ailo::json;
 namespace fs = std::filesystem;

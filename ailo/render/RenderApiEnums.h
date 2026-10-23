@@ -100,6 +100,26 @@ enum class TextureType : uint8_t {
     Cubemap,
 };
 
+enum class TextureFormat : uint8_t {
+    RGBA8,
+    RGBA8_SRGB,
+    RGBA32F,
+    RGBA16F,
+    // Block-compressed, 4x4 texel blocks.
+    BC1,        // rgb, opaque
+    BC1_SRGB,
+    BC3,        // rgba
+    BC3_SRGB,
+    BC4,        // r
+    BC5,        // rg
+    BC6H,       // rgb half float, unsigned
+    BC7,        // rgba
+    BC7_SRGB,
+    // Texture packages store the values above, so new formats go at the end.
+    R8,
+    DEPTH32F,
+};
+
 enum class TextureUsage : uint16_t {
     None = 0,
     Sampled = 1 << 0,
@@ -137,6 +157,80 @@ constexpr std::string_view toString(CompareOp op) {
         case CompareOp::Always:       return "always";
     }
     return "?";
+}
+
+constexpr std::string_view toString(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8:      return "rgba8";
+        case TextureFormat::RGBA8_SRGB: return "rgba8_srgb";
+        case TextureFormat::RGBA32F:    return "rgba32f";
+        case TextureFormat::RGBA16F:    return "rgba16f";
+        case TextureFormat::BC1:        return "bc1";
+        case TextureFormat::BC1_SRGB:   return "bc1_srgb";
+        case TextureFormat::BC3:        return "bc3";
+        case TextureFormat::BC3_SRGB:   return "bc3_srgb";
+        case TextureFormat::BC4:        return "bc4";
+        case TextureFormat::BC5:        return "bc5";
+        case TextureFormat::BC6H:       return "bc6h";
+        case TextureFormat::BC7:        return "bc7";
+        case TextureFormat::BC7_SRGB:   return "bc7_srgb";
+        case TextureFormat::R8:         return "r8";
+        case TextureFormat::DEPTH32F:   return "depth32f";
+    }
+    return "?";
+}
+
+// Texels per block side: 1 for uncompressed formats, 4 for block-compressed ones.
+constexpr uint32_t blockExtent(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8:
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::RGBA32F:
+        case TextureFormat::RGBA16F:
+        case TextureFormat::R8:
+        case TextureFormat::DEPTH32F: return 1;
+        default:                      return 4;
+    }
+}
+
+// Bytes per texel for uncompressed formats, per block for compressed ones.
+constexpr uint32_t blockBytes(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::R8:         return 1;
+        case TextureFormat::RGBA8:
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::DEPTH32F:   return 4;
+        case TextureFormat::RGBA32F:    return 16;
+        case TextureFormat::RGBA16F:    return 8;
+        case TextureFormat::BC1:
+        case TextureFormat::BC1_SRGB:
+        case TextureFormat::BC4:        return 8;
+        case TextureFormat::BC3:
+        case TextureFormat::BC3_SRGB:
+        case TextureFormat::BC5:
+        case TextureFormat::BC6H:
+        case TextureFormat::BC7:
+        case TextureFormat::BC7_SRGB:   return 16;
+    }
+    return 0;
+}
+
+constexpr bool isCompressed(TextureFormat format) {
+    return blockExtent(format) > 1;
+}
+
+constexpr bool isSrgb(TextureFormat format) {
+    switch (format) {
+        case TextureFormat::RGBA8_SRGB:
+        case TextureFormat::BC1_SRGB:
+        case TextureFormat::BC3_SRGB:
+        case TextureFormat::BC7_SRGB: return true;
+        default:                      return false;
+    }
+}
+
+constexpr bool isDepth(TextureFormat format) {
+    return format == TextureFormat::DEPTH32F;
 }
 
 constexpr std::string_view toString(TextureType type) {

@@ -49,7 +49,7 @@ public:
     void updateBuffer(const BufferHandle& handle, const void* data, uint64_t size, uint64_t byteOffset = 0);
 
     // Texture management
-    Unique<gpu::Texture> createTexture(TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
+    Unique<gpu::Texture> createTexture(TextureType, TextureFormat, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
     void updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize,
         uint32_t width = 0, uint32_t height = 0, uint32_t xOffset = 0, uint32_t yOffset = 0,
         uint32_t baseLayer = 0, uint32_t layerCount = 1,

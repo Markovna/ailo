@@ -91,6 +91,27 @@ vk::ImageUsageFlags getTextureUsage(TextureUsage usage) {
   return usageFlags;
 }
 
+vk::Format getFormat(TextureFormat format) {
+  switch (format) {
+    case TextureFormat::RGBA8:      return vk::Format::eR8G8B8A8Unorm;
+    case TextureFormat::RGBA8_SRGB: return vk::Format::eR8G8B8A8Srgb;
+    case TextureFormat::RGBA32F:    return vk::Format::eR32G32B32A32Sfloat;
+    case TextureFormat::RGBA16F:    return vk::Format::eR16G16B16A16Sfloat;
+    case TextureFormat::BC1:        return vk::Format::eBc1RgbUnormBlock;
+    case TextureFormat::BC1_SRGB:   return vk::Format::eBc1RgbSrgbBlock;
+    case TextureFormat::BC3:        return vk::Format::eBc3UnormBlock;
+    case TextureFormat::BC3_SRGB:   return vk::Format::eBc3SrgbBlock;
+    case TextureFormat::BC4:        return vk::Format::eBc4UnormBlock;
+    case TextureFormat::BC5:        return vk::Format::eBc5UnormBlock;
+    case TextureFormat::BC6H:       return vk::Format::eBc6HUfloatBlock;
+    case TextureFormat::BC7:        return vk::Format::eBc7UnormBlock;
+    case TextureFormat::BC7_SRGB:   return vk::Format::eBc7SrgbBlock;
+    case TextureFormat::R8:         return vk::Format::eR8Unorm;
+    case TextureFormat::DEPTH32F:   return vk::Format::eD32Sfloat;
+  }
+  return vk::Format::eUndefined;
+}
+
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout layout) {
   switch (layout) {
     case vk::ImageLayout::eUndefined:

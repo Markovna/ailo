@@ -250,10 +250,10 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
     commands.acquire(std::move(buffer));
 }
 
-Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
+Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, TextureFormat format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
     return m_textures.make(
         *m_device, m_device.physicalDevice(),
-        type, format, levels, width, height,
+        type, vkutils::getFormat(format), levels, width, height,
         vkutils::getTextureUsage(usage),
         (usage & TextureUsage::DepthStencilAttachment) != TextureUsage::None ?
             vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor);

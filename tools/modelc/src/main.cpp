@@ -110,7 +110,7 @@ int dump(const fs::path& path) {
     std::cout << "embedded textures: " << pkg->textures.size() << "\n";
     for (size_t i = 0; i < pkg->textures.size(); i++) {
         const auto& tex = pkg->textures[i];
-        std::cout << "  " << i << ": " << ailo::texture::toString(tex.format) << " " << tex.width << "x" << tex.height
+        std::cout << "  " << i << ": " << ailo::toString(tex.format) << " " << tex.width << "x" << tex.height
                   << "\n";
     }
     return 0;

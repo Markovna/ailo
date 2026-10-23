@@ -20,7 +20,7 @@ bool contains(const std::string& text, const std::string& part) {
 texture::TexturePackage makeCubemap() {
     texture::TexturePackage pkg;
     pkg.type = TextureType::Cubemap;
-    pkg.format = texture::TextureFormat::RGBA32F;
+    pkg.format = TextureFormat::RGBA32F;
     pkg.width = 2;
     pkg.height = 2;
     pkg.levels = 1;

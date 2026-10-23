@@ -21,7 +21,7 @@ template<typename F>
 texture::TexturePackage makeCubemap(uint32_t dim, F radiance) {
     texture::TexturePackage pkg;
     pkg.type = TextureType::Cubemap;
-    pkg.format = texture::TextureFormat::RGBA32F;
+    pkg.format = TextureFormat::RGBA32F;
     pkg.width = dim;
     pkg.height = dim;
     pkg.levels = 1;

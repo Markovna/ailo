@@ -18,6 +18,7 @@
 namespace lightc {
 
 using namespace ailo::texture;
+using ailo::TextureFormat;
 using ailo::TextureType;
 namespace fs = std::filesystem;
 

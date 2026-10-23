@@ -23,68 +23,6 @@ constexpr uint32_t kMaxDimension = 65536;
 
 }
 
-std::string_view toString(TextureFormat format) {
-    switch (format) {
-        case TextureFormat::RGBA8:      return "rgba8";
-        case TextureFormat::RGBA8_SRGB: return "rgba8_srgb";
-        case TextureFormat::RGBA32F:    return "rgba32f";
-        case TextureFormat::RGBA16F:    return "rgba16f";
-        case TextureFormat::BC1:        return "bc1";
-        case TextureFormat::BC1_SRGB:   return "bc1_srgb";
-        case TextureFormat::BC3:        return "bc3";
-        case TextureFormat::BC3_SRGB:   return "bc3_srgb";
-        case TextureFormat::BC4:        return "bc4";
-        case TextureFormat::BC5:        return "bc5";
-        case TextureFormat::BC6H:       return "bc6h";
-        case TextureFormat::BC7:        return "bc7";
-        case TextureFormat::BC7_SRGB:   return "bc7_srgb";
-    }
-    return "?";
-}
-
-bool isCompressed(TextureFormat format) {
-    return blockExtent(format) > 1;
-}
-
-bool isSrgb(TextureFormat format) {
-    switch (format) {
-        case TextureFormat::RGBA8_SRGB:
-        case TextureFormat::BC1_SRGB:
-        case TextureFormat::BC3_SRGB:
-        case TextureFormat::BC7_SRGB: return true;
-        default:                      return false;
-    }
-}
-
-uint32_t blockExtent(TextureFormat format) {
-    switch (format) {
-        case TextureFormat::RGBA8:
-        case TextureFormat::RGBA8_SRGB:
-        case TextureFormat::RGBA32F:
-        case TextureFormat::RGBA16F: return 1;
-        default:                     return 4;
-    }
-}
-
-uint32_t blockBytes(TextureFormat format) {
-    switch (format) {
-        case TextureFormat::RGBA8:
-        case TextureFormat::RGBA8_SRGB: return 4;
-        case TextureFormat::RGBA32F:    return 16;
-        case TextureFormat::RGBA16F:    return 8;
-        case TextureFormat::BC1:
-        case TextureFormat::BC1_SRGB:
-        case TextureFormat::BC4:        return 8;
-        case TextureFormat::BC3:
-        case TextureFormat::BC3_SRGB:
-        case TextureFormat::BC5:
-        case TextureFormat::BC6H:
-        case TextureFormat::BC7:
-        case TextureFormat::BC7_SRGB:   return 16;
-    }
-    return 0;
-}
-
 uint32_t mipLevelCount(uint32_t width, uint32_t height) {
     return std::bit_width(std::max({ width, height, 1u }));
 }
@@ -121,6 +59,7 @@ std::span<const uint8_t> TexturePackage::image(uint32_t level, uint32_t layer) c
 }
 
 std::string TexturePackage::validate() const {
+    if (format > kLastPackageFormat) return std::string(toString(format)) + " textures cannot be packaged";
     if (width == 0 || height == 0) return "texture has no pixels";
     // Beyond any GPU's limit; also keeps the size arithmetic below from overflowing on a corrupt header.
     if (width > kMaxDimension || height > kMaxDimension) {
@@ -198,7 +137,7 @@ std::optional<TexturePackage> TexturePackage::deserialize(std::span<const uint8_
         switch (tag) {
             case kChunkInfo:
                 pkg.type = c.enumeration(TextureType::Cubemap);
-                pkg.format = c.enumeration(TextureFormat::BC7_SRGB);
+                pkg.format = c.enumeration(kLastPackageFormat);
                 pkg.width = c.u32();
                 pkg.height = c.u32();
                 pkg.levels = c.u32();

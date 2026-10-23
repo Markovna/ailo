@@ -13,6 +13,7 @@
 
 namespace fs = std::filesystem;
 using namespace ailo::texture;
+using ailo::TextureFormat;
 using ailo::TextureType;
 using namespace ailo::fileio;
 using namespace texc;

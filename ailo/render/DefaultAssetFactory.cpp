@@ -20,7 +20,7 @@ namespace {
 using Pixel = std::array<uint8_t, 4>;
 
 AssetPtr<Texture> createTexture2D(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
-                                  vk::Format format, const Pixel& pixel) {
+                                  TextureFormat format, const Pixel& pixel) {
     auto texture = textures.emplace(key, &renderApi, TextureType::Texture2D, format, TextureUsage::Sampled, 1, 1, 1);
     texture->updateImage(&renderApi, pixel.data(), pixel.size());
     return texture;
@@ -37,7 +37,7 @@ AssetPtr<Texture> createEmbeddedTexture(RenderAPI& renderApi, AssetStorage<Textu
 }
 
 AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
-                                vk::Format format, const Pixel& pixel) {
+                                TextureFormat format, const Pixel& pixel) {
     auto texture = textures.emplace(key, &renderApi, TextureType::Cubemap, format, TextureUsage::Sampled, 1, 1, 1);
     for (uint32_t face = 0; face < 6; face++) {
         texture->updateImage(&renderApi, pixel.data(), pixel.size(), 1, 1, 0, 0, face, 1);
@@ -166,11 +166,11 @@ AssetPtr<Mesh> createUnitCube(AssetStorage<Mesh>& storage, RenderAPI* renderApi)
 }
 
 void textures::createDefaultAssets(DefaultAssets& defaults, AssetStorage<Texture>& storage, RenderAPI& renderApi) {
-    defaults.add(createTexture2D(renderApi, storage, kWhite, vk::Format::eR8G8B8A8Srgb, { 255, 255, 255, 255 }));
-    defaults.add(createTexture2D(renderApi, storage, kBlack, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
-    defaults.add(createTexture2D(renderApi, storage, kNormal, vk::Format::eR8G8B8A8Unorm, { 128, 128, 255, 255 }));
-    defaults.add(createTexture2D(renderApi, storage, kDefaultMetallicRoughness, vk::Format::eR8G8B8A8Unorm, { 0, 128, 0, 255 }));
-    defaults.add(createCubemap(renderApi, storage, kBlackCube, vk::Format::eR8G8B8A8Srgb, { 0, 0, 0, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kWhite, TextureFormat::RGBA8_SRGB, { 255, 255, 255, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kBlack, TextureFormat::RGBA8_SRGB, { 0, 0, 0, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kNormal, TextureFormat::RGBA8, { 128, 128, 255, 255 }));
+    defaults.add(createTexture2D(renderApi, storage, kDefaultMetallicRoughness, TextureFormat::RGBA8, { 0, 128, 0, 255 }));
+    defaults.add(createCubemap(renderApi, storage, kBlackCube, TextureFormat::RGBA8_SRGB, { 0, 0, 0, 255 }));
     defaults.add(createEmbeddedTexture(renderApi, storage, kDfgLut, embedded::textures::kDfgLut));
 }
 

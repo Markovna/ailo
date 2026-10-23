@@ -31,7 +31,7 @@ struct TextureDefinition {
     // Unset: whether any texel's alpha is below 255. Color textures only.
     std::optional<bool> alpha;
     // Overrides the target's format table; its sRGB variant is picked from `srgb`.
-    std::optional<ailo::texture::TextureFormat> format;
+    std::optional<ailo::TextureFormat> format;
     // Unset: true. Color textures only.
     std::optional<bool> srgb;
     // options.srgb: color textures that are sRGB.

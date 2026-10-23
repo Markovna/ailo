@@ -8,7 +8,7 @@
 
 namespace ailo {
 
-Texture::Texture(RenderAPI* renderApi, TextureType type, vk::Format format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels)
+Texture::Texture(RenderAPI* renderApi, TextureType type, TextureFormat format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels)
     : m_handle(renderApi->createTexture(type, format, usage, width, height, levels)), m_levels(levels) {
 }
 
@@ -25,31 +25,8 @@ void Texture::generateMipmaps(RenderAPI* renderApi) {
     renderApi->generateMipmaps(m_handle);
 }
 
-namespace {
-
-vk::Format toVkFormat(texture::TextureFormat format) {
-    switch (format) {
-        case texture::TextureFormat::RGBA8:      return vk::Format::eR8G8B8A8Unorm;
-        case texture::TextureFormat::RGBA8_SRGB: return vk::Format::eR8G8B8A8Srgb;
-        case texture::TextureFormat::RGBA32F:    return vk::Format::eR32G32B32A32Sfloat;
-        case texture::TextureFormat::RGBA16F:    return vk::Format::eR16G16B16A16Sfloat;
-        case texture::TextureFormat::BC1:        return vk::Format::eBc1RgbUnormBlock;
-        case texture::TextureFormat::BC1_SRGB:   return vk::Format::eBc1RgbSrgbBlock;
-        case texture::TextureFormat::BC3:        return vk::Format::eBc3UnormBlock;
-        case texture::TextureFormat::BC3_SRGB:   return vk::Format::eBc3SrgbBlock;
-        case texture::TextureFormat::BC4:        return vk::Format::eBc4UnormBlock;
-        case texture::TextureFormat::BC5:        return vk::Format::eBc5UnormBlock;
-        case texture::TextureFormat::BC6H:       return vk::Format::eBc6HUfloatBlock;
-        case texture::TextureFormat::BC7:        return vk::Format::eBc7UnormBlock;
-        case texture::TextureFormat::BC7_SRGB:   return vk::Format::eBc7SrgbBlock;
-    }
-    throw std::runtime_error("unknown texture package format");
-}
-
-}
-
 Texture Texture::fromPackage(RenderAPI* renderApi, const texture::TexturePackage& pkg) {
-    Texture tex(renderApi, pkg.type, toVkFormat(pkg.format), TextureUsage::Sampled, pkg.width, pkg.height,
+    Texture tex(renderApi, pkg.type, pkg.format, TextureUsage::Sampled, pkg.width, pkg.height,
                 pkg.allocatedLevels());
 
     // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
@@ -83,7 +60,7 @@ void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> byt
     const int size = static_cast<int>(bytes.size());
     bool isHdr = stbi_is_hdr_from_memory(data, size);
 
-    vk::Format format = isHdr ? vk::Format::eR32G32B32A32Sfloat : vk::Format::eR8G8B8A8Srgb;
+    TextureFormat format = isHdr ? TextureFormat::RGBA32F : TextureFormat::RGBA8_SRGB;
 
     Texture* tex;
     if (!isHdr) {

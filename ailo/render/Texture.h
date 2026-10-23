@@ -11,7 +11,7 @@ namespace texture { struct TexturePackage; }
 
 class Texture {
 public:
-    Texture(RenderAPI*, TextureType, vk::Format, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
+    Texture(RenderAPI*, TextureType, TextureFormat, TextureUsage, uint32_t width, uint32_t height, uint8_t levels = 1);
 
     void updateImage(RenderAPI*, const void* data, size_t dataSize, uint32_t width, uint32_t height, uint32_t xOffset, uint32_t yOffset, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
     void updateImage(RenderAPI*, const void* data, size_t dataSize);

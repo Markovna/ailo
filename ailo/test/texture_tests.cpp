@@ -15,6 +15,7 @@
 #include "stb_image/stb_image_write.h"
 
 using namespace ailo::texture;
+using ailo::TextureFormat;
 using ailo::TextureType;
 namespace fs = std::filesystem;
 
@@ -238,6 +239,16 @@ void testDeserializeRejectsBadPackages() {
     notSquare.data.resize(notSquare.expectedDataSize());
     CHECK(!TexturePackage::deserialize(notSquare.serialize(), error));
     CHECK(contains(error, "square"));
+
+    for (auto format : { TextureFormat::R8, TextureFormat::DEPTH32F }) {
+        TexturePackage engineOnly;
+        engineOnly.format = format;
+        engineOnly.width = 2;
+        engineOnly.height = 2;
+        engineOnly.data.resize(engineOnly.expectedDataSize());
+        CHECK(contains(engineOnly.validate(), "cannot be packaged"));
+        CHECK(!TexturePackage::deserialize(engineOnly.serialize(), error));
+    }
 
     TexturePackage empty;
     CHECK(!TexturePackage::deserialize(empty.serialize(), error));

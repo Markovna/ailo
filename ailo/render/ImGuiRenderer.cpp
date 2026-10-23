@@ -98,7 +98,7 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
     // Create texture
     auto texture = m_renderAPI->createTexture(
         TextureType::Texture2D,
-        vk::Format::eR8Unorm,
+        TextureFormat::R8,
         TextureUsage::Sampled,
         static_cast<uint32_t>(tex->Width),
         static_cast<uint32_t>(tex->Height)
