@@ -9,6 +9,7 @@
 #include <vk_mem_alloc.h>
 #include "render/Resource.h"
 #include "render/Constants.h"
+#include "render/RenderApiEnums.h"
 
 namespace ailo {
 
@@ -31,113 +32,6 @@ using DescriptorSetHandle = Handle<gpu::DescriptorSet>;
 using TextureHandle = Handle<gpu::Texture>;
 using DescriptorSetLayoutHandle = Handle<gpu::DescriptorSetLayout>;
 using RenderTargetHandle = Handle<gpu::RenderTarget>;
-
-enum class BufferBinding : uint8_t {
-  UNKNOWN,
-  VERTEX,
-  INDEX,
-  UNIFORM,
-};
-
-enum class IndexType : uint8_t {
-  UINT16,
-  UINT32,
-};
-
-enum class CullingMode : uint8_t {
-  NONE,
-  FRONT,
-  BACK,
-  FRONT_AND_BACK
-};
-
-enum class BlendOperation : uint8_t {
-  ADD,
-  SUBTRACT,
-  REVERSE_SUBTRACT,
-  MIN,
-  MAX
-};
-
-enum class BlendFunction : uint8_t {
-  ZERO,
-  ONE,
-  SRC_COLOR,
-  ONE_MINUS_SRC_COLOR,
-  DST_COLOR,
-  ONE_MINUS_DST_COLOR,
-  SRC_ALPHA,
-  ONE_MINUS_SRC_ALPHA,
-  DST_ALPHA,
-  ONE_MINUS_DST_ALPHA,
-  SRC_ALPHA_SATURATE
-};
-
-enum class CompareOp : uint8_t {
-  NEVER = 0,
-  LESS,
-  EQUAL,
-  LESS_OR_EQUAL,
-  GREATER,
-  NOT_EQUAL,
-  GREATER_OR_EQUAL,
-  ALWAYS
-};
-
-enum class SamplerFilter : uint8_t {
-  NEAREST,
-  LINEAR
-};
-
-enum class SamplerMipmapMode : uint8_t {
-  NEAREST,
-  LINEAR
-};
-
-enum class SamplerWrapMode : uint8_t {
-  REPEAT,
-  MIRRORED_REPEAT,
-  CLAMP_TO_EDGE,
-  CLAMP_TO_BORDER
-};
-
-enum class SamplerCompareMode : uint8_t {
-  NONE,
-  COMPARE_TO_TEXTURE
-};
-
-struct SamplerParams {
-  SamplerFilter filterMag = SamplerFilter::LINEAR;
-  SamplerFilter filterMin = SamplerFilter::LINEAR;
-  SamplerMipmapMode mipmapMode = SamplerMipmapMode::LINEAR;
-  SamplerWrapMode wrapS = SamplerWrapMode::REPEAT;
-  SamplerWrapMode wrapT = SamplerWrapMode::REPEAT;
-  SamplerWrapMode wrapR = SamplerWrapMode::REPEAT;
-  SamplerCompareMode compareMode = SamplerCompareMode::NONE;
-  CompareOp compareFunc = CompareOp::ALWAYS;
-
-  bool operator==(const SamplerParams& other) const = default;
-};
-
-enum class TextureType : uint8_t {
-    TEXTURE_2D,
-    TEXTURE_CUBEMAP
-};
-
-enum class TextureUsage : uint16_t {
-    None = 0,
-    Sampled = 1 << 0,
-    Storage = 1 << 1,
-    ColorAttachment = 1 << 2,
-    DepthStencilAttachment = 1 << 3,
-};
-
-inline TextureUsage operator&(TextureUsage lhs, TextureUsage rhs) {
-    return static_cast<TextureUsage>(static_cast<uint16_t>(lhs) & static_cast<uint16_t>(rhs));
-}
-inline TextureUsage operator|(TextureUsage lhs, TextureUsage rhs) {
-    return static_cast<TextureUsage>(static_cast<uint16_t>(lhs) | static_cast<uint16_t>(rhs));
-}
 
 class ColorAttachmentMask : public std::bitset<kMaxColorAttachments> {};
 
@@ -231,7 +125,7 @@ struct VertexInputDescription {
 };
 
 struct RasterDescription {
-    CullingMode cullingMode = CullingMode::FRONT;
+    CullingMode cullingMode = CullingMode::Front;
     bool inverseFrontFace = false;
     bool blendEnable = false;
     bool depthWriteEnable = true;
@@ -242,7 +136,7 @@ struct RasterDescription {
     BlendFunction srcAlphaBlendFunc;
     BlendFunction dstRgbBlendFunc;
     BlendFunction dstAlphaBlendFunc;
-    CompareOp depthCompareOp = CompareOp::LESS;
+    CompareOp depthCompareOp = CompareOp::Less;
 };
 
 struct DescriptorSetLayoutBinding {

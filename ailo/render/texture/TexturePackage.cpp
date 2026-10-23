@@ -23,14 +23,6 @@ constexpr uint32_t kMaxDimension = 65536;
 
 }
 
-std::string_view toString(TextureType type) {
-    switch (type) {
-        case TextureType::Texture2D: return "2d";
-        case TextureType::Cubemap:   return "cubemap";
-    }
-    return "?";
-}
-
 std::string_view toString(TextureFormat format) {
     switch (format) {
         case TextureFormat::RGBA8:      return "rgba8";

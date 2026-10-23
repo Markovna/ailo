@@ -26,7 +26,7 @@ std::string LightingPackage::validate() const {
             return "irradiance SH has a non-finite coefficient";
         }
     }
-    if (reflections.type != texture::TextureType::Cubemap) {
+    if (reflections.type != TextureType::Cubemap) {
         return "reflections must be a cubemap";
     }
     if (auto error = reflections.validate(); !error.empty()) {

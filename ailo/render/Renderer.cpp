@@ -41,7 +41,7 @@ static constexpr SamplerParams kShadowSampler {
   .wrapT = SamplerWrapMode::CLAMP_TO_EDGE,
   .wrapR = SamplerWrapMode::CLAMP_TO_EDGE,
   .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
-  .compareFunc = CompareOp::LESS_OR_EQUAL,
+  .compareFunc = CompareOp::LessEqual,
 };
 
 static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
@@ -106,9 +106,9 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
     .vertexShader = ShaderDescription::code(embedded::shaders::kTonemapVert),
     .fragmentShader = ShaderDescription::code(embedded::shaders::kTonemapFrag),
     .raster = RasterDescription {
-      .cullingMode = CullingMode::NONE,
+      .cullingMode = CullingMode::None,
       .depthWriteEnable = false,
-      .depthCompareOp = CompareOp::ALWAYS,
+      .depthCompareOp = CompareOp::Always,
     },
     .layout = { tonemapLayout },
   });
@@ -149,7 +149,7 @@ void Renderer::shadowPass() {
 
   if (!m_shadowMapTexture) {
     m_shadowMapTexture = backend->createTexture(
-        TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
+        TextureType::Texture2D, vk::Format::eD32Sfloat,
         TextureUsage::Sampled | TextureUsage::DepthStencilAttachment,
         atlasSize, atlasSize);
 
@@ -265,9 +265,9 @@ void Renderer::updateHdrTarget() {
   }
   m_hdrExtent = extent;
 
-  m_hdrColor = backend->createTexture(TextureType::TEXTURE_2D, vk::Format::eR16G16B16A16Sfloat,
+  m_hdrColor = backend->createTexture(TextureType::Texture2D, vk::Format::eR16G16B16A16Sfloat,
     TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.width, extent.height);
-  m_hdrDepth = backend->createTexture(TextureType::TEXTURE_2D, vk::Format::eD32Sfloat,
+  m_hdrDepth = backend->createTexture(TextureType::Texture2D, vk::Format::eD32Sfloat,
     TextureUsage::DepthStencilAttachment, extent.width, extent.height);
 
   PerColorAttachment<TextureHandle> colors {};

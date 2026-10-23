@@ -24,30 +24,6 @@ std::string_view toString(VertexDomain v) {
     return "?";
 }
 
-std::string_view toString(CullingMode v) {
-    switch (v) {
-        case CullingMode::None:         return "none";
-        case CullingMode::Front:        return "front";
-        case CullingMode::Back:         return "back";
-        case CullingMode::FrontAndBack: return "frontAndBack";
-    }
-    return "?";
-}
-
-std::string_view toString(DepthFunc v) {
-    switch (v) {
-        case DepthFunc::Never:        return "never";
-        case DepthFunc::Less:         return "less";
-        case DepthFunc::Equal:        return "equal";
-        case DepthFunc::LessEqual:    return "lessEqual";
-        case DepthFunc::Greater:      return "greater";
-        case DepthFunc::NotEqual:     return "notEqual";
-        case DepthFunc::GreaterEqual: return "greaterEqual";
-        case DepthFunc::Always:       return "always";
-    }
-    return "?";
-}
-
 std::string_view toString(ShaderStage v) {
     switch (v) {
         case ShaderStage::Vertex:   return "vertex";

@@ -8,8 +8,11 @@
 #include <span>
 
 #include "Json.h"
+#include "render/RenderApiEnums.h"
 
 using namespace ailo::material;
+using ailo::CompareOp;
+using ailo::CullingMode;
 namespace json = ailo::json;
 
 namespace matcomp {
@@ -354,15 +357,15 @@ constexpr std::pair<std::string_view, VertexAttribute> kAttributes[] = {
     { "normal", VertexAttribute::Normal },
 };
 
-constexpr std::pair<std::string_view, DepthFunc> kDepthFuncs[] = {
-    { "never", DepthFunc::Never },
-    { "less", DepthFunc::Less },
-    { "equal", DepthFunc::Equal },
-    { "lessEqual", DepthFunc::LessEqual },
-    { "greater", DepthFunc::Greater },
-    { "notEqual", DepthFunc::NotEqual },
-    { "greaterEqual", DepthFunc::GreaterEqual },
-    { "always", DepthFunc::Always },
+constexpr std::pair<std::string_view, CompareOp> kDepthFuncs[] = {
+    { "never", CompareOp::Never },
+    { "less", CompareOp::Less },
+    { "equal", CompareOp::Equal },
+    { "lessEqual", CompareOp::LessEqual },
+    { "greater", CompareOp::Greater },
+    { "notEqual", CompareOp::NotEqual },
+    { "greaterEqual", CompareOp::GreaterEqual },
+    { "always", CompareOp::Always },
 };
 
 constexpr std::pair<std::string_view, Variant::type_t> kVariantFilters[] = {

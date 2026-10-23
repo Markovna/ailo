@@ -57,6 +57,7 @@ target_link_libraries(ailo_lighting PUBLIC glm::glm ailo_texture)
 add_library(ailo STATIC
     render/RenderAPI.cpp
     render/RenderAPI.h
+    render/RenderApiEnums.h
     render/ImGuiRenderer.cpp
     render/ImGuiRenderer.h
     input/InputSystem.cpp

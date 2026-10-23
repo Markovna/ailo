@@ -21,7 +21,7 @@ using Pixel = std::array<uint8_t, 4>;
 
 AssetPtr<Texture> createTexture2D(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
                                   vk::Format format, const Pixel& pixel) {
-    auto texture = textures.emplace(key, &renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, 1, 1, 1);
+    auto texture = textures.emplace(key, &renderApi, TextureType::Texture2D, format, TextureUsage::Sampled, 1, 1, 1);
     texture->updateImage(&renderApi, pixel.data(), pixel.size());
     return texture;
 }
@@ -38,7 +38,7 @@ AssetPtr<Texture> createEmbeddedTexture(RenderAPI& renderApi, AssetStorage<Textu
 
 AssetPtr<Texture> createCubemap(RenderAPI& renderApi, AssetStorage<Texture>& textures, const char* key,
                                 vk::Format format, const Pixel& pixel) {
-    auto texture = textures.emplace(key, &renderApi, TextureType::TEXTURE_CUBEMAP, format, TextureUsage::Sampled, 1, 1, 1);
+    auto texture = textures.emplace(key, &renderApi, TextureType::Cubemap, format, TextureUsage::Sampled, 1, 1, 1);
     for (uint32_t face = 0; face < 6; face++) {
         texture->updateImage(&renderApi, pixel.data(), pixel.size(), 1, 1, 0, 0, face, 1);
     }

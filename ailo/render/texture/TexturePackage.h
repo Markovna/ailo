@@ -7,15 +7,12 @@
 #include <string_view>
 #include <vector>
 
+#include "render/RenderApiEnums.h"
+
 namespace ailo::texture {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
 static constexpr uint32_t kTexturePackageVersion = 2;
-
-enum class TextureType : uint8_t {
-    Texture2D,
-    Cubemap,
-};
 
 enum class TextureFormat : uint8_t {
     RGBA8,
@@ -34,7 +31,6 @@ enum class TextureFormat : uint8_t {
     BC7_SRGB,
 };
 
-std::string_view toString(TextureType type);
 std::string_view toString(TextureFormat format);
 bool isCompressed(TextureFormat format);
 bool isSrgb(TextureFormat format);

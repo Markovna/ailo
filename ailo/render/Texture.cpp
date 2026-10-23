@@ -46,14 +46,10 @@ vk::Format toVkFormat(texture::TextureFormat format) {
     throw std::runtime_error("unknown texture package format");
 }
 
-TextureType toTextureType(texture::TextureType type) {
-    return type == texture::TextureType::Cubemap ? TextureType::TEXTURE_CUBEMAP : TextureType::TEXTURE_2D;
-}
-
 }
 
 Texture Texture::fromPackage(RenderAPI* renderApi, const texture::TexturePackage& pkg) {
-    Texture tex(renderApi, toTextureType(pkg.type), toVkFormat(pkg.format), TextureUsage::Sampled, pkg.width, pkg.height,
+    Texture tex(renderApi, pkg.type, toVkFormat(pkg.format), TextureUsage::Sampled, pkg.width, pkg.height,
                 pkg.allocatedLevels());
 
     // Levels are stored level-major, so all layers of a level are contiguous and upload in one copy.
@@ -102,7 +98,7 @@ void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> byt
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = &ctx.construct(m_renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = &ctx.construct(m_renderApi, TextureType::Texture2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(m_renderApi, pixels, texWidth * texHeight * desiredChannels);
         stbi_image_free(pixels);
 
@@ -117,7 +113,7 @@ void TextureRawLoader::load(const std::string& key, std::span<const uint8_t> byt
         }
 
         uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-        tex = &ctx.construct(m_renderApi, TextureType::TEXTURE_2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
+        tex = &ctx.construct(m_renderApi, TextureType::Texture2D, format, TextureUsage::Sampled, texWidth, texHeight, mipmaps ? mipLevels : 1);
         tex->updateImage(m_renderApi, pixels, texWidth * texHeight * desiredChannels * sizeof(float));
         stbi_image_free(pixels);
     }

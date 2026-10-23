@@ -53,7 +53,7 @@ void ImGuiRenderer::createPipeline() {
                 .vertexShader = ShaderDescription::code(embedded::shaders::kImguiVert),
                 .fragmentShader = ShaderDescription::code(embedded::shaders::kImguiFrag),
                     .raster = ailo::RasterDescription {
-                        .cullingMode = ailo::CullingMode::NONE,
+                        .cullingMode = ailo::CullingMode::None,
                         .inverseFrontFace = false,
                         .blendEnable = true,
                         .depthWriteEnable = false,
@@ -97,7 +97,7 @@ void ImGuiRenderer::updateTexture(ImTextureData* tex) {
   if (tex->Status == ImTextureStatus_WantCreate) {
     // Create texture
     auto texture = m_renderAPI->createTexture(
-        TextureType::TEXTURE_2D,
+        TextureType::Texture2D,
         vk::Format::eR8Unorm,
         TextureUsage::Sampled,
         static_cast<uint32_t>(tex->Width),

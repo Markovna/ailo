@@ -49,7 +49,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     samples = std::min(samples, device.getMSAASamples());
 
     Shared<gpu::Texture> depth = textures.make(
-        *device, device.physicalDevice(), TextureType::TEXTURE_2D,
+        *device, device.physicalDevice(), TextureType::Texture2D,
         depthFormat, 1, extent.width, extent.height,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth,
@@ -69,7 +69,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
         if (samples != vk::SampleCountFlagBits::e1) {
             auto color = rt->colors[0];
             rt->colors[0] = textures.make(
-                *device, device.physicalDevice(), TextureType::TEXTURE_2D,
+                *device, device.physicalDevice(), TextureType::Texture2D,
                 surfaceFormat.format, 1, extent.width, extent.height,
                 vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                 vk::ImageAspectFlagBits::eColor,

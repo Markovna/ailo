@@ -15,6 +15,7 @@
 #include "stb_image/stb_image_write.h"
 
 using namespace ailo::texture;
+using ailo::TextureType;
 namespace fs = std::filesystem;
 
 namespace {

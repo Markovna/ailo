@@ -11,7 +11,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
         m_usage |= vk::ImageUsageFlagBits::eTransferSrc;
     }
 
-    m_layerCount = type == TextureType::TEXTURE_CUBEMAP ? 6 : 1;
+    m_layerCount = type == TextureType::Cubemap ? 6 : 1;
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
@@ -27,7 +27,7 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
     imageInfo.samples = m_samples;
     imageInfo.sharingMode = vk::SharingMode::eExclusive;
 
-    if (type == TextureType::TEXTURE_CUBEMAP) {
+    if (type == TextureType::Cubemap) {
         imageInfo.flags = vk::ImageCreateFlagBits::eCubeCompatible;
     }
 
@@ -54,7 +54,7 @@ vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::F
     vk::ImageAspectFlags aspectFlags) {
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image = image;
-    viewInfo.viewType = m_type == TextureType::TEXTURE_2D ? vk::ImageViewType::e2D : vk::ImageViewType::eCube;
+    viewInfo.viewType = m_type == TextureType::Texture2D ? vk::ImageViewType::e2D : vk::ImageViewType::eCube;
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;

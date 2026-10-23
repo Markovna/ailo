@@ -132,7 +132,7 @@ std::optional<MaterialPackage> MaterialPackage::deserialize(std::span<const uint
                 pkg.raster.depthWrite = c.boolean();
                 pkg.raster.depthCulling = c.boolean();
                 pkg.raster.doubleSided = c.boolean();
-                pkg.raster.depthFunc = c.enumeration(DepthFunc::Always);
+                pkg.raster.depthFunc = c.enumeration(CompareOp::Always);
                 pkg.requiredAttributes = c.u8();
                 pkg.variantFilter = c.u8();
                 break;

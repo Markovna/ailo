@@ -20,7 +20,7 @@ bool near(const glm::vec3& a, const glm::vec3& b, float tolerance) {
 template<typename F>
 texture::TexturePackage makeCubemap(uint32_t dim, F radiance) {
     texture::TexturePackage pkg;
-    pkg.type = texture::TextureType::Cubemap;
+    pkg.type = TextureType::Cubemap;
     pkg.format = texture::TextureFormat::RGBA32F;
     pkg.width = dim;
     pkg.height = dim;

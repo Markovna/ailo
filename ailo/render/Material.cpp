@@ -7,30 +7,6 @@ namespace ailo {
 
 namespace {
 
-CullingMode toCullingMode(material::CullingMode mode) {
-    switch (mode) {
-        case material::CullingMode::None:         return CullingMode::NONE;
-        case material::CullingMode::Front:        return CullingMode::FRONT;
-        case material::CullingMode::Back:         return CullingMode::BACK;
-        case material::CullingMode::FrontAndBack: return CullingMode::FRONT_AND_BACK;
-    }
-    return CullingMode::BACK;
-}
-
-CompareOp toCompareOp(material::DepthFunc func) {
-    switch (func) {
-        case material::DepthFunc::Never:        return CompareOp::NEVER;
-        case material::DepthFunc::Less:         return CompareOp::LESS;
-        case material::DepthFunc::Equal:        return CompareOp::EQUAL;
-        case material::DepthFunc::LessEqual:    return CompareOp::LESS_OR_EQUAL;
-        case material::DepthFunc::Greater:      return CompareOp::GREATER;
-        case material::DepthFunc::NotEqual:     return CompareOp::NOT_EQUAL;
-        case material::DepthFunc::GreaterEqual: return CompareOp::GREATER_OR_EQUAL;
-        case material::DepthFunc::Always:       return CompareOp::ALWAYS;
-    }
-    return CompareOp::LESS;
-}
-
 ShaderDescription::ShaderCode toShaderCode(std::span<const uint32_t> spirv) {
     auto* bytes = reinterpret_cast<const char*>(spirv.data());
     return { bytes, bytes + spirv.size_bytes() };
@@ -41,11 +17,11 @@ ShaderDescription::ShaderCode toShaderCode(std::span<const uint32_t> spirv) {
 Material::Material(RenderAPI* renderApi, material::MaterialPackage package)
     : m_renderApi(renderApi), m_package(std::move(package)) {
     const auto& raster = m_package.raster;
-    m_raster.cullingMode = raster.doubleSided ? CullingMode::NONE : toCullingMode(raster.culling);
+    m_raster.cullingMode = raster.doubleSided ? CullingMode::None : raster.culling;
     m_raster.inverseFrontFace = false;
     m_raster.depthWriteEnable = raster.depthWrite;
     m_raster.colorWriteEnable = raster.colorWrite;
-    m_raster.depthCompareOp = raster.depthCulling ? toCompareOp(raster.depthFunc) : CompareOp::ALWAYS;
+    m_raster.depthCompareOp = raster.depthCulling ? raster.depthFunc : CompareOp::Always;
 
     constexpr auto kAllStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
     if (m_package.uniformBlockSize > 0) {

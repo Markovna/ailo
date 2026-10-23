@@ -26,7 +26,7 @@ struct RasterState {
     bool colorWrite = true;
     bool depthWrite = true;
     bool depthCulling = true;          // false: no depth test, depthFunc is ignored
-    DepthFunc depthFunc = DepthFunc::Less;
+    CompareOp depthFunc = CompareOp::Less;
     bool doubleSided = false;
 };
 

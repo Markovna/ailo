@@ -8,10 +8,12 @@
 #include <glm/gtc/constants.hpp>
 
 #include "Cubemap.h"
+#include "render/RenderApiEnums.h"
 
 namespace lightc {
 
 using namespace ailo::texture;
+using ailo::TextureType;
 
 namespace {
 

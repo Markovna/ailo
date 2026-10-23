@@ -4,10 +4,10 @@ namespace ailo::vkutils {
 
 vk::CullModeFlags getCullMode(CullingMode mode) {
   switch (mode) {
-    case CullingMode::NONE: return vk::CullModeFlagBits::eNone;
-    case CullingMode::FRONT: return vk::CullModeFlagBits::eFront;
-    case CullingMode::BACK: return vk::CullModeFlagBits::eBack;
-    case CullingMode::FRONT_AND_BACK: return vk::CullModeFlagBits::eFrontAndBack;
+    case CullingMode::None: return vk::CullModeFlagBits::eNone;
+    case CullingMode::Front: return vk::CullModeFlagBits::eFront;
+    case CullingMode::Back: return vk::CullModeFlagBits::eBack;
+    case CullingMode::FrontAndBack: return vk::CullModeFlagBits::eFrontAndBack;
   }
   return vk::CullModeFlagBits::eNone;
 }

@@ -19,7 +19,7 @@ bool contains(const std::string& text, const std::string& part) {
 // A 2x2 rgba32f cubemap whose texels count up.
 texture::TexturePackage makeCubemap() {
     texture::TexturePackage pkg;
-    pkg.type = texture::TextureType::Cubemap;
+    pkg.type = TextureType::Cubemap;
     pkg.format = texture::TextureFormat::RGBA32F;
     pkg.width = 2;
     pkg.height = 2;
@@ -50,14 +50,14 @@ void testRoundTrip() {
     auto loaded = LightingPackage::deserialize(data, error);
     REQUIRE(loaded && error.empty());
     CHECK_EQ(loaded->irradianceSH, pkg.irradianceSH);
-    CHECK_EQ(loaded->reflections.type, texture::TextureType::Cubemap);
+    CHECK_EQ(loaded->reflections.type, TextureType::Cubemap);
     CHECK_EQ(loaded->reflections.width, 2);
     CHECK_EQ(loaded->reflections.data, pkg.reflections.data);
 }
 
 void testValidate() {
     LightingPackage pkg = makePackage();
-    pkg.reflections.type = texture::TextureType::Texture2D;
+    pkg.reflections.type = TextureType::Texture2D;
     CHECK(contains(pkg.validate(), "cubemap"));
 
     pkg = makePackage();

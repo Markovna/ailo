@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string_view>
 
+#include "render/RenderApiEnums.h"
+
 namespace ailo::material {
 
 enum class ShadingModel : uint8_t {
@@ -16,24 +18,6 @@ enum class BlendingMode : uint8_t {
 
 enum class VertexDomain : uint8_t {
     Object,
-};
-
-enum class CullingMode : uint8_t {
-    None,
-    Front,
-    Back,
-    FrontAndBack,
-};
-
-enum class DepthFunc : uint8_t {
-    Never,
-    Less,
-    Equal,
-    LessEqual,
-    Greater,
-    NotEqual,
-    GreaterEqual,
-    Always,
 };
 
 // Position is always present. Lit materials always get Normal, Tangents implies Normal.
@@ -84,8 +68,6 @@ constexpr uint32_t componentCount(ParameterType type) {
 std::string_view toString(ShadingModel);
 std::string_view toString(BlendingMode);
 std::string_view toString(VertexDomain);
-std::string_view toString(CullingMode);
-std::string_view toString(DepthFunc);
 std::string_view toString(ShaderStage);
 std::string_view toString(ParameterType);
 std::string_view toString(SamplerDefault);

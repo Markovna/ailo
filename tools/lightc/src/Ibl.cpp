@@ -12,11 +12,13 @@
 #include <glm/gtc/packing.hpp>
 
 #include "Cubemap.h"
+#include "render/RenderApiEnums.h"
 #include "stb_image/stb_image.h"
 
 namespace lightc {
 
 using namespace ailo::texture;
+using ailo::TextureType;
 namespace fs = std::filesystem;
 
 namespace {

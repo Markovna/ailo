@@ -62,7 +62,7 @@ private:
     std::vector<vk::ImageLayout> m_rangeLayouts;
     uint8_t m_levels = 1;
     uint8_t m_layerCount = 1;
-    TextureType m_type = TextureType::TEXTURE_2D;
+    TextureType m_type = TextureType::Texture2D;
     vk::SampleCountFlagBits m_samples = vk::SampleCountFlagBits::e1;
     vk::ImageUsageFlags m_usage;
 

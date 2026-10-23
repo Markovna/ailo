@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "TextureFormats.h"
+#include "render/RenderApiEnums.h"
 #include "render/texture/TexturePacker.h"
 
 namespace texc {
@@ -18,7 +19,7 @@ struct DefinitionError : std::runtime_error {
 };
 
 struct TextureDefinition {
-    ailo::texture::TextureType type = ailo::texture::TextureType::Texture2D;
+    ailo::TextureType type = ailo::TextureType::Texture2D;
     // One image for a 2d texture, six faces (+x -x +y -y +z -z) for a cubemap; relative to the .tex file.
     std::vector<std::filesystem::path> sources;
     // Cubemap only: sources[0] is one equirectangular image, resampled into faces of faceSize (0: its width / 4).
