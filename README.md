@@ -1,6 +1,6 @@
 # ailo
 
-ailo is a physically based renderer and small game engine written in C++23 on Vulkan. It has a plugin-based architecture built on an ECS (EnTT): engine features and games are plugins that add their own resources and systems. 
+ailo is a game engine with physically based renderer written in C++23 on Vulkan. It has a plugin-based architecture built on an ECS (EnTT): engine features and games are plugins that add their own resources and systems. 
 
 ## Features
 
