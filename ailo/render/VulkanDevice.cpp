@@ -102,8 +102,7 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
         return {};
     };
 
-    // The first suitable device wins. Prefer discrete over integrated GPUs: on hybrid laptops the loader's order follows
-    // the OS per-app GPU preference, which may put the integrated GPU first.
+    // The first suitable device wins. Prefer discrete over integrated GPUs
     auto deviceTypeRank = [](const vk::PhysicalDevice& device) {
         switch (device.getProperties().deviceType) {
             case vk::PhysicalDeviceType::eDiscreteGpu: return 0;

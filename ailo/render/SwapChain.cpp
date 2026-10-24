@@ -14,7 +14,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
 
     auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
 
-    uint32_t imageCount = capabilities.minImageCount + 4;
+    uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
         imageCount = capabilities.maxImageCount;
     }

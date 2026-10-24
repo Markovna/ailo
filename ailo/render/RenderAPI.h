@@ -84,7 +84,6 @@ public:
     void endGpuTimer();
     std::span<const GpuTiming> gpuTimings() const { return m_gpuTimer.timings(); }
 
-    void handleWindowResize();
     glm::ivec2 getSwapchainExtent() const;
 
 private:
@@ -109,7 +108,6 @@ private:
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:
-    bool m_framebufferResized = false;
     bool m_swapChainOutdated = false;
 
     // Core Vulkan objects

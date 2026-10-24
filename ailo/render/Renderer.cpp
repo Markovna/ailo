@@ -20,7 +20,6 @@
 #include "ShadowMapManager.h"
 #include "Skin.h"
 #include "ecs/AnimatorComponent.h"
-#include "ecs/Transform.h"
 
 namespace ailo {
 

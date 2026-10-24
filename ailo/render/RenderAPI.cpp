@@ -106,8 +106,7 @@ void RenderAPI::endFrame() {
 
     auto result = m_swapChain->present(commands, m_device.graphicsQueue(), m_device.presentQueue());
 
-    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || m_framebufferResized) {
-        m_framebufferResized = false;
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
         recreateSwapchain();
     } else if (result != vk::Result::eSuccess) {
         throw std::runtime_error("failed to present swap chain image!");
@@ -633,10 +632,6 @@ void RenderAPI::endGpuTimer() {
 }
 
 // Swapchain management
-
-void RenderAPI::handleWindowResize() {
-    m_framebufferResized = true;
-}
 
 glm::ivec2 RenderAPI::getSwapchainExtent() const {
     const auto& rt = m_swapChain->getCurrentRenderTarget();
