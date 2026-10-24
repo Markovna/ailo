@@ -196,6 +196,8 @@ struct RenderData {
   BufferHandle vertexBuffer;
   uint32_t indexCount;
   uint32_t indexOffset;
+  // Bit 0: inside the camera frustum; bit 1 + i: inside shadow cascade i.
+  uint32_t visibility;
 };
 
 class Renderer {

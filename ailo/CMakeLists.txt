@@ -172,6 +172,7 @@ add_library(ailo STATIC
     render/ShadowMapManager.cpp
     render/ShadowMapManager.h
     common/AABB.h
+    common/Frustum.h
         utils/Log.cpp
         utils/Log.h
         utils/Stream.cpp

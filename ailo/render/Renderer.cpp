@@ -18,6 +18,7 @@
 
 #include "Renderable.h"
 #include "ShadowMapManager.h"
+#include "common/Frustum.h"
 #include "Skin.h"
 #include "ecs/AnimatorComponent.h"
 
@@ -42,6 +43,12 @@ static constexpr SamplerParams kShadowSampler {
   .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
   .compareFunc = CompareOp::LessEqual,
 };
+
+static constexpr uint32_t kVisibleInView = 1u << 0;
+
+static constexpr uint32_t visibleInCascade(uint32_t cascade) {
+  return 1u << (cascade + 1);
+}
 
 static glm::vec2 getSpotLightScaleOffset(float inner, float outer) {
   float const outerClamped = std::clamp(std::abs(outer), glm::radians(0.5f), glm::half_pi<float>());
@@ -174,7 +181,7 @@ void Renderer::shadowPass() {
     backend->setScissor(x, y, tileSize, tileSize);
 
     for (const RenderData& renderData : m_renderData) {
-      if (!renderData.depthProgram) {
+      if (!renderData.depthProgram || !(renderData.visibility & visibleInCascade(cascade))) {
         continue;
       }
 
@@ -212,7 +219,7 @@ void Renderer::colorPass() {
   PipelineState pipelineState {};
 
   for(const RenderData& renderData : m_renderData) {
-      if (!renderData.colorProgram) {
+      if (!renderData.colorProgram || !(renderData.visibility & kVisibleInView)) {
         continue;
       }
 
@@ -385,14 +392,37 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
   m_renderData.clear();
   m_renderData.reserve(meshCount * 2);
 
+  const Frustum viewFrustum(camera.projection * camera.view);
+  const auto cascades = m_shadowMapManager.cascades();
+  std::array<Frustum, kMaxShadowCascades> cascadeFrustums;
+  for (size_t i = 0; i < cascades.size(); i++) {
+    cascadeFrustums[i] = Frustum(cascades[i].viewProjection);
+  }
+  const uint32_t visibleEverywhere = visibleInCascade(static_cast<uint32_t>(cascades.size())) - 1u;
+
   uint32_t objectIndex = 0;
   for(const auto& [entity, renderable] : renderables.each()) {
     if (scene.registry().all_of<Disabled>(entity)) continue;
     const auto tr = scene.tryGet<TransformComponent>(entity);
     auto skin = scene.tryGet<Skin>(entity);
+    auto mesh = renderable.mesh;
+    const glm::mat4 model = tr ? tr->world().toMatrix() : glm::mat4(1.0f);
+
+    // Skinned meshes are never culled: their bind-pose bounds don't follow the animation.
+    uint32_t visibility = visibleEverywhere;
+    if (!skin) {
+      const Aabb bounds = mesh->bounds.transformed(model);
+      visibility = viewFrustum.intersects(bounds) ? kVisibleInView : 0u;
+      if (renderable.castShadows) {
+        for (uint32_t i = 0; i < cascades.size(); i++) {
+          if (cascadeFrustums[i].intersects(bounds)) visibility |= visibleInCascade(i);
+        }
+      }
+    }
+    if (!visibility) continue;
 
     auto& uniformBufferData = m_perObjectUniformBufferData[objectIndex];
-    uniformBufferData.model = tr ? tr->world().toMatrix() : glm::mat4(1.0f);
+    uniformBufferData.model = model;
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
     uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
@@ -401,7 +431,6 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
     if (skin) variant.key |= material::Variant::SKINNING;
     if (renderable.receiveShadows) variant.key |= material::Variant::SHADOWS;
 
-    auto mesh = renderable.mesh;
     for(size_t i = 0; i < mesh->faces.size(); i++) {
       auto& [indexOffset, indexCount] = mesh->faces[i];
       auto& instance = renderable.materials[i];
@@ -456,6 +485,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
       entry.vertexBuffer = mesh->vertexBuffer.getBuffer();
       entry.indexCount = indexCount;
       entry.indexOffset = indexOffset;
+      entry.visibility = visibility;
     }
 
     objectIndex++;
