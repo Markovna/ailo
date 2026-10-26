@@ -45,37 +45,22 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     createInfo.oldSwapchain = nullptr;
     m_swapchain = device->createSwapchainKHR(createInfo);
 
-    auto samples = vk::SampleCountFlagBits::e1;
-    samples = std::min(samples, device.getMSAASamples());
-
     Shared<gpu::Texture> depth = textures.make(
         *device, device.physicalDevice(), TextureType::Texture2D,
         depthFormat, 1, extent.width, extent.height,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
-        vk::ImageAspectFlagBits::eDepth,
-        samples);
+        vk::ImageAspectFlagBits::eDepth);
 
     auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
     m_renderTargets.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
         auto& rt = m_renderTargets.emplace_back(renderTargets.make());
-        rt->samples = samples;
+        rt->samples = vk::SampleCountFlagBits::e1;
         rt->width = extent.width;
         rt->height = extent.height;
 
         rt->colors[0] = textures.make( *device, image,
             surfaceFormat.format, extent.width, extent.height, vk::ImageUsageFlagBits::eColorAttachment, vk::ImageAspectFlagBits::eColor);
-
-        if (samples != vk::SampleCountFlagBits::e1) {
-            auto color = rt->colors[0];
-            rt->colors[0] = textures.make(
-                *device, device.physicalDevice(), TextureType::Texture2D,
-                surfaceFormat.format, 1, extent.width, extent.height,
-                vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-                vk::ImageAspectFlagBits::eColor,
-                samples);
-            rt->resolve[0] = color;
-        }
 
         rt->depth = depth;
 
@@ -95,9 +80,7 @@ vk::Result SwapChain::acquireNextImage(vk::Device device, vk::Semaphore& semapho
 }
 
 vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue) {
-    auto& texture = m_renderTargets[m_currentImageIndex]->resolve[0]
-        ? m_renderTargets[m_currentImageIndex]->resolve[0]
-        : m_renderTargets[m_currentImageIndex]->colors[0];
+    auto& texture = m_renderTargets[m_currentImageIndex]->colors[0];
     texture->transitionLayout(commandBuffer.buffer(), vk::ImageLayout::ePresentSrcKHR);
 
     commandBuffer.submit(graphicsQueue, m_renderFinishedSemaphores[m_currentImageIndex]);

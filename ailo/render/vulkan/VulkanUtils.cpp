@@ -1,5 +1,8 @@
 #include "VulkanUtils.h"
 
+#include <bit>
+#include <cassert>
+
 namespace ailo::vkutils {
 
 vk::CullModeFlags getCullMode(CullingMode mode) {
@@ -87,6 +90,7 @@ vk::ImageUsageFlags getTextureUsage(TextureUsage usage) {
   if ((usage & TextureUsage::Storage) == TextureUsage::Storage) usageFlags |= vk::ImageUsageFlagBits::eStorage;
   if ((usage & TextureUsage::ColorAttachment) == TextureUsage::ColorAttachment) usageFlags |= vk::ImageUsageFlagBits::eColorAttachment;
   if ((usage & TextureUsage::DepthStencilAttachment) == TextureUsage::DepthStencilAttachment) usageFlags |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
+  if ((usage & TextureUsage::Transient) == TextureUsage::Transient) usageFlags |= vk::ImageUsageFlagBits::eTransientAttachment;
 
   return usageFlags;
 }
@@ -110,6 +114,11 @@ vk::Format getFormat(TextureFormat format) {
     case TextureFormat::DEPTH32F:   return vk::Format::eD32Sfloat;
   }
   return vk::Format::eUndefined;
+}
+
+vk::SampleCountFlagBits getSampleCount(uint8_t samples) {
+  assert(std::has_single_bit(samples) && samples <= 64);
+  return static_cast<vk::SampleCountFlagBits>(samples);
 }
 
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout layout) {

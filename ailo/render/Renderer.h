@@ -97,6 +97,7 @@ struct ViewInfo {
 struct RendererSettings {
   // Resolution of one cascade; the atlas is kShadowAtlasTiles times larger on each side.
   uint32_t shadowMapSize = 1024;
+  uint8_t msaaSamples = 1;
   ShadowSettings shadows;
   Color clearColor { 0.1f, 0.1f, 0.3f, 1.0f };
 };
@@ -252,11 +253,9 @@ private:
   AssetPtr<Texture> m_defaultIblSpecular;
   TextureHandle m_iblSpecularMap;
 
-  // Shadow mapping
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
 
-  // HDR color pass target, resolved into the swapchain by the tonemap pass. Recreated when the swapchain resizes.
   Unique<gpu::Texture> m_hdrColor;
   Unique<gpu::Texture> m_hdrDepth;
   Unique<gpu::RenderTarget> m_hdrRenderTarget;

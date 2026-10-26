@@ -126,6 +126,7 @@ enum class TextureUsage : uint16_t {
     Storage = 1 << 1,
     ColorAttachment = 1 << 2,
     DepthStencilAttachment = 1 << 3,
+    Transient = 1 << 4,
 };
 
 inline TextureUsage operator&(TextureUsage lhs, TextureUsage rhs) {

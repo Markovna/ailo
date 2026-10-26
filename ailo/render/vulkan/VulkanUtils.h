@@ -16,6 +16,7 @@ vk::BufferUsageFlagBits getBufferUsage(BufferBinding);
 vk::IndexType getIndexType(IndexType);
 vk::ImageUsageFlags getTextureUsage(TextureUsage);
 vk::Format getFormat(TextureFormat);
+vk::SampleCountFlagBits getSampleCount(uint8_t samples);
 
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionSrcAccess(vk::ImageLayout);
 std::tuple<vk::AccessFlags, vk::PipelineStageFlags> getTransitionDstAccess(vk::ImageLayout);

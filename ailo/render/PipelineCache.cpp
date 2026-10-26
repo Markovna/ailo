@@ -141,6 +141,8 @@ ailo::Shared<ailo::Pipeline> ailo::PipelineCache::getOrCreate() {
         query.renderPassKey.colors[i] = state.frameBufferFormat.color[i];
     }
     query.renderPassKey.depth = state.frameBufferFormat.depth;
+    query.renderPassKey.hasResolve = state.frameBufferFormat.hasResolve;
+    query.renderPassKey.samples = state.frameBufferFormat.samples;
 
     auto ptr = m_cache.get(query);
     if (ptr) {

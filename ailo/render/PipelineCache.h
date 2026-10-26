@@ -31,6 +31,8 @@ class PipelineCache {
     struct RenderPassCompatibilityKey {
         PerColorAttachment<vk::Format> colors;
         vk::Format depth;
+        std::bitset<kMaxColorAttachments> hasResolve {};
+        vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
 
         bool operator==(const RenderPassCompatibilityKey& other) const = default;
     };
@@ -64,6 +66,8 @@ class PipelineCache {
                 utils::hash_combine(seed, attribute.offset);
             }
             utils::hash_combine(seed, key.renderPassKey.depth);
+            utils::hash_combine(seed, key.renderPassKey.hasResolve);
+            utils::hash_combine(seed, key.renderPassKey.samples);
             for (auto& color : key.renderPassKey.colors) {
                 utils::hash_combine(seed, color);
             }

@@ -164,7 +164,7 @@ void Renderer::shadowPass() {
 
   if (!m_shadowMapRenderTarget) {
     m_shadowMapRenderTarget = backend->createRenderTarget(
-        {}, m_shadowMapTexture, atlasSize, atlasSize, vk::SampleCountFlagBits::e1);
+        {}, m_shadowMapTexture, atlasSize, atlasSize);
   }
 
   RenderPassDescription shadowPassDesc {};
@@ -208,11 +208,12 @@ void Renderer::shadowPass() {
 void Renderer::colorPass() {
   RenderAPI* backend = m_renderAPI;
 
+  updateHdrTarget();
+
   RenderPassDescription renderPass {};
   renderPass.color[0] = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eStore };
   renderPass.depth = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eDontCare };
 
-  updateHdrTarget();
   const auto& clearColor = m_settings.clearColor;
   backend->beginRenderPass(m_hdrRenderTarget, renderPass, clearColor);
 
@@ -270,15 +271,15 @@ void Renderer::updateHdrTarget() {
   }
   m_hdrExtent = extent;
 
+  const uint8_t samples = m_settings.msaaSamples;
   m_hdrColor = backend->createTexture(TextureType::Texture2D, TextureFormat::RGBA16F,
     TextureUsage::ColorAttachment | TextureUsage::Sampled, extent.x, extent.y);
   m_hdrDepth = backend->createTexture(TextureType::Texture2D, TextureFormat::DEPTH32F,
-    TextureUsage::DepthStencilAttachment, extent.x, extent.y);
+    TextureUsage::DepthStencilAttachment | TextureUsage::Transient, extent.x, extent.y, 1, samples);
 
   PerColorAttachment<TextureHandle> colors {};
   colors[0] = m_hdrColor;
-  m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.x, extent.y,
-    vk::SampleCountFlagBits::e1);
+  m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.x, extent.y, samples);
 
   backend->updateDescriptorSetTexture(m_tonemapDescriptorSet, m_hdrColor, 0, kClampToEdgeSampler);
 }

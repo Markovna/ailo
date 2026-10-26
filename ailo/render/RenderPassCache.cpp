@@ -79,7 +79,7 @@ RenderPass::RenderPass(vk::Device device, DeletionQueue& deletionQueue, const Re
     subpass.pipelineBindPoint = vk::PipelineBindPoint::eGraphics;
     subpass.colorAttachmentCount = colorAttachmentRefs.size();
     subpass.pColorAttachments = colorAttachmentRefs.data();
-    subpass.pResolveAttachments = resolveAttachmentRefs.data();
+    subpass.pResolveAttachments = query.hasResolve.any() ? resolveAttachmentRefs.data() : nullptr;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
     vk::SubpassDependency dependency{};
@@ -114,7 +114,8 @@ RenderPass& RenderPassCache::getOrCreate(const RenderPassDescription& descriptio
         auto& colorAttachmentDesc = query.attachments[i];
         colorAttachmentDesc.format = format.color[i];
         colorAttachmentDesc.loadOp = description.color[i].load;
-        colorAttachmentDesc.storeOp = description.color[i].store;
+        // A resolved multisampled attachment is only needed within the pass.
+        colorAttachmentDesc.storeOp = format.hasResolve[i] ? vk::AttachmentStoreOp::eDontCare : description.color[i].store;
     }
 
     constexpr auto depthAttachmentIndex = kMaxColorAttachments;

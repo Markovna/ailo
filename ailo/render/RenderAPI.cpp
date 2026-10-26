@@ -3,6 +3,9 @@
 #include "vulkan/VulkanUtils.h"
 #include "SwapChain.h"
 #include "utils/Log.h"
+#include <algorithm>
+#include <bit>
+#include <cassert>
 #include <numeric>
 #include <stdexcept>
 
@@ -249,13 +252,19 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
     commands.acquire(std::move(buffer));
 }
 
-Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, TextureFormat format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels) {
+Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, TextureFormat format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels, uint8_t samples) {
     return m_textures.make(
         *m_device, m_device.physicalDevice(),
         type, vkutils::getFormat(format), levels, width, height,
         vkutils::getTextureUsage(usage),
         (usage & TextureUsage::DepthStencilAttachment) != TextureUsage::None ?
-            vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor);
+            vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor,
+        clampSampleCount(samples));
+}
+
+vk::SampleCountFlagBits RenderAPI::clampSampleCount(uint8_t samples) const {
+    const auto maxSamples = static_cast<uint8_t>(m_device.getMSAASamples());
+    return vkutils::getSampleCount(std::bit_floor(std::clamp<uint8_t>(samples, 1, maxSamples)));
 }
 
 void RenderAPI::updateTextureImage(const TextureHandle& handle, const void* data, size_t dataSize,
@@ -391,20 +400,40 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 }
 
 
-Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, vk::SampleCountFlagBits samples) {
+Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, uint8_t samples) {
     auto renderTarget = m_renderTargets.make();
-
-    for (uint32_t i = 0; i < colors.size(); i++) {
-        if (colors[i]) {
-            renderTarget->colors[i] = m_textures.share(colors[i]);
-        }
-    }
-    if (depth) {
-        renderTarget->depth = m_textures.share(depth);
-    }
     renderTarget->width = width;
     renderTarget->height = height;
-    renderTarget->samples = samples;
+    renderTarget->samples = clampSampleCount(samples);
+
+    auto createMsaaTexture = [&](const Texture& texture, vk::ImageUsageFlags usage) -> Shared<Texture> {
+        return m_textures.make(*m_device, m_device.physicalDevice(), TextureType::Texture2D, texture.format, 1,
+            width, height, usage | vk::ImageUsageFlagBits::eTransientAttachment, texture.aspect, renderTarget->samples);
+    };
+
+    for (uint32_t i = 0; i < colors.size(); i++) {
+        if (!colors[i]) {
+            continue;
+        }
+        auto color = m_textures.share(colors[i]);
+        assert(color->getSamples() == vk::SampleCountFlagBits::e1);
+        if (renderTarget->samples != vk::SampleCountFlagBits::e1) {
+            renderTarget->colors[i] = createMsaaTexture(*color, vk::ImageUsageFlagBits::eColorAttachment);
+            renderTarget->resolve[i] = std::move(color);
+        } else {
+            renderTarget->colors[i] = std::move(color);
+        }
+    }
+
+    if (depth) {
+        auto depthTexture = m_textures.share(depth);
+        // Depth isn't resolved: a single-sampled depth texture gets a multisampled stand-in and is never written.
+        if (depthTexture->getSamples() != renderTarget->samples) {
+            assert(depthTexture->getSamples() == vk::SampleCountFlagBits::e1);
+            depthTexture = createMsaaTexture(*depthTexture, vk::ImageUsageFlagBits::eDepthStencilAttachment);
+        }
+        renderTarget->depth = std::move(depthTexture);
+    }
     return renderTarget;
 }
 
@@ -547,10 +576,9 @@ void RenderAPI::endRenderPass() {
             if (renderTarget->colors[i] && (renderTarget->colors[i]->getUsage() & vk::ImageUsageFlagBits::eSampled)) {
                 renderTarget->colors[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
             }
-
-            // if (renderTarget->resolve[i] && renderTarget->resolve[i]->getUsage() == vk::ImageUsageFlagBits::eSampled) {
-            //     renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
-            // }
+            if (renderTarget->resolve[i] && (renderTarget->resolve[i]->getUsage() & vk::ImageUsageFlagBits::eSampled)) {
+                renderTarget->resolve[i]->transitionLayout(*commands, vk::ImageLayout::eShaderReadOnlyOptimal);
+            }
         }
 
         if (renderTarget->depth && (renderTarget->depth->getUsage() & vk::ImageUsageFlagBits::eSampled)) {

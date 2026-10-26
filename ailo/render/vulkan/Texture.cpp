@@ -37,7 +37,18 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
 
     vk::MemoryAllocateInfo allocInfo{};
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+    std::optional<uint32_t> memoryType;
+    if (m_usage & vk::ImageUsageFlagBits::eTransientAttachment) {
+        memoryType = findMemoryType(physicalDevice, memRequirements.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eLazilyAllocated);
+    }
+    if (!memoryType) {
+        memoryType = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal);
+    }
+    if (!memoryType) {
+        throw std::runtime_error("failed to find suitable memory type!");
+    }
+    allocInfo.memoryTypeIndex = *memoryType;
 
     memory = device.allocateMemory(allocInfo);
     device.bindImageMemory(image, memory, 0);
@@ -65,7 +76,7 @@ vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::F
     return device.createImageView(viewInfo);
 }
 
-uint32_t Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+std::optional<uint32_t> Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
 
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
@@ -74,7 +85,7 @@ uint32_t Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typ
         }
     }
 
-    throw std::runtime_error("failed to find suitable memory type!");
+    return std::nullopt;
 }
 
 Texture::~Texture() {

@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include <optional>
+
 #include "Resources.h"
 #include "render/Resource.h"
 
@@ -67,7 +69,7 @@ private:
     vk::ImageUsageFlags m_usage;
 
     vk::ImageView createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels, vk::ImageAspectFlags aspectFlags);
-    uint32_t findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties);
+    std::optional<uint32_t> findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 };
 
 }
