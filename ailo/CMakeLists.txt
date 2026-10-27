@@ -175,8 +175,6 @@ add_library(ailo STATIC
     common/Frustum.h
         utils/Log.cpp
         utils/Log.h
-        utils/Stream.cpp
-        utils/Stream.h
         render/Color.h
 )
 

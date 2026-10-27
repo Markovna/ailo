@@ -3,23 +3,21 @@
 
 namespace ailo {
 
-class OutputStream;
-
 namespace log {
 
-struct Loggers {
-    using ostream = OutputStream;
+class LogStream;
 
-    ostream& debug;
-    ostream& error;
-    ostream& warn;
-    ostream& info;
-    ostream& verbose;
+struct Loggers {
+    LogStream& debug;
+    LogStream& error;
+    LogStream& warn;
+    LogStream& info;
+    LogStream& verbose;
 };
 
 extern Loggers const slog;
 
-void write(Loggers::ostream& out, std::string_view fmt, std::format_args args);
+void write(LogStream& out, std::string_view fmt, std::format_args args);
 
 template <typename... Args>
 void info(std::format_string<Args...> fmt, Args&&... args) {
