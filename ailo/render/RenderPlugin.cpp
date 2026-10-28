@@ -58,6 +58,7 @@ void RenderPlugin::build(App& app) {
     server.registerLoader<Texture>(std::make_unique<TexturePackageLoader>(&api));
     server.registerLoader<Texture>(std::make_unique<TextureRawLoader>(&api));
     server.registerLoader<Material>(std::make_unique<MaterialLoader>(&api));
+    server.registerLoader<MaterialInstance>(std::make_unique<MaterialInstanceLoader>(&api, &server));
     server.registerLoader<IndirectLight>(std::make_unique<IndirectLightLoader>(&api, &textureStorage));
     server.registerLoader<Model>(std::make_unique<ModelLoader>(&api, &server, ModelLoader::Storages {
         .textures = &textureStorage,

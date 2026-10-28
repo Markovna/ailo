@@ -5,7 +5,7 @@
 
 #include "MaterialDefinition.h"
 
-namespace matcomp {
+namespace matc {
 
 std::vector<ailo::material::Variant> getStageVariants(const MaterialDefinition& def, ailo::material::ShaderStage stage);
 

@@ -105,7 +105,7 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     // The first suitable device wins. Prefer discrete over integrated GPUs
     auto deviceTypeRank = [](const vk::PhysicalDevice& device) {
         switch (device.getProperties().deviceType) {
-            case vk::PhysicalDeviceType::eDiscreteGpu: return 0;
+            case vk::PhysicalDeviceType::eDiscreteGpu: return 4;
             case vk::PhysicalDeviceType::eIntegratedGpu: return 1;
             case vk::PhysicalDeviceType::eVirtualGpu: return 2;
             default: return 3;

@@ -1,4 +1,4 @@
-// MATERIAL_HAS_NORMAL: defined by matcomp when the material writes material.normal.
+// MATERIAL_HAS_NORMAL: defined by matc when the material writes material.normal.
 
 #include "common_math.glsl"
 #include "common_brdf.glsl"

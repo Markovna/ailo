@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <stdexcept>
 
 #include "DefaultAssetFactory.h"
 #include "Renderer.h"
+#include "material/MaterialInstancePackage.h"
 #include "utils/Log.h"
 
 namespace ailo {
@@ -151,6 +153,27 @@ AssetPtr<MaterialInstance> MaterialInstance::create(AssetStorage<MaterialInstanc
     if (!material) return {};
 
     return storage.emplace(noname_t{}, &renderApi, server, material);
+}
+
+void MaterialInstanceLoader::load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<MaterialInstance>& ctx) {
+    std::string error;
+    auto pkg = material::MaterialInstancePackage::deserialize(bytes, error);
+    if (!pkg) {
+        throw std::runtime_error(key + ": " + error);
+    }
+
+    auto material = ctx.load<Material>(pkg->material);
+    if (!material) {
+        throw std::runtime_error(key + ": failed to load material '" + pkg->material + "'");
+    }
+
+    auto& instance = ctx.construct(m_renderApi, *m_server, std::move(material));
+    for (const auto& p : pkg->parameters) {
+        instance.setParameter(p.name, p.type, p.value);
+    }
+    for (const auto& t : pkg->textures) {
+        instance.setParameter(t.name, ctx.load<Texture>(t.texture));
+    }
 }
 
 }

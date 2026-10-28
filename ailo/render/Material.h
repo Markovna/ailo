@@ -39,7 +39,7 @@ private:
     mutable std::bitset<material::Variant::COUNT> m_missingVariants;
 };
 
-// Reads a material package that matcomp compiled from a .mat file, keeping its name.
+// Reads a material package that matc compiled from a .mat file, keeping its name.
 class MaterialLoader : public AssetLoader<Material> {
 public:
     explicit MaterialLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}

@@ -6,6 +6,7 @@ void runEmbeddedAssetTests();
 void runTextureTests();
 void runModelTests();
 void runLightingTests();
+void runMaterialInstanceTests();
 void runTransformTests();
 void runPhysicsTests();
 
@@ -16,6 +17,7 @@ int main() {
     runTextureTests();
     runModelTests();
     runLightingTests();
+    runMaterialInstanceTests();
     runTransformTests();
     runPhysicsTests();
 

@@ -8,7 +8,9 @@
 
 namespace ailo {
 
-// Resources: AssetServer, whose default reader is a FileAssetReader relative to root (empty: the working directory).
+// Resources: AssetServer, whose default reader is a FileAssetReader relative to root, the assets folder: plain keys
+// such as "materials/pbr.mat" are relative to it. The default is the asset build's output, <build>/assets, for a
+// game run from the build folder.
 // The "engine" source is a MemoryAssetReader over the assets embedded into the engine (assets/, e.g.
 // "engine:/materials/lit.mat"). More readers can be registered by source name (AssetServer::registerReader) and
 // are used for "<source>:/<path>" keys.
@@ -18,7 +20,7 @@ namespace ailo {
 // that it is empty when destroyed, so insert storages after the resources their assets depend on (e.g. the
 // RenderAPI) and before the resources that hold AssetPtrs.
 struct AssetPlugin {
-    std::filesystem::path root;
+    std::filesystem::path root = "assets";
 
     void build(App& app);
 };

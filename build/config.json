@@ -7,9 +7,9 @@
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
-        "matcomp": {
-            "extensions": [ ".mat" ],
-            "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
+        "matc": {
+            "extensions": [ ".mat", ".matinst" ],
+            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "modelc": {

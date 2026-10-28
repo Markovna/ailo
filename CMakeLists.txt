@@ -116,7 +116,7 @@ if(CMAKE_GENERATOR MATCHES "Ninja")
 else()
     find_program(AILO_NINJA ninja REQUIRED)
 endif()
-set(AILO_ASSET_TOOLS texc matcomp modelc lightc)
+set(AILO_ASSET_TOOLS texc matc modelc lightc)
 set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
 
 # Builds FILES like the asset build (build/gen.py) and compiles them into TARGET as a C++ package written by bin2cpp
@@ -182,7 +182,7 @@ endfunction()
 add_subdirectory(ailo)
 
 add_subdirectory(tools/json)
-add_subdirectory(tools/matcomp)
+add_subdirectory(tools/matc)
 add_subdirectory(tools/texc)
 add_subdirectory(tools/modelc)
 add_subdirectory(tools/lightc)

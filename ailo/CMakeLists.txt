@@ -23,6 +23,8 @@ endfunction()
 add_library(ailo_material STATIC
     render/material/MaterialEnums.cpp
     render/material/MaterialEnums.h
+    render/material/MaterialInstancePackage.cpp
+    render/material/MaterialInstancePackage.h
     render/material/MaterialPackage.cpp
     render/material/MaterialPackage.h
     render/material/Variant.h

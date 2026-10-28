@@ -7,7 +7,7 @@
 
 #include "render/material/MaterialEnums.h"
 
-namespace matcomp {
+namespace matc {
 
 // #include "..." is resolved relative to the including file first, then against the include directories.
 class ShaderCompiler {

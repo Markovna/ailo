@@ -1,20 +1,23 @@
-# matcomp
+# matc
 
-Compiles a material definition (`.mat`) into a material package, which keeps the definition's name (`.mat`).
+Compiles a material definition (`.mat`) into a material package, which keeps the definition's name (`.mat`), and a
+material instance (`.matinst`, see [Material instances](#material-instances)) into a material instance package.
 A material provides named parameters, raster state, required vertex inputs, a shading model and
 shader *functions*. The surface templates in `shaders/surface/` own `main()`, attributes, varyings, skinning and
-lighting; matcomp joins them with the material's code for every variant.
+lighting; matc joins them with the material's code for every variant.
 
 ```
-matcomp [-I <dir>]... -o <output.mat> [--depfile <file>] [--emit-glsl <dir>] <input.mat>
-matcomp --dump <package.mat>
+matc [-I <dir>]... -o <output.mat> [--depfile <file>] [--emit-glsl <dir>] <input.mat>
+matc -o <output.matinst> [--depfile <file>] [--root <assets folder>] <input.matinst>
+matc --dump <package.mat|package.matinst>
 ```
 
 - `-I` adds an include directory. The repository's `shaders/` folder, which holds the templates, is always searched,
   after these.
 - `--depfile` writes the `.mat` file and every included template, so editing a template rebuilds the materials.
 - `--emit-glsl` writes the generated GLSL of each variant, for debugging.
-- `--dump` prints a package: properties, parameter layout and defaults, variants.
+- `--root` is the assets folder. `.matinst` files need it to turn their paths into asset keys; `.mat` files ignore it.
+- `--dump` prints a package: properties, parameter layout and defaults, variants; or an instance's values.
 
 ## Format
 
@@ -117,7 +120,7 @@ on top.
 
 ## Variants
 
-matcomp compiles every variant that `variantFilter` doesn't exclude; the material's code never picks one:
+matc compiles every variant that `variantFilter` doesn't exclude; the material's code never picks one:
 
 | Bit | Meaning | Stages |
 |---|---|---|
@@ -126,3 +129,41 @@ matcomp compiles every variant that `variantFilter` doesn't exclude; the materia
 | `DEPTH_ONLY` | depth only (no color output); doesn't run `material()`, nor `materialVertex()` unless it writes `clipPosition` | both |
 
 Identical SPIR-V is stored once in the package.
+
+## Material instances
+
+A `.matinst` file is JSON (with `//` and `/* */` comments) that sets parameters of a material:
+
+```
+{
+    "material": "/materials/pbr.mat",
+    "parameters": {
+        "baseColorFactor": [1.0, 0.8, 0.8, 1.0],
+        "normalGreenSign": -1.0
+    },
+    "textures": {
+        "baseColorMap": "rock_BaseColor.png.tex"
+    }
+}
+```
+
+| Property | Meaning |
+|---|---|
+| `material` | required; the `.mat` source the instance uses |
+| `parameters` | uniform parameter name -> value, written like a `default` (a value or a flat array, matrices column-major). Unlisted parameters keep the material's default. |
+| `textures` | sampler parameter name -> texture asset. Unlisted samplers keep the material's default texture. |
+
+Paths starting with `/` are relative to the assets folder (`--root`), keys with a source (`engine:/materials/lit.mat`,
+`builtin://textures/white`) are used as is, and other paths are relative to the `.matinst` file. matc resolves them
+at compile time and stores full asset keys, relative to the assets folder (`materials/pbr.mat`), which is where the
+engine's file reader is rooted. A path outside the assets folder is an error. For a `.matinst` embedded under another
+source, reference its material and textures with that source's keys (`engine:/...`).
+
+matc reads the material's source (`engine:/` materials from the repository's `assets/`) to check every name and
+value against its parameters, so a value can't have the wrong type. Materials of other sources can't be read and are
+errors. Texture files are checked to exist, except for keys with a source. The depfile lists the `.matinst` and the
+material's source, so editing the material rechecks its instances; the compiled material isn't needed.
+
+At runtime `MaterialInstanceLoader` (registered by `RenderPlugin`) loads `.matinst` keys as a `MaterialInstance`,
+loading its material and textures by their stored keys. The instance is shared by everyone who loads that key; for one of
+your own, create an instance of its material and `copyParametersFrom()` it.

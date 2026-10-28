@@ -15,7 +15,7 @@ using ailo::CompareOp;
 using ailo::CullingMode;
 namespace json = ailo::json;
 
-namespace matcomp {
+namespace matc {
 
 namespace {
 
@@ -224,44 +224,17 @@ uint32_t std140Alignment(ParameterType t) {
 uint32_t alignUp(uint32_t v, uint32_t a) { return (v + a - 1) / a * a; }
 
 void writeDefault(MaterialParameter& p, const json::Value& value) {
+    std::vector<uint32_t> words = parseParameterValue(p, value, "default for \"" + p.name + "\"");
+
     uint32_t elements = std::max(p.arraySize, 1u);
     uint32_t components = componentCount(p.type);
-
-    std::vector<const json::Value*> flat;
-    if (value.isArray()) {
-        for (const auto& v : value.asArray()) flat.push_back(&v);
-    } else {
-        flat.push_back(&value);
-    }
-    if (flat.size() != size_t(elements) * components) {
-        fail(value.line, "default for \"" + p.name + "\" needs " + std::to_string(elements * components) +
-                         " value(s), got " + std::to_string(flat.size()));
-    }
-
     uint32_t elementStride = p.arraySize ? alignUp(std140Size(p.type), 16) : std140Size(p.type);
     uint32_t rows = rowCount(p.type);
 
     for (uint32_t e = 0; e < elements; e++) {
         for (uint32_t i = 0; i < components; i++) {
-            const json::Value& v = *flat[e * components + i];
-            uint32_t column = i / rows;
-            uint32_t row = i % rows;
-            uint32_t byteOffset = e * elementStride + column * 16 + row * 4;
-
-            uint32_t bits = 0;
-            if (isBoolType(p.type)) {
-                bits = getBool(v, "default") ? 1u : 0u;
-            } else if (!v.isNumber()) {
-                fail(v.line, "default for \"" + p.name + "\" must be numeric, got " + v.typeName());
-            } else if (isFloatType(p.type)) {
-                bits = std::bit_cast<uint32_t>(float(v.asNumber()));
-            } else {
-                double n = v.asNumber();
-                if (n != std::floor(n)) fail(v.line, "default for \"" + p.name + "\" must be an integer");
-                if (isUnsignedType(p.type) && n < 0) fail(v.line, "default for \"" + p.name + "\" must not be negative");
-                bits = isUnsignedType(p.type) ? uint32_t(n) : std::bit_cast<uint32_t>(int32_t(n));
-            }
-            std::memcpy(p.defaultValue.data() + byteOffset, &bits, sizeof(bits));
+            uint32_t byteOffset = e * elementStride + (i / rows) * 16 + (i % rows) * 4;
+            std::memcpy(p.defaultValue.data() + byteOffset, &words[e * components + i], sizeof(uint32_t));
         }
     }
 }
@@ -437,6 +410,42 @@ void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
     }
 }
 
+}
+
+std::vector<uint32_t> parseParameterValue(const MaterialParameter& p, const json::Value& value, const std::string& what) {
+    uint32_t elements = std::max(p.arraySize, 1u);
+    uint32_t components = componentCount(p.type);
+
+    std::vector<const json::Value*> flat;
+    if (value.isArray()) {
+        for (const auto& v : value.asArray()) flat.push_back(&v);
+    } else {
+        flat.push_back(&value);
+    }
+    if (flat.size() != size_t(elements) * components) {
+        fail(value.line, what + " needs " + std::to_string(elements * components) + " value(s), got " +
+                         std::to_string(flat.size()));
+    }
+
+    std::vector<uint32_t> words;
+    words.reserve(flat.size());
+    for (const json::Value* v : flat) {
+        uint32_t bits = 0;
+        if (isBoolType(p.type)) {
+            bits = getBool(*v, what) ? 1u : 0u;
+        } else if (!v->isNumber()) {
+            fail(v->line, what + " must be numeric, got " + v->typeName());
+        } else if (isFloatType(p.type)) {
+            bits = std::bit_cast<uint32_t>(float(v->asNumber()));
+        } else {
+            double n = v->asNumber();
+            if (n != std::floor(n)) fail(v->line, what + " must be an integer");
+            if (isUnsignedType(p.type) && n < 0) fail(v->line, what + " must not be negative");
+            bits = isUnsignedType(p.type) ? uint32_t(n) : std::bit_cast<uint32_t>(int32_t(n));
+        }
+        words.push_back(bits);
+    }
+    return words;
 }
 
 MaterialDefinition parseMaterialDefinition(std::string_view source) {

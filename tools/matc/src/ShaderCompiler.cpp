@@ -8,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-namespace matcomp {
+namespace matc {
 
 namespace {
 

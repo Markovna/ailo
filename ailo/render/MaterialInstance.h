@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <bit>
 #include <span>
 #include <vector>
@@ -55,6 +56,11 @@ public:
         setUniform(name, UniformTraits<T>::type, words, firstElement);
     }
 
+    void setParameter(std::string_view name, material::ParameterType type, std::span<const uint32_t> words,
+                      uint32_t firstElement = 0) {
+        setUniform(name, type, words, firstElement);
+    }
+
     void copyParametersFrom(const MaterialInstance& other);
 
     // Uploads changed parameters. Call while recording a frame, before drawing with the instance.
@@ -93,6 +99,24 @@ private:
     Unique<gpu::Buffer> m_uniformBuffer;
     std::vector<Sampler> m_samplers;
     Unique<gpu::DescriptorSet> m_descriptorSet;
+};
+
+// Reads a material instance package that matc compiled from a .matinst file. Its material and textures are
+// loaded as dependencies.
+class MaterialInstanceLoader : public AssetLoader<MaterialInstance> {
+public:
+    MaterialInstanceLoader(RenderAPI* renderApi, AssetServer* server) : m_renderApi(renderApi), m_server(server) {}
+
+    constexpr std::span<const std::string_view> extensions() const override { return kExtensions; }
+
+protected:
+    void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<MaterialInstance>& ctx) override;
+
+private:
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".matinst" };
+
+    RenderAPI* m_renderApi;
+    AssetServer* m_server;
 };
 
 }

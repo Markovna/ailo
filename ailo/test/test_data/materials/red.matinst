@@ -1,0 +1,14 @@
+{
+    // Relative to this file; matc stores the key relative to the assets folder.
+    "material": "tinted.mat",
+    "parameters": {
+        "tint": [1.0, 0.0, 0.0, 1.0],
+        "strength": 2.5,
+        "layers": [3, -4],
+        "inverted": true,
+        "uvTransform": [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    },
+    "textures": {
+        "baseColorMap": "builtin://textures/black"
+    }
+}

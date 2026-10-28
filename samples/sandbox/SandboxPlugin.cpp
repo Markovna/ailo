@@ -34,10 +34,10 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         Camera { .exposure = 1.2 },
         OrbitCamera { .distance = 10.0f },
         Skybox {
-            .cubemap = server.load<Texture>("assets/textures/rogland_clear_night_skybox.tex"),
+            .cubemap = server.load<Texture>("textures/rogland_clear_night_skybox.tex"),
         },
         SceneLighting {
-            .indirectLight = server.load<IndirectLight>("assets/textures/rogland_clear_night_4k.light"),
+            .indirectLight = server.load<IndirectLight>("textures/rogland_clear_night_4k.light"),
             .lightDirection = glm::normalize(glm::vec3(0.2, -1.1, 0.22)),
             .sunIntensity = 3.0f,
             .iblIntensity = 0.5f,
@@ -60,12 +60,12 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
 
     const glm::quat yaw90 = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/sponza/Sponza.gltf.model"));
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/Roundhouse Kick.fbx.model"), {
+    scene::spawnPrefab(scene, server.load<Model>("models/sponza/Sponza.gltf.model"));
+    scene::spawnPrefab(scene, server.load<Model>("models/Roundhouse Kick.fbx.model"), {
         .rotation = yaw90,
         .scale = glm::vec3(0.01f),
     });
-    scene::spawnPrefab(scene, server.load<Model>("assets/models/DamagedHelmet.glb.model"), {
+    scene::spawnPrefab(scene, server.load<Model>("models/DamagedHelmet.glb.model"), {
         .position = { 1.2f, 3.0f, 0.0f },
         .rotation = yaw90,
         .scale = glm::vec3(0.6f),

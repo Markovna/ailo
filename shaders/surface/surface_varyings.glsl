@@ -1,5 +1,5 @@
 // Expects VARYING to be defined as in (fragment) or out (vertex).
-// matcomp defines, for each entry i of the material's "variables":
+// matc defines, for each entry i of the material's "variables":
 //   VARIABLE_CUSTOMi     the variable name (field of MaterialVertexInputs)
 //   VARIABLE_CUSTOM_ATi  the varying, variable_<name>
 

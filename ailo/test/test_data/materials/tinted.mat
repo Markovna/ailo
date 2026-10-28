@@ -1,0 +1,21 @@
+material {
+    "name": "Tinted",
+    "shadingModel": "unlit",
+    "requires": ["uv0"],
+    "parameters": [
+        { "type": "float4",    "name": "tint",      "default": [1.0, 1.0, 1.0, 1.0] },
+        { "type": "float",     "name": "strength" },
+        { "type": "int[2]",    "name": "layers" },
+        { "type": "bool",      "name": "inverted" },
+        { "type": "float3x3",  "name": "uvTransform" },
+        { "type": "sampler2d", "name": "baseColorMap" }
+    ]
+}
+
+fragment {
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        vec2 uv = (materialParams.uvTransform * vec3(getUV0(), 1.0)).xy;
+        material.baseColor = texture(materialParams_baseColorMap, uv) * materialParams.tint * materialParams.strength;
+    }
+}

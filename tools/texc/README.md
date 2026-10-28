@@ -63,4 +63,4 @@ the real-time bc7f packer at `low`, and bc7e at its fast and slow levels at `nor
 endpoint modes and partitions as the quality rises. BC4/BC5 have one setting.
 
 A normal map stores only x and y in RG; z has to be rebuilt when it is sampled (`unpackNormalMap(texel)` in a
-material, `tools/matcomp/README.md`). The BC formats need a GPU with BC texture support.
+material, `tools/matc/README.md`). The BC formats need a GPU with BC texture support.

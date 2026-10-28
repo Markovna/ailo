@@ -210,8 +210,8 @@ public:
     float bannerTimer = 0.0f;
 
     void load(AssetServer& server, AssetStorage<MaterialInstance>& instances, RenderAPI& api) {
-        auto pbr = server.load<Material>("assets/materials/pbr.mat");
-        auto glow = server.load<Material>("assets/materials/glow.mat");
+        auto pbr = server.load<Material>("materials/pbr.mat");
+        auto glow = server.load<Material>("materials/glow.mat");
 
         auto texture = [&server](const std::string& key) { return server.load<Texture>(key); };
         auto glowInstance = [&](const glm::vec4& color) {
@@ -226,7 +226,7 @@ public:
         m_exhaustMaterial = glowInstance(kExhaustColor);
         m_shipSparkMaterial = glowInstance(kShipSparkColor);
 
-        if (auto ship = server.load<Model>("assets/models/ship/vaisso.fbx.model"); ship && !ship->instances.empty()) {
+        if (auto ship = server.load<Model>("models/ship/vaisso.fbx.model"); ship && !ship->instances.empty()) {
             const Aabb bounds = modelBounds(*ship);
             const glm::vec3 size = bounds.max - bounds.min;
             const float scale = kShipLength / std::max({ size.x, size.y, size.z });
@@ -244,7 +244,7 @@ public:
             }
 
             for (size_t i = 0; i < ship->instances.size(); i++) {
-                const std::string prefix = "assets/models/ship/" + std::string(i == hull ? "A" : "Cockpit");
+                const std::string prefix = "models/ship/" + std::string(i == hull ? "A" : "Cockpit");
                 auto material = MaterialInstance::create(instances, server, api, pbr);
                 if (material) {
                     material->setParameter("baseColorMap", texture(prefix + "_Base_Color.png.tex"));
@@ -254,7 +254,7 @@ public:
                     material->setParameter("occlusionMap", texture(prefix + "_Mixed_AO.png.tex"));
                     material->setParameter("normalGreenSign", -1.0f);
                     if (i == hull) {
-                        material->setParameter("emissiveMap", texture("assets/models/ship/A_Emissive.png.tex"));
+                        material->setParameter("emissiveMap", texture("models/ship/A_Emissive.png.tex"));
                         m_hullMaterial = material;
                     }
                 }
@@ -266,8 +266,8 @@ public:
             }
         }
 
-        if (auto rocks = server.load<Model>("assets/models/asteroids/asteroid_pack_01.obj.model")) {
-            constexpr auto kPrefix = "assets/models/asteroids/asteroid_pack_01_DefaultMaterial_";
+        if (auto rocks = server.load<Model>("models/asteroids/asteroid_pack_01.obj.model")) {
+            constexpr auto kPrefix = "models/asteroids/asteroid_pack_01_DefaultMaterial_";
             m_rockMaterial = MaterialInstance::create(instances, server, api, pbr);
             if (m_rockMaterial) {
                 m_rockMaterial->setParameter("baseColorMap", texture(std::string(kPrefix) + "BaseColor.png.tex"));
@@ -292,9 +292,9 @@ public:
         m_camera = scene::spawn(scene,
             TransformComponent {},
             Camera { .fovY = kCameraFov, .nearPlane = 0.5f, .farPlane = 1200.0f, .exposure = 1.2f },
-            Skybox { .cubemap = server.load<Texture>("assets/textures/nebula_skybox.tex") },
+            Skybox { .cubemap = server.load<Texture>("textures/nebula_skybox.tex") },
             SceneLighting {
-                .indirectLight = server.load<IndirectLight>("assets/textures/nebula.light"),
+                .indirectLight = server.load<IndirectLight>("textures/nebula.light"),
                 .lightDirection = glm::vec3(1.0f, 0.0f, 0.0f),
                 .sunIntensity = 6.0f,
                 .iblIntensity = 1.5f,
