@@ -219,7 +219,7 @@ target_compile_definitions(ailo PUBLIC VK_ENABLE_BETA_EXTENSIONS)
 #target_compile_definitions(ailo PRIVATE NDEBUG)
 
 # The DFG LUT is a built-in texture (textures::kDfgLut), embedded into the engine.
-set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/generated/dfg_lut.texpack)
+set(DFG_LUT_OUTPUT ${CMAKE_BINARY_DIR}/generated/dfg_lut.tex)
 add_custom_command(
         OUTPUT ${DFG_LUT_OUTPUT}
         COMMAND $<TARGET_FILE:lightc> --dfg -o ${DFG_LUT_OUTPUT}
@@ -235,7 +235,7 @@ add_shader(BUILTIN_SHADERS shaders/tonemap.vert)
 add_shader(BUILTIN_SHADERS shaders/tonemap.frag)
 embed_resources(ailo PACKAGE shaders FILES ${BUILTIN_SHADERS})
 
-# Built-in assets, read by the "engine" source that AssetPlugin registers ("engine:/materials/lit.matpack").
+# Built-in assets, read by the "engine" source that AssetPlugin registers ("engine:/materials/lit.mat").
 embed_assets(ailo PACKAGE materials ROOT ${CMAKE_SOURCE_DIR}/assets FILES
         materials/lit.mat
         materials/skybox.mat

@@ -10,8 +10,8 @@
 namespace ailo {
 
 namespace materials {
-constexpr auto kLit = "engine:/materials/lit.matpack";
-constexpr auto kSkybox = "engine:/materials/skybox.matpack";
+constexpr auto kLit = "engine:/materials/lit.mat";
+constexpr auto kSkybox = "engine:/materials/skybox.mat";
 }
 
 class Material {
@@ -39,7 +39,7 @@ private:
     mutable std::bitset<material::Variant::COUNT> m_missingVariants;
 };
 
-// Reads a material package built by matcomp (<name>.mat -> <name>.matpack).
+// Reads a material package that matcomp compiled from a .mat file, keeping its name.
 class MaterialLoader : public AssetLoader<Material> {
 public:
     explicit MaterialLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
@@ -50,7 +50,7 @@ protected:
     void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Material>& ctx) override;
 
 private:
-    static constexpr std::array<std::string_view, 1> kExtensions = { ".matpack" };
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".mat" };
 
     RenderAPI* m_renderApi;
 };

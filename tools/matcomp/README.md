@@ -1,13 +1,13 @@
 # matcomp
 
-Compiles a material definition (`.mat`) into a material package (`.matpack`).
+Compiles a material definition (`.mat`) into a material package, which keeps the definition's name (`.mat`).
 A material provides named parameters, raster state, required vertex inputs, a shading model and
 shader *functions*. The surface templates in `shaders/surface/` own `main()`, attributes, varyings, skinning and
 lighting; matcomp joins them with the material's code for every variant.
 
 ```
-matcomp [-I <dir>]... -o <output.matpack> [--depfile <file>] [--emit-glsl <dir>] <input.mat>
-matcomp --dump <package.matpack>
+matcomp [-I <dir>]... -o <output.mat> [--depfile <file>] [--emit-glsl <dir>] <input.mat>
+matcomp --dump <package.mat>
 ```
 
 - `-I` adds an include directory. The repository's `shaders/` folder, which holds the templates, is always searched,

@@ -10,7 +10,7 @@ namespace ailo {
 
 // Resources: AssetServer, whose default reader is a FileAssetReader relative to root (empty: the working directory).
 // The "engine" source is a MemoryAssetReader over the assets embedded into the engine (assets/, e.g.
-// "engine:/materials/lit.matpack"). More readers can be registered by source name (AssetServer::registerReader) and
+// "engine:/materials/lit.mat"). More readers can be registered by source name (AssetServer::registerReader) and
 // are used for "<source>:/<path>" keys.
 // Asset types are added by the plugins that own them through addAssetType<T>, which inserts an
 // AssetStorage<T> resource; they also register the loaders (e.g. RenderPlugin registers the Texture loader).

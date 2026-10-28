@@ -1,11 +1,11 @@
 # texc
 
-Packs the image(s) named by a texture definition (`.tex`) into a texture package (`.texpack`) that stores GPU-ready
+Packs the image(s) named by a texture definition (`.tex`) into a texture package (under the same `.tex` name) that stores GPU-ready
 data. Images are decoded with stb_image as 4 channels, then block-compressed (see [Formats](#formats)).
 
 ```
-texc -o <output.texpack> [--depfile <file>] [--root <assets folder>] [--target desktop] <input.tex>
-texc --dump <package.texpack>
+texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop] <input.tex>
+texc --dump <package.tex>
 ```
 
 - `--root` is the assets folder that paths starting with `/` are relative to. The asset build passes it.
@@ -13,7 +13,7 @@ texc --dump <package.texpack>
 - `--depfile` lists the `.tex` file and every source image, so editing an image repacks it.
 - `--dump` prints a package's header: type, format, size, stored levels, the generate-mipmaps flag, data size.
 
-It is run by the asset build (`build/README.md`): every `.tex` file in `assets/` (`assets/<dir>/<name>.tex`) is packed into `<build>/assets/<dir>/<name>.texpack`. Its source images are copied
+It is run by the asset build (`build/README.md`): every `.tex` file in `assets/` (`assets/<dir>/<name>.tex`) is packed into `<build>/assets/<dir>/<name>.tex`. Its source images are copied
 into the build too, like any other file.
 
 ## Format

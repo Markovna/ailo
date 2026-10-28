@@ -4,16 +4,16 @@ Bakes image-based lighting data:
 
 - a light definition (`.light`) naming an equirectangular HDR environment becomes a lighting package: its prefiltered 
   specular radiance cubemap and the spherical harmonics of its diffuse irradiance;
-- `--dfg` writes the DFG LUT of the split-sum approximation as a texture package (`.texpack`). It has no source.
+- `--dfg` writes the DFG LUT of the split-sum approximation as a texture package (`.tex`). It has no source.
 
 ```
-lightc -o <output.lightpack> [--depfile <file>] [--root <assets folder>] <input.light>
-lightc --dfg -o <output.texpack>
+lightc -o <output.light> [--depfile <file>] [--root <assets folder>] <input.light>
+lightc --dfg -o <output.tex>
 ```
 
 - `--root` is the assets folder that paths starting with `/` are relative to. The asset build passes it.
 - `--depfile` lists the `.light` file and its source image, so editing either rebakes it.
-- `texc --dump <package.texpack>` prints the header of the DFG LUT.
+- `texc --dump <package.tex>` prints the header of the DFG LUT.
 
 ## Outputs
 

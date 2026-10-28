@@ -1,11 +1,11 @@
 # modelc
 
-Compiles a model definition (`.model`) into a model package (`.modelpack`). The source model (glTF, FBX, OBJ,
+Compiles a model definition (`.model`) into a model package, which keeps the definition's name (`.model`). The source model (glTF, FBX, OBJ,
 anything assimp reads) is imported with assimp.
 
 ```
-modelc -o <output.modelpack> [--depfile <file>] [--root <assets folder>] <input.model>
-modelc --dump <package.modelpack>
+modelc -o <output.model> [--depfile <file>] [--root <assets folder>] <input.model>
+modelc --dump <package.model>
 ```
 
 - `--root` is the assets folder that a `source` starting with `/` is relative to. The asset build passes it.
@@ -22,9 +22,9 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 ```
 {
     "source": "model.gltf",
-    "material": "default.matpack",
-    "materials": { "Curtain": "cloth.matpack" },
-    "textures": { "rock.png": "rock.png.texpack" }
+    "material": "default.mat",
+    "materials": { "Curtain": "cloth.mat" },
+    "textures": { "rock.png": "rock.png.tex" }
 }
 ```
 
@@ -56,8 +56,8 @@ or not the material declares them:
   errors.
 - **Overridden** by `textures`, keyed by the URI as the source writes it (percent-decoded for glTF): the reference is
   replaced by the whole path given, not just its file name, relative to the `.model` file, or to the assets folder if
-  it starts with `/`, and stored as given (normalized), extension included: `"white.png": "white.png.texpack"` refers
-  to the package texc builds from `white.png.tex`. modelc doesn't check that it exists. An overridden URI may be
+  it starts with `/`, and stored as given (normalized), extension included: `"white.png": "white.png.tex"` refers
+  to the texture texc builds from `white.png.tex`. modelc doesn't check that it exists. An overridden URI may be
   absolute in the source.
 
 ## Geometry

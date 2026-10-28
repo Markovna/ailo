@@ -43,7 +43,7 @@ protected:
     void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Model>& ctx) override;
 
 private:
-    static constexpr std::array<std::string_view, 1> kExtensions = { ".modelpack" };
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".model" };
 
     RenderAPI* m_renderApi;
     AssetServer* m_server;

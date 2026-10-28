@@ -22,9 +22,9 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: texc -o <output.texpack> [--depfile <file>] [--root <assets folder>] [--target desktop]\n"
+        "usage: texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop]\n"
         "            <input.tex>\n"
-        "       texc --dump <package.texpack>\n";
+        "       texc --dump <package.tex>\n";
 }
 
 // "/x/y.png" is relative to the assets folder (root), anything else to the .tex file's folder. On Windows "/x" has a

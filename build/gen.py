@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Writes build_assets.ninja: one edge per file in the assets folder, compiling it or copying it into the build folder.
 
-The config maps file extensions to the tool that compiles them and the extension of the output; every other file is
-copied. Files and folders matched by the assets folder's .assetignore are skipped. The manifest regenerates itself when a file is added to or removed from the assets folder. See README.md.
+The config maps file extensions to the tool that compiles them; every other file is copied. Either way the output keeps
+the file's path. Files and folders matched by the assets folder's .assetignore are skipped. The manifest regenerates itself when a file is added to or removed from the assets folder. See README.md.
 """
 
 import argparse
@@ -101,6 +101,21 @@ def posix(path):
     return Path(path).as_posix()
 
 
+def tools_by_extension(tool_configs, script):
+    """Maps each lower-case asset extension to the name of the tool that compiles it."""
+    by_extension = {}
+    for name, t in tool_configs.items():
+        extensions = t["extensions"]
+        if not isinstance(extensions, list):
+            sys.exit(f"{script}: tools.{name}.extensions must be a list of extensions; the output keeps the asset's name")
+        for ext in extensions:
+            ext = ext.lower()
+            if ext in by_extension:
+                sys.exit(f"{script}: {ext} is compiled by both {by_extension[ext]} and {name}")
+            by_extension[ext] = name
+    return by_extension
+
+
 def generator_args(source, build_dir, config, tools_dir):
     """The arguments as the manifest records them: absolute paths."""
     return {"source": posix(Path(source).resolve()), "build_dir": posix(Path(build_dir).resolve()),
@@ -132,13 +147,7 @@ def generate(source, build_dir, config, tools_dir):
     config = load_json(config_path)
     tool_configs = config.get("tools", {})
     tools = {name: posix(tools_dir / (name + EXE_SUFFIX)) for name in tool_configs}
-    by_extension = {}
-    for name, t in tool_configs.items():
-        for ext, output in t["extensions"].items():
-            ext = ext.lower()
-            if ext in by_extension:
-                sys.exit(f"gen.py: {ext} is compiled by both {by_extension[ext][0]} and {name}")
-            by_extension[ext] = (name, output)
+    by_extension = tools_by_extension(tool_configs, "gen.py")
 
     # Absolute paths: ninja runs this from the build folder.
     regen_command = [posix(sys.executable), posix(Path(__file__).resolve()),
@@ -191,18 +200,9 @@ def generate(source, build_dir, config, tools_dir):
             rel = posix(path.relative_to(source))
             if rel == IGNORE_FILE or is_ignored(ignore, rel, False):
                 continue
-            compiled = by_extension.get(path.suffix.lower())
-
-            if compiled:
-                name, output = compiled
-                out = f"{out_root}/{posix(Path(rel).with_suffix(output))}"
-                edge = (f"compile_{name}", out, [tools[name]])
-            else:
-                out = f"{out_root}/{rel}"
-                edge = ("copy", out, [])
-
-            if out in outputs:
-                sys.exit(f"gen.py: {rel} and {outputs[out]} both build {out}")
+            name = by_extension.get(path.suffix.lower())
+            out = f"{out_root}/{rel}"
+            edge = (f"compile_{name}", out, [tools[name]]) if name else ("copy", out, [])
             outputs[out] = rel
             edges.append((rel, posix(path), edge))
 

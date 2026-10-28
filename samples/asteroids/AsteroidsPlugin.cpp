@@ -79,9 +79,9 @@ struct RockSize {
 
 // Large, medium, small. Shooting one splits it into two of the next size; small ones are destroyed.
 constexpr std::array<RockSize, 3> kRockSizes {{
-    { 14.0f, 5.0f, 15.0f, 20, 40, 6 },
-    { 7.0f, 10.0f, 22.0f, 50, 26, 4 },
-    { 3.0f, 15.0f, 30.0f, 100, 16, 3 },
+    { 14.0f, 10.0f, 20.0f, 20, 40, 6 },
+    { 7.0f, 18.0f, 28.0f, 50, 26, 4 },
+    { 3.0f, 22.0f, 32.0f, 100, 16, 3 },
 }};
 
 const glm::vec4 kLaserColor { 0.6f, 3.0f, 8.0f, 1.0f };
@@ -210,8 +210,8 @@ public:
     float bannerTimer = 0.0f;
 
     void load(AssetServer& server, AssetStorage<MaterialInstance>& instances, RenderAPI& api) {
-        auto pbr = server.load<Material>("assets/materials/pbr.matpack");
-        auto glow = server.load<Material>("assets/materials/glow.matpack");
+        auto pbr = server.load<Material>("assets/materials/pbr.mat");
+        auto glow = server.load<Material>("assets/materials/glow.mat");
 
         auto texture = [&server](const std::string& key) { return server.load<Texture>(key); };
         auto glowInstance = [&](const glm::vec4& color) {
@@ -226,7 +226,7 @@ public:
         m_exhaustMaterial = glowInstance(kExhaustColor);
         m_shipSparkMaterial = glowInstance(kShipSparkColor);
 
-        if (auto ship = server.load<Model>("assets/models/ship/vaisso.fbx.modelpack"); ship && !ship->instances.empty()) {
+        if (auto ship = server.load<Model>("assets/models/ship/vaisso.fbx.model"); ship && !ship->instances.empty()) {
             const Aabb bounds = modelBounds(*ship);
             const glm::vec3 size = bounds.max - bounds.min;
             const float scale = kShipLength / std::max({ size.x, size.y, size.z });
@@ -247,14 +247,14 @@ public:
                 const std::string prefix = "assets/models/ship/" + std::string(i == hull ? "A" : "Cockpit");
                 auto material = MaterialInstance::create(instances, server, api, pbr);
                 if (material) {
-                    material->setParameter("baseColorMap", texture(prefix + "_Base_Color.png.texpack"));
-                    material->setParameter("normalMap", texture(prefix + "_Normal_DirectX.png.texpack"));
-                    material->setParameter("metallicMap", texture(prefix + "_Metallic.png.texpack"));
-                    material->setParameter("roughnessMap", texture(prefix + "_Roughness.png.texpack"));
-                    material->setParameter("occlusionMap", texture(prefix + "_Mixed_AO.png.texpack"));
+                    material->setParameter("baseColorMap", texture(prefix + "_Base_Color.png.tex"));
+                    material->setParameter("normalMap", texture(prefix + "_Normal_DirectX.png.tex"));
+                    material->setParameter("metallicMap", texture(prefix + "_Metallic.png.tex"));
+                    material->setParameter("roughnessMap", texture(prefix + "_Roughness.png.tex"));
+                    material->setParameter("occlusionMap", texture(prefix + "_Mixed_AO.png.tex"));
                     material->setParameter("normalGreenSign", -1.0f);
                     if (i == hull) {
-                        material->setParameter("emissiveMap", texture("assets/models/ship/A_Emissive.png.texpack"));
+                        material->setParameter("emissiveMap", texture("assets/models/ship/A_Emissive.png.tex"));
                         m_hullMaterial = material;
                     }
                 }
@@ -266,14 +266,14 @@ public:
             }
         }
 
-        if (auto rocks = server.load<Model>("assets/models/asteroids/asteroid_pack_01.obj.modelpack")) {
+        if (auto rocks = server.load<Model>("assets/models/asteroids/asteroid_pack_01.obj.model")) {
             constexpr auto kPrefix = "assets/models/asteroids/asteroid_pack_01_DefaultMaterial_";
             m_rockMaterial = MaterialInstance::create(instances, server, api, pbr);
             if (m_rockMaterial) {
-                m_rockMaterial->setParameter("baseColorMap", texture(std::string(kPrefix) + "BaseColor.png.texpack"));
-                m_rockMaterial->setParameter("normalMap", texture(std::string(kPrefix) + "Normal_Ut.png.texpack"));
-                m_rockMaterial->setParameter("metallicMap", texture(std::string(kPrefix) + "Metallic_.png.texpack"));
-                m_rockMaterial->setParameter("roughnessMap", texture(std::string(kPrefix) + "Roughness.png.texpack"));
+                m_rockMaterial->setParameter("baseColorMap", texture(std::string(kPrefix) + "BaseColor.png.tex"));
+                m_rockMaterial->setParameter("normalMap", texture(std::string(kPrefix) + "Normal_Ut.png.tex"));
+                m_rockMaterial->setParameter("metallicMap", texture(std::string(kPrefix) + "Metallic_.png.tex"));
+                m_rockMaterial->setParameter("roughnessMap", texture(std::string(kPrefix) + "Roughness.png.tex"));
             }
 
             // Every rock is centered on its own origin (scripts/split_asteroid_pack.py).
@@ -292,9 +292,9 @@ public:
         m_camera = scene::spawn(scene,
             TransformComponent {},
             Camera { .fovY = kCameraFov, .nearPlane = 0.5f, .farPlane = 1200.0f, .exposure = 1.2f },
-            Skybox { .cubemap = server.load<Texture>("assets/textures/nebula_skybox.texpack") },
+            Skybox { .cubemap = server.load<Texture>("assets/textures/nebula_skybox.tex") },
             SceneLighting {
-                .indirectLight = server.load<IndirectLight>("assets/textures/nebula.lightpack"),
+                .indirectLight = server.load<IndirectLight>("assets/textures/nebula.light"),
                 .lightDirection = glm::vec3(1.0f, 0.0f, 0.0f),
                 .sunIntensity = 6.0f,
                 .iblIntensity = 1.5f,

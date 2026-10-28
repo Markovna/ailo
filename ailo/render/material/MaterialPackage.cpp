@@ -102,7 +102,7 @@ std::vector<uint8_t> MaterialPackage::serialize() const {
 std::optional<MaterialPackage> MaterialPackage::deserialize(std::span<const uint8_t> data, std::string& error) {
     Reader header(data);
     if (header.u32() != kMagic || !header.ok()) {
-        error = "not a material package";
+        error = "not a material package (an uncompiled .mat file?)";
         return std::nullopt;
     }
     uint32_t version = header.u32();

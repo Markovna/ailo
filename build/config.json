@@ -1,24 +1,24 @@
 {
-    // Tool -> the extensions it compiles, each mapped to the extension of its output. Files with any other extension
+    // Tool -> the extensions it compiles. Outputs keep the asset's path, compiled or not. Files with any other extension
     // are copied as is. See build/README.md.
     "tools": {
         "texc": {
-            "extensions": { ".tex": ".texpack" },
+            "extensions": [ ".tex" ],
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "matcomp": {
-            "extensions": { ".mat": ".matpack" },
+            "extensions": [ ".mat" ],
             "args": ["--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "modelc": {
-            "extensions": { ".model": ".modelpack" },
+            "extensions": [ ".model" ],
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "lightc": {
-            "extensions": { ".light": ".lightpack" },
+            "extensions": [ ".light" ],
             "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         }

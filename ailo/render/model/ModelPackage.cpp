@@ -278,7 +278,7 @@ std::vector<uint8_t> ModelPackage::serialize() const {
 std::optional<ModelPackage> ModelPackage::deserialize(std::span<const uint8_t> data, std::string& error) {
     Reader header(data);
     if (header.u32() != kMagic || !header.ok()) {
-        error = "not a model package";
+        error = "not a model package (an uncompiled .model file?)";
         return std::nullopt;
     }
     uint32_t version = header.u32();

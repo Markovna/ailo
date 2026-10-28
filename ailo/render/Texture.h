@@ -27,7 +27,7 @@ private:
     uint8_t m_levels;
 };
 
-// Reads a texture package built by texc (<name>.tex -> <name>.texpack).
+// Reads a texture package that texc compiled from a .tex file, keeping its name.
 class TexturePackageLoader : public AssetLoader<Texture> {
 public:
     explicit TexturePackageLoader(RenderAPI* renderApi) : m_renderApi(renderApi) {}
@@ -38,7 +38,7 @@ protected:
     void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<Texture>& ctx) override;
 
 private:
-    static constexpr std::array<std::string_view, 1> kExtensions = { ".texpack" };
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".tex" };
 
     RenderAPI* m_renderApi;
 };

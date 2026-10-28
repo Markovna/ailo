@@ -637,10 +637,10 @@ void testLoaderChosenByExtension() {
     AssetStorage<Texture> textures;
     AssetServer server { std::make_unique<TestReader>() };
     server.registerStorage(&textures);
-    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("pack", std::vector<std::string_view>{ ".texpack" }));
+    server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("pack", std::vector<std::string_view>{ ".tex" }));
     server.registerLoader<Texture>(std::make_unique<TaggingTextureLoader>("raw", std::vector<std::string_view>{ ".png", ".JPG" }));
 
-    CHECK_EQ(server.load<Texture>("dir/rock.png.texpack")->name, "pack:dir/rock.png.texpack");
+    CHECK_EQ(server.load<Texture>("dir/rock.png.tex")->name, "pack:dir/rock.png.tex");
     CHECK_EQ(server.load<Texture>("dir/rock.png")->name, "raw:dir/rock.png");
     // Extensions are compared case-insensitively.
     CHECK_EQ(server.load<Texture>("dir/ROCK.PNG")->name, "raw:dir/ROCK.PNG");

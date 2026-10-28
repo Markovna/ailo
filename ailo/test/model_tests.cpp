@@ -50,7 +50,7 @@ ModelPackage makePackage() {
 
     Material& lit = pkg.materials.emplace_back();
     lit.name = "Stone";
-    lit.material = "assets/materials/lit.matpack";
+    lit.material = "assets/materials/lit.mat";
     lit.floats.push_back({ "baseColorFactor", 4, { 0.5f, 0.25f, 1.0f, 1.0f } });
     lit.floats.push_back({ "roughnessFactor", 1, { 0.75f } });
     lit.textures.push_back({ "baseColorMap", { TextureSource::Uri, "textures/stone.png", 0 } });
@@ -105,7 +105,7 @@ void testRoundTrip() {
 
     REQUIRE_EQ(out->materials.size(), 2);
     const auto& lit = out->materials[0];
-    CHECK(lit.name == "Stone" && lit.material == "assets/materials/lit.matpack");
+    CHECK(lit.name == "Stone" && lit.material == "assets/materials/lit.mat");
     REQUIRE_EQ(lit.floats.size(), 2);
     CHECK(lit.floats[0].name == "baseColorFactor" && lit.floats[0].components == 4);
     CHECK_EQ(lit.floats[0].value[1], 0.25f);
@@ -229,6 +229,11 @@ void testDeserializeRejectsBadPackages() {
 
     std::vector<uint8_t> notAPackage = { 'n', 'o', 'p', 'e', 0, 0, 0, 0 };
     CHECK(!ModelPackage::deserialize(notAPackage, error) && contains(error, "not a model package"));
+
+    // Built models keep the .model name, so loading the source by mistake must fail on the magic.
+    const std::string source = R"({ "source": "a.gltf", "material": "lit.mat" })";
+    CHECK(!ModelPackage::deserialize(std::span(reinterpret_cast<const uint8_t*>(source.data()), source.size()), error)
+          && contains(error, "uncompiled .model"));
 
     auto wrongVersion = bytes;
     wrongVersion[4] = uint8_t(kModelPackageVersion + 1);

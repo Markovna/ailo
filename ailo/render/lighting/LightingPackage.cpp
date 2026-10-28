@@ -58,7 +58,7 @@ std::vector<uint8_t> LightingPackage::serialize() const {
 std::optional<LightingPackage> LightingPackage::deserialize(std::span<const uint8_t> data, std::string& error) {
     Reader header(data);
     if (header.u32() != kMagic || !header.ok()) {
-        error = "not a lighting package";
+        error = "not a lighting package (an uncompiled .light file?)";
         return std::nullopt;
     }
     uint32_t version = header.u32();

@@ -1,5 +1,5 @@
 {
     // Body and cockpit meshes; the game replaces the material with its own instances of materials/pbr.mat.
     "source": ".source/vaisso.fbx",
-    "material": "engine:/materials/lit.matpack"
+    "material": "engine:/materials/lit.mat"
 }

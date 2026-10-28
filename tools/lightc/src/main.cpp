@@ -20,8 +20,8 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: lightc -o <output.lightpack> [--depfile <file>] [--root <assets folder>] <input.light>\n"
-        "       lightc --dfg -o <output.texpack>\n";
+        "usage: lightc -o <output.light> [--depfile <file>] [--root <assets folder>] <input.light>\n"
+        "       lightc --dfg -o <output.tex>\n";
 }
 
 // "/x/y.hdr" is relative to the assets folder (root), anything else to the .light file's folder. On Windows "/x" has

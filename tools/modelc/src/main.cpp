@@ -21,8 +21,8 @@ constexpr unsigned kCacheSize = 16;
 
 void printUsage() {
     std::cerr <<
-        "usage: modelc -o <output.modelpack> [--depfile <file>] [--root <assets folder>] <input.model>\n"
-        "       modelc --dump <package.modelpack>\n";
+        "usage: modelc -o <output.model> [--depfile <file>] [--root <assets folder>] <input.model>\n"
+        "       modelc --dump <package.model>\n";
 }
 
 // "/x/y.gltf" is relative to the assets folder (root), anything else to the .model file's folder. On Windows "/x" has

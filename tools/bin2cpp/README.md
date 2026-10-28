@@ -21,7 +21,7 @@ namespace game::assets {
 
 extern const std::span<const std::uint8_t> kPackage;
 
-// materials/toon.matpack
+// materials/toon.mat
 extern const std::span<const std::uint8_t> kMaterialsToon;
 
 }
@@ -40,7 +40,7 @@ The spans are `constinit`, so they can be read during the static initialization 
 
 A file's symbol is made from its path (relative to the root, or just the file name) without the last extension: the
 letters and digits are split into words at every other character, and each word is capitalized behind a `k`.
-`tonemap.vert.spv` is `kTonemapVert`, and `materials/toon.matpack` is `kToon`, or `kMaterialsToon` when the root is the
+`tonemap.vert.spv` is `kTonemapVert`, and `materials/toon.mat` is `kToon`, or `kMaterialsToon` when the root is the
 folder holding `materials/`. Two files with the same symbol, or a file named `kPackage`, are an error.
 
 The outputs are only rewritten when their content changes, so a build that restats them recompiles nothing when the

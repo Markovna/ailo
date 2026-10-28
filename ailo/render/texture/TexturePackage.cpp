@@ -113,7 +113,7 @@ std::vector<uint8_t> TexturePackage::serialize() const {
 std::optional<TexturePackage> TexturePackage::deserialize(std::span<const uint8_t> data, std::string& error) {
     Reader header(data);
     if (header.u32() != kMagic || !header.ok()) {
-        error = "not a texture package";
+        error = "not a texture package (an uncompiled .tex file?)";
         return std::nullopt;
     }
     uint32_t version = header.u32();

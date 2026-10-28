@@ -21,8 +21,8 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: matcomp [-I <dir>]... -o <output.matpack> [--depfile <file>] [--emit-glsl <dir>] <input.mat>\n"
-        "       matcomp --dump <package.matpack>\n";
+        "usage: matcomp [-I <dir>]... -o <output.mat> [--depfile <file>] [--emit-glsl <dir>] <input.mat>\n"
+        "       matcomp --dump <package.mat>\n";
 }
 
 std::string variantName(ShaderStage stage, Variant v) {

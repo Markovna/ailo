@@ -46,7 +46,7 @@ MemoryAssetReader testReader() {
     return {
         { "hello.txt", embedded::test_assets::kHello },
         { "nested/world.txt", embedded::test_assets::kNestedWorld },
-        { "materials/unlit.matpack", embedded::test_assets::kMaterialsUnlit },
+        { "materials/unlit.mat", embedded::test_assets::kMaterialsUnlit },
     };
 }
 
@@ -61,10 +61,10 @@ void testPackageIsAligned() {
 
 void testCompiledAssetIsEmbedded() {
     const auto reader = testReader();
-    const auto material = reader.find("materials/unlit.matpack");
+    const auto material = reader.find("materials/unlit.mat");
     CHECK(material && text(*material).starts_with("AMAT"));
     // Only the listed keys are found.
-    CHECK(!reader.find("materials/unlit.mat"));
+    CHECK(!reader.find("materials/unlit.matpack"));
     CHECK(!reader.find("unlisted.txt"));
 }
 

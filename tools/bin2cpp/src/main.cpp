@@ -55,8 +55,6 @@ fs::path relativePath(const fs::path& path, const fs::path& root) {
     return root.empty() ? path.filename() : fs::absolute(path).lexically_normal().lexically_relative(root);
 }
 
-// The relative path without its last extension, written as a constant: "materials/toon.matpack" -> kMaterialsToon,
-// "tonemap.vert.spv" -> kTonemapVert. Empty if it has no letters or digits.
 std::string symbolName(fs::path rel) {
     rel.replace_extension();
     std::string symbol;

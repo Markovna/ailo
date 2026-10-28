@@ -3,8 +3,8 @@
 
 The files are listed one per line in the --files file, relative to --root. Each is compiled by the tool its extension
 maps to in the config, or copied, into <build>/package_build/<package>/files/, and the last edge runs bin2cpp on all of
-them, sorted by path, to write <output>/<package>.h and <package>.cpp. Symbols come from the built file's path relative
-to that folder (materials/toon.matpack -> <namespace>::kMaterialsToon). The manifest regenerates itself when the list
+them, sorted by path, to write <output>/<package>.h and <package>.cpp. Built files keep the listed paths, and symbols
+come from them (materials/toon.mat -> <namespace>::kMaterialsToon). The manifest regenerates itself when the list
 changes. See README.md.
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 # Keeps Python from writing build/__pycache__ for gen.
 sys.dont_write_bytecode = True
 
-from gen import EXE_SUFFIX, escape_path, escape_value, load_json, posix, quote
+from gen import EXE_SUFFIX, escape_path, escape_value, load_json, posix, quote, tools_by_extension
 
 
 def read_file_list(path, root):
@@ -78,13 +78,7 @@ def main():
         tool_configs = load_json(config_path).get("tools", {})
     tools_dir = Path(args.tools_dir).resolve() if args.tools_dir else None
     tools = {name: posix(tools_dir / (name + EXE_SUFFIX)) for name in tool_configs}
-    by_extension = {}
-    for name, t in tool_configs.items():
-        for ext, out_ext in t["extensions"].items():
-            ext = ext.lower()
-            if ext in by_extension:
-                sys.exit(f"gen_package.py: {ext} is compiled by both {by_extension[ext][0]} and {name}")
-            by_extension[ext] = (name, out_ext)
+    by_extension = tools_by_extension(tool_configs, "gen_package.py")
 
     regen_command = [posix(sys.executable), posix(script), "--package", package, "--output", posix(output),
                      "--root", posix(root), "--files", posix(files_path), "--build-dir", posix(build_dir),
@@ -144,16 +138,14 @@ def main():
     outputs = {}
 
     for rel, path in read_file_list(files_path, root):
-        compiled = by_extension.get(path.suffix.lower())
-        if compiled:
-            name, out_ext = compiled
-            out = f"{files_dir}/{posix(Path(rel).with_suffix(out_ext))}"
+        name = by_extension.get(path.suffix.lower())
+        out = f"{files_dir}/{rel}"
+        if name:
             edge = f"compile_{name} {escape_path(posix(path))} | {escape_path(tools[name])}"
         else:
-            out = f"{files_dir}/{rel}"
             edge = f"copy {escape_path(posix(path))}"
         if out in outputs:
-            sys.exit(f"gen_package.py: {rel} and {outputs[out]} both build {out}")
+            sys.exit(f"gen_package.py: {rel} is listed twice")
         outputs[out] = rel
         lines.append(f"build {escape_path(out)}: {edge}")
         lines.append(f"  name = {escape_value(rel)}")

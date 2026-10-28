@@ -16,7 +16,7 @@ struct IndirectLight {
     std::array<glm::vec3, lighting::kIrradianceSHCount> irradianceSH{};
 };
 
-// Reads a lighting package built by lightc (<name>.light -> <name>.lightpack).
+// Reads a lighting package that lightc compiled from a .light file, keeping its name.
 class IndirectLightLoader : public AssetLoader<IndirectLight> {
 public:
     IndirectLightLoader(RenderAPI* renderApi, AssetStorage<Texture>* textures)
@@ -28,7 +28,7 @@ protected:
     void load(const std::string& key, std::span<const uint8_t> bytes, LoadContext<IndirectLight>& ctx) override;
 
 private:
-    static constexpr std::array<std::string_view, 1> kExtensions = { ".lightpack" };
+    static constexpr std::array<std::string_view, 1> kExtensions = { ".light" };
 
     RenderAPI* m_renderApi;
     AssetStorage<Texture>* m_textures;
