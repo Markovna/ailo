@@ -23,7 +23,7 @@ The samples live in `samples/`.
 
 ## Building
 
-See [BUILDING.md](BUILDING.md). The Vulkan SDK, CMake, a C++23 compiler, Python 3 and Ninja are required; every other dependency is vendored in `third_party/`.
+See [BUILDING.md](BUILDING.md). CMake, a C++23 compiler, Python 3 and Ninja are required; every other dependency is vendored in `third_party/`.
 
 ## License
 

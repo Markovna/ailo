@@ -3,21 +3,12 @@ project(ailo)
 
 set(CMAKE_CXX_STANDARD 23)
 
-# Find Vulkan package
-find_package(Vulkan REQUIRED)
+# Vulkan headers only: the loader (vulkan-1) is loaded at runtime by vulkan.hpp's dynamic dispatcher, so the build
+# needs no Vulkan SDK.
+add_subdirectory(third_party/Vulkan-Headers)
 
-# Find glslc shader compiler
-find_program(GLSLC glslc HINTS
-    $ENV{VULKAN_SDK}/bin
-    $ENV{VULKAN_SDK}/Bin
-    ${Vulkan_GLSLC_EXECUTABLE}
-)
-
-if(NOT GLSLC)
-    message(FATAL_ERROR "glslc shader compiler not found!")
-endif()
-
-# Compiles SHADER to <build>/shaders/<name>.<stage>.spv and appends that path to the list LIST_VAR.
+# Compiles SHADER with glslang (built in tools/matc) to <build>/shaders/<name>.<stage>.spv and appends that path to the
+# list LIST_VAR.
 function(add_shader LIST_VAR SHADER)
     # Parse optional arguments: NAME and DEFINES
     set(options "")
@@ -43,7 +34,7 @@ function(add_shader LIST_VAR SHADER)
 
     set(SPIRV ${CMAKE_BINARY_DIR}/shaders/${OUTPUT_NAME}.${FILE_EXT}.spv)
 
-    # Build define flags for glslc
+    # Build define flags for glslang
     set(DEFINE_FLAGS "")
     foreach(DEFINE ${SHADER_ARG_DEFINES})
         list(APPEND DEFINE_FLAGS "-D${DEFINE}")
@@ -52,8 +43,8 @@ function(add_shader LIST_VAR SHADER)
     add_custom_command(
             OUTPUT ${SPIRV}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/shaders/"
-            COMMAND ${GLSLC} -I${CMAKE_SOURCE_DIR}/shaders ${DEFINE_FLAGS} -MD -MF ${SPIRV}.d ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
-            DEPENDS ${CMAKE_SOURCE_DIR}/${SHADER}
+            COMMAND $<TARGET_FILE:glslang-standalone> -V --quiet -I${CMAKE_SOURCE_DIR}/shaders ${DEFINE_FLAGS} --depfile ${SPIRV}.d ${CMAKE_SOURCE_DIR}/${SHADER} -o ${SPIRV}
+            DEPENDS glslang-standalone ${CMAKE_SOURCE_DIR}/${SHADER}
             DEPFILE ${SPIRV}.d
             COMMENT "Compiling shader ${OUTPUT_NAME}.${FILE_EXT}.spv with defines: ${SHADER_ARG_DEFINES}"
     )

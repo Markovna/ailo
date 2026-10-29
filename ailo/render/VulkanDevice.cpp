@@ -3,25 +3,9 @@
 
 #include "utils/Log.h"
 
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+
 namespace ailo {
-
-// Static helper to load debug extension functions
-static VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
-                                              const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-static void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT debugMessenger,
-                                           const VkAllocationCallbacks* pAllocator) {
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr) {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
 
 VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     : m_window(window) {
@@ -105,7 +89,7 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     // The first suitable device wins. Prefer discrete over integrated GPUs
     auto deviceTypeRank = [](const vk::PhysicalDevice& device) {
         switch (device.getProperties().deviceType) {
-            case vk::PhysicalDeviceType::eDiscreteGpu: return 4;
+            case vk::PhysicalDeviceType::eDiscreteGpu: return 0;
             case vk::PhysicalDeviceType::eIntegratedGpu: return 1;
             case vk::PhysicalDeviceType::eVirtualGpu: return 2;
             default: return 3;
@@ -170,6 +154,8 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     createInfo.ppEnabledExtensionNames = enabledExtensions.data();
 
     m_device = m_physicalDevice.createDevice(createInfo);
+    // Device-level pointers skip the loader's dispatch.
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(m_device);
     m_graphicsQueue = m_device.getQueue(m_graphicsQueueFamilyIndex, 0);
     m_presentQueue = m_device.getQueue(m_presentQueueFamilyIndex, 0);
 }
@@ -180,7 +166,7 @@ VulkanDevice::~VulkanDevice() {
     m_instance.destroySurfaceKHR(m_surface);
 
     if (m_debugMessenger) {
-        DestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
+        m_instance.destroyDebugUtilsMessengerEXT(m_debugMessenger);
     }
 
     m_instance.destroy();
@@ -201,6 +187,9 @@ vk::SampleCountFlagBits VulkanDevice::getMaxUsableSampleCount() {
 }
 
 void VulkanDevice::createInstance() {
+    // Loads vulkan-1 (throws if there is no Vulkan driver) and the global functions.
+    VULKAN_HPP_DEFAULT_DISPATCHER.init();
+
     vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName = "Ailo";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -223,10 +212,17 @@ void VulkanDevice::createInstance() {
     std::vector<const char*> enabledLayers;
 
 #if AILO_VK_ENABLED(AILO_VK_ENABLE_VALIDATION_LAYERS)
-    extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    enabledLayers.emplace_back("VK_LAYER_KHRONOS_validation");
+    // The layer comes with the Vulkan SDK, which the engine does not need: run without it when it is not installed.
+    constexpr std::string_view validationLayer = "VK_LAYER_KHRONOS_validation";
+    const auto layers = vk::enumerateInstanceLayerProperties();
+    if (std::ranges::any_of(layers, [&](const auto& layer) { return layer.layerName == validationLayer; })) {
+        extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        enabledLayers.emplace_back(validationLayer.data());
+    } else {
+        LOG_WARNING("{} not found: validation is disabled. Install the Vulkan SDK or check VK_LAYER_PATH",
+                    validationLayer);
+    }
 #endif
-
 
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -235,6 +231,7 @@ void VulkanDevice::createInstance() {
     createInfo.ppEnabledLayerNames = enabledLayers.data();
 
     m_instance = vk::createInstance(createInfo);
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
 }
 
 vk::SurfaceFormatKHR VulkanDevice::getSurfaceFormat() const {
@@ -325,10 +322,15 @@ void VulkanDevice::setupDebugMessenger() {
                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debugCallback;
 
-    if (CreateDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr,
-        reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_debugMessenger)) != VK_SUCCESS) {
+    // Not loaded when the validation layer (and so VK_EXT_debug_utils) was not enabled.
+    const auto create = VULKAN_HPP_DEFAULT_DISPATCHER.vkCreateDebugUtilsMessengerEXT;
+    if (!create) {
+        return;
+    }
+    if (create(m_instance, &createInfo, nullptr, reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_debugMessenger))
+        != VK_SUCCESS) {
         throw std::runtime_error("failed to set up debug messenger!");
-        }
+    }
 #endif
 }
 

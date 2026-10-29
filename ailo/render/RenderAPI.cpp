@@ -164,30 +164,8 @@ Unique<gpu::VertexBufferLayout> RenderAPI::createVertexBufferLayout(const Vertex
 VmaAllocator RenderAPI::createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device) {
   VmaAllocator allocator;
   VmaVulkanFunctions const funcs {
-#if VMA_DYNAMIC_VULKAN_FUNCTIONS
-      .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
-      .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
-#else
-      .vkGetPhysicalDeviceProperties = vkGetPhysicalDeviceProperties,
-      .vkGetPhysicalDeviceMemoryProperties = vkGetPhysicalDeviceMemoryProperties,
-      .vkAllocateMemory = vkAllocateMemory,
-      .vkFreeMemory = vkFreeMemory,
-      .vkMapMemory = vkMapMemory,
-      .vkUnmapMemory = vkUnmapMemory,
-      .vkFlushMappedMemoryRanges = vkFlushMappedMemoryRanges,
-      .vkInvalidateMappedMemoryRanges = vkInvalidateMappedMemoryRanges,
-      .vkBindBufferMemory = vkBindBufferMemory,
-      .vkBindImageMemory = vkBindImageMemory,
-      .vkGetBufferMemoryRequirements = vkGetBufferMemoryRequirements,
-      .vkGetImageMemoryRequirements = vkGetImageMemoryRequirements,
-      .vkCreateBuffer = vkCreateBuffer,
-      .vkDestroyBuffer = vkDestroyBuffer,
-      .vkCreateImage = vkCreateImage,
-      .vkDestroyImage = vkDestroyImage,
-      .vkCmdCopyBuffer = vkCmdCopyBuffer,
-      .vkGetBufferMemoryRequirements2KHR = vkGetBufferMemoryRequirements2KHR,
-      .vkGetImageMemoryRequirements2KHR = vkGetImageMemoryRequirements2KHR
-#endif
+      .vkGetInstanceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetInstanceProcAddr,
+      .vkGetDeviceProcAddr = VULKAN_HPP_DEFAULT_DISPATCHER.vkGetDeviceProcAddr,
   };
   VmaAllocatorCreateInfo const allocatorInfo {
       // Disable the internal VMA synchronization because the backend is singled threaded.
@@ -762,43 +740,22 @@ void RenderAPI::loadFromCpu(CommandBuffer& commands, const Buffer& bufferHandle,
   // or into a submitted one the GPU hasn't finished. A buffer that was never read, or whose readers have all
   // completed, needs no barrier. Earlier writes are already ordered by the barrier that follows every copy.
   if (bufferHandle.lastReadSerial > m_commands.completedSerial()) {
-    VkBufferMemoryBarrier barrier = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcAccessMask = srcAccess,
-        .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .buffer = bufferHandle.buffer,
-        .offset = byteOffset,
-        .size = numBytes,
-    };
-    vkCmdPipelineBarrier(commandBuffer, srcStage, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0,
-                         nullptr, 1, &barrier, 0, nullptr);
+    const vk::BufferMemoryBarrier barrier(vk::AccessFlags(srcAccess), vk::AccessFlagBits::eTransferWrite,
+                                          vk::QueueFamilyIgnored, vk::QueueFamilyIgnored,
+                                          bufferHandle.buffer, byteOffset, numBytes);
+    commandBuffer.pipelineBarrier(vk::PipelineStageFlags(srcStage), vk::PipelineStageFlagBits::eTransfer, {}, {},
+                                  barrier, {});
   }
 
-  VkBufferCopy region = {
-      .srcOffset = staged.offset,
-      .dstOffset = byteOffset,
-      .size = numBytes,
-  };
-  vkCmdCopyBuffer(commandBuffer, staged.buffer, bufferHandle.buffer, 1, &region);
+  commandBuffer.copyBuffer(staged.buffer, bufferHandle.buffer, vk::BufferCopy(staged.offset, byteOffset, numBytes));
 
-  VkAccessFlags dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | srcAccess;
-  VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | srcStage;
+  const vk::AccessFlags dstAccessMask = vk::AccessFlagBits::eTransferWrite | vk::AccessFlags(srcAccess);
+  const vk::PipelineStageFlags dstStageMask = vk::PipelineStageFlagBits::eTransfer | vk::PipelineStageFlags(srcStage);
 
-  VkBufferMemoryBarrier barrier = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .dstAccessMask = dstAccessMask,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .buffer = bufferHandle.buffer,
-      .offset = byteOffset,
-      .size = numBytes,
-  };
-
-  vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStageMask, 0, 0,
-                       nullptr, 1, &barrier, 0, nullptr);
+  const vk::BufferMemoryBarrier barrier(vk::AccessFlagBits::eTransferWrite, dstAccessMask,
+                                        vk::QueueFamilyIgnored, vk::QueueFamilyIgnored,
+                                        bufferHandle.buffer, byteOffset, numBytes);
+  commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, dstStageMask, {}, {}, barrier, {});
 }
 
 } // namespace ailo

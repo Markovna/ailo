@@ -76,7 +76,7 @@ bool ShaderCompiler::compile(const std::string& source, ailo::material::ShaderSt
                              std::vector<uint32_t>& spirv, std::string& error) {
     static GlslangProcess process;
 
-    // Same settings as glslc's defaults, which the hand-written shaders are built with.
+    // Vulkan 1.0 and SPIR-V 1.0, like `glslang -V`, which the hand-written shaders are built with.
     EShLanguage language = stage == ailo::material::ShaderStage::Vertex ? EShLangVertex : EShLangFragment;
     glslang::TShader shader(language);
 

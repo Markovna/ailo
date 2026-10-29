@@ -121,9 +121,10 @@ void GpuTimer::resolve(uint32_t frameIndex) {
 
     std::array<uint64_t, kMaxScopes * 2> ticks{};
     const auto queryCount = static_cast<uint32_t>(frame.scopes.size() * 2);
-    const VkResult result = vkGetQueryPoolResults(m_device, m_pool, firstQuery(frameIndex), queryCount,
-        queryCount * sizeof(uint64_t), ticks.data(), sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
-    if (result != VK_SUCCESS) {
+    // The pointer overload returns eNotReady instead of throwing.
+    const vk::Result result = m_device.getQueryPoolResults(m_pool, firstQuery(frameIndex), queryCount,
+        queryCount * sizeof(uint64_t), ticks.data(), sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+    if (result != vk::Result::eSuccess) {
         return;
     }
 

@@ -183,7 +183,7 @@ add_library(ailo STATIC
 # PUBLIC: libraries whose headers the engine's headers include.
 target_link_libraries(ailo
     PUBLIC
-        Vulkan::Vulkan
+        Vulkan::Headers
         glfw
         glm::glm
         GPUOpen::VulkanMemoryAllocator
@@ -200,7 +200,6 @@ target_link_libraries(ailo
 )
 
 target_include_directories(ailo PUBLIC
-    ${Vulkan_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -214,6 +213,15 @@ target_compile_definitions(ailo PUBLIC
 target_compile_definitions(ailo PUBLIC GLFW_INCLUDE_VULKAN)
 
 target_compile_definitions(ailo PUBLIC VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
+
+# Vulkan is not linked: vulkan-1 is loaded at runtime and every call goes through vulkan.hpp's default dynamic
+# dispatcher (initialized in VulkanDevice). VMA fetches its functions through the dispatcher's vkGet*ProcAddr.
+target_compile_definitions(ailo PUBLIC
+    VK_NO_PROTOTYPES
+    VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+    VMA_STATIC_VULKAN_FUNCTIONS=0
+    VMA_DYNAMIC_VULKAN_FUNCTIONS=1
+)
 
 # VK_KHR_portability_subset (MoltenVK) is declared in vulkan_beta.h
 target_compile_definitions(ailo PUBLIC VK_ENABLE_BETA_EXTENSIONS)
