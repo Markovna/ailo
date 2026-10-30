@@ -1,0 +1,5 @@
+{
+    // Sparks of exploding rocks
+    "material": "/materials/glow.mat",
+    "parameters": { "color": [8.0, 3.2, 0.8, 1.0] }
+}

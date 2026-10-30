@@ -1,0 +1,5 @@
+{
+    // Engine exhaust
+    "material": "/materials/glow.mat",
+    "parameters": { "color": [1.2, 2.6, 9.0, 1.0] }
+}

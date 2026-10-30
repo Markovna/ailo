@@ -1,5 +1,7 @@
 {
-    // Body and cockpit meshes; the game replaces the material with its own instances of materials/pbr.mat.
     "source": ".source/vaisso.fbx",
-    "material": "engine:/materials/lit.mat"
+    // The FBX names both parts "Vaisseau" and its geometry carries no material layer, so the importer gives both meshes
+    // one default material: the hull takes "material", and the cockpit, the inner node, is picked by its path.
+    "material": "hull.matinst",
+    "nodeMaterials": { "Vaisseau/Vaisseau": "cockpit.matinst" }
 }

@@ -1,0 +1,14 @@
+{
+    "material": "/materials/pbr.mat",
+    "parameters": {
+        // the normal maps are DirectX style (green points down)
+        "normalGreenSign": -1.0
+    },
+    "textures": {
+        "baseColorMap": "Cockpit_Base_Color.png.tex",
+        "normalMap": "Cockpit_Normal_DirectX.png.tex",
+        "metallicMap": "Cockpit_Metallic.png.tex",
+        "roughnessMap": "Cockpit_Roughness.png.tex",
+        "occlusionMap": "Cockpit_Mixed_AO.png.tex"
+    }
+}

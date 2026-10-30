@@ -1,0 +1,17 @@
+{
+    "material": "/materials/pbr.mat",
+    "parameters": {
+        // the normal maps are DirectX style (green points down)
+        "normalGreenSign": -1.0,
+        // brightened by the game while thrusting
+        "emissiveFactor": [2.0, 2.0, 2.0]
+    },
+    "textures": {
+        "baseColorMap": "A_Base_Color.png.tex",
+        "normalMap": "A_Normal_DirectX.png.tex",
+        "metallicMap": "A_Metallic.png.tex",
+        "roughnessMap": "A_Roughness.png.tex",
+        "occlusionMap": "A_Mixed_AO.png.tex",
+        "emissiveMap": "A_Emissive.png.tex"
+    }
+}

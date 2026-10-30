@@ -1,0 +1,9 @@
+{
+    "material": "/materials/pbr.mat",
+    "textures": {
+        "baseColorMap": "asteroid_pack_01_DefaultMaterial_BaseColor.png.tex",
+        "normalMap": "asteroid_pack_01_DefaultMaterial_Normal_Ut.png.tex",
+        "metallicMap": "asteroid_pack_01_DefaultMaterial_Metallic_.png.tex",
+        "roughnessMap": "asteroid_pack_01_DefaultMaterial_Roughness.png.tex"
+    }
+}

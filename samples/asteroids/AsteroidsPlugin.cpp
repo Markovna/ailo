@@ -23,7 +23,6 @@
 #include "render/DefaultAssetFactory.h"
 #include "render/MaterialInstance.h"
 #include "render/Model.h"
-#include "render/RenderAPI.h"
 #include "render/Renderable.h"
 #include "render/Skybox.h"
 #include "render/Texture.h"
@@ -83,11 +82,6 @@ constexpr std::array<RockSize, 3> kRockSizes {{
     { 7.0f, 18.0f, 28.0f, 50, 26, 4 },
     { 3.0f, 22.0f, 32.0f, 100, 16, 3 },
 }};
-
-const glm::vec4 kLaserColor { 0.6f, 3.0f, 8.0f, 1.0f };
-const glm::vec4 kSparkColor { 8.0f, 3.2f, 0.8f, 1.0f };
-const glm::vec4 kExhaustColor { 1.2f, 2.6f, 9.0f, 1.0f };
-const glm::vec4 kShipSparkColor { 3.0f, 6.0f, 9.0f, 1.0f };
 
 constexpr glm::vec3 kForward { 0.0f, 0.0f, -1.0f };
 constexpr glm::vec3 kUp { 0.0f, 1.0f, 0.0f };
@@ -209,22 +203,13 @@ public:
     bool gameOver = false;
     float bannerTimer = 0.0f;
 
-    void load(AssetServer& server, AssetStorage<MaterialInstance>& instances, RenderAPI& api) {
-        auto pbr = server.load<Material>("materials/pbr.mat");
-        auto glow = server.load<Material>("materials/glow.mat");
-
-        auto texture = [&server](const std::string& key) { return server.load<Texture>(key); };
-        auto glowInstance = [&](const glm::vec4& color) {
-            auto instance = MaterialInstance::create(instances, server, api, glow);
-            if (instance) instance->setParameter("color", color);
-            return instance;
-        };
-
+    // Every material instance is compiled offline (assets/materials/*.matinst); the models name theirs.
+    void load(AssetServer& server) {
         m_cube = server.load<Mesh>(meshes::kUnitCube);
-        m_laserMaterial = glowInstance(kLaserColor);
-        m_sparkMaterial = glowInstance(kSparkColor);
-        m_exhaustMaterial = glowInstance(kExhaustColor);
-        m_shipSparkMaterial = glowInstance(kShipSparkColor);
+        m_laserMaterial = server.load<MaterialInstance>("materials/laser.matinst");
+        m_sparkMaterial = server.load<MaterialInstance>("materials/spark.matinst");
+        m_exhaustMaterial = server.load<MaterialInstance>("materials/exhaust.matinst");
+        m_shipSparkMaterial = server.load<MaterialInstance>("materials/ship_spark.matinst");
 
         if (auto ship = server.load<Model>("models/ship/vaisso.fbx.model"); ship && !ship->instances.empty()) {
             const Aabb bounds = modelBounds(*ship);
@@ -232,56 +217,24 @@ public:
             const float scale = kShipLength / std::max({ size.x, size.y, size.z });
             m_shipFrame = Transform { .position = -bounds.center() * scale, .scale = glm::vec3(scale) };
 
-            // Two meshes: the hull ("A" textures) and the cockpit glass, the smaller one.
-            auto indexCount = [](const Mesh& mesh) {
-                uint32_t count = 0;
-                for (const auto& face : mesh.faces) count += face.indexCount;
-                return count;
-            };
-            size_t hull = 0;
-            for (size_t i = 1; i < ship->instances.size(); i++) {
-                if (indexCount(*ship->instances[i].mesh) > indexCount(*ship->instances[hull].mesh)) hull = i;
-            }
-
-            for (size_t i = 0; i < ship->instances.size(); i++) {
-                const std::string prefix = "models/ship/" + std::string(i == hull ? "A" : "Cockpit");
-                auto material = MaterialInstance::create(instances, server, api, pbr);
-                if (material) {
-                    material->setParameter("baseColorMap", texture(prefix + "_Base_Color.png.tex"));
-                    material->setParameter("normalMap", texture(prefix + "_Normal_DirectX.png.tex"));
-                    material->setParameter("metallicMap", texture(prefix + "_Metallic.png.tex"));
-                    material->setParameter("roughnessMap", texture(prefix + "_Roughness.png.tex"));
-                    material->setParameter("occlusionMap", texture(prefix + "_Mixed_AO.png.tex"));
-                    material->setParameter("normalGreenSign", -1.0f);
-                    if (i == hull) {
-                        material->setParameter("emissiveMap", texture("models/ship/A_Emissive.png.tex"));
-                        m_hullMaterial = material;
-                    }
-                }
+            for (const auto& instance : ship->instances) {
                 m_shipParts.push_back(MeshPart {
-                    .mesh = ship->instances[i].mesh,
-                    .material = material,
-                    .local = Transform::fromMatrix(ship->instances[i].transform),
+                    .mesh = instance.mesh,
+                    .material = instance.material,
+                    .local = Transform::fromMatrix(instance.transform),
                 });
             }
+            // The same instance the model uses: its emissive glow follows the thrust.
+            m_hullMaterial = server.load<MaterialInstance>("models/ship/hull.matinst");
         }
 
         if (auto rocks = server.load<Model>("models/asteroids/asteroid_pack_01.obj.model")) {
-            constexpr auto kPrefix = "models/asteroids/asteroid_pack_01_DefaultMaterial_";
-            m_rockMaterial = MaterialInstance::create(instances, server, api, pbr);
-            if (m_rockMaterial) {
-                m_rockMaterial->setParameter("baseColorMap", texture(std::string(kPrefix) + "BaseColor.png.tex"));
-                m_rockMaterial->setParameter("normalMap", texture(std::string(kPrefix) + "Normal_Ut.png.tex"));
-                m_rockMaterial->setParameter("metallicMap", texture(std::string(kPrefix) + "Metallic_.png.tex"));
-                m_rockMaterial->setParameter("roughnessMap", texture(std::string(kPrefix) + "Roughness.png.tex"));
-            }
-
-            // Every rock is centered on its own origin (scripts/split_asteroid_pack.py).
+            // Every rock is centered on its own origin: the OBJ was split out of the pack's single mesh.
             for (const auto& instance : rocks->instances) {
                 const Transform local = Transform::fromMatrix(instance.transform);
                 const glm::vec3 extent = instance.mesh->bounds.extent() * local.scale;
                 m_rockMeshes.push_back(RockMesh {
-                    .part = { .mesh = instance.mesh, .material = m_rockMaterial, .local = local },
+                    .part = { .mesh = instance.mesh, .material = instance.material, .local = local },
                     .radius = (extent.x + extent.y + extent.z) / 3.0f,
                 });
             }
@@ -382,7 +335,6 @@ private:
     AssetPtr<MaterialInstance> m_exhaustMaterial;
     AssetPtr<MaterialInstance> m_shipSparkMaterial;
     AssetPtr<MaterialInstance> m_hullMaterial;
-    AssetPtr<MaterialInstance> m_rockMaterial;
     std::vector<MeshPart> m_shipParts;
     std::vector<RockMesh> m_rockMeshes;
     Transform m_shipFrame; // centers and scales the ship model
@@ -913,9 +865,8 @@ void AsteroidsGame::drawHud(Scene& scene, const AsteroidsInput& input, float asp
     }
 }
 
-void setup(AsteroidsGame& game, World& world, AssetServer& server, AssetStorage<MaterialInstance>& instances,
-           RenderAPI& api) {
-    game.load(server, instances, api);
+void setup(AsteroidsGame& game, World& world, AssetServer& server) {
+    game.load(server);
     game.setupScene(world.scene(), server);
 }
 

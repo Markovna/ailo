@@ -1,0 +1,5 @@
+{
+    // Laser beams
+    "material": "/materials/glow.mat",
+    "parameters": { "color": [0.6, 3.0, 8.0, 1.0] }
+}
