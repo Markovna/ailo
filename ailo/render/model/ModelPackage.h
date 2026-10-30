@@ -78,8 +78,8 @@ struct FloatParameter {
 };
 
 struct Material {
-    std::string name;                   // as named in the source model
-    std::string material;
+    std::string name;                   // as named in the source model, or the node's name for a node material
+    std::string material;               // relative to the model, or a key with a source (engine:/...)
     std::vector<FloatParameter> floats;
     std::vector<TextureParameter> textures;
 };

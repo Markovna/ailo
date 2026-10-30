@@ -131,7 +131,9 @@ public:
             for (Mesh& mesh : m_pkg.meshes) optimizeMesh(mesh);
         }
         buildClips();
-        buildInstances(m_scene->mRootNode, glm::mat4(1.0f));
+        buildExternalClips();
+        buildInstances(m_scene->mRootNode, glm::mat4(1.0f), "");
+        checkNodeMaterials();
     }
 
 private:
@@ -251,6 +253,8 @@ private:
     std::optional<TextureRef> texture(const aiMaterial* mat, aiTextureType type, bool srgb, const std::string& materialName) {
         aiString path;
         if (mat->GetTextureCount(type) == 0 || mat->GetTexture(type, 0, &path) != AI_SUCCESS) return std::nullopt;
+        // Some FBX exporters (e.g. Unreal) write texture slots without a file name.
+        if (path.length == 0) return std::nullopt;
 
         const std::string what = "material \"" + materialName + "\" " + aiTextureTypeToString(type) + " texture '" +
                                  path.C_Str() + "'";
@@ -397,41 +401,104 @@ private:
         if (m_boneNames.empty()) return;
 
         for (unsigned i = 0; i < m_scene->mNumAnimations; i++) {
-            const aiAnimation* anim = m_scene->mAnimations[i];
-            Clip& clip = m_pkg.clips.emplace_back();
-            clip.name = anim->mName.C_Str();
-            clip.ticksPerSecond = anim->mTicksPerSecond > 0.0 ? float(anim->mTicksPerSecond) : 25.0f;
-            clip.duration = float(anim->mDuration) / clip.ticksPerSecond;
+            addClip(m_scene->mAnimations[i], m_scene->mAnimations[i]->mName.C_Str());
+        }
+    }
 
-            for (unsigned j = 0; j < anim->mNumChannels; j++) {
-                const aiNodeAnim* ch = anim->mChannels[j];
-                Channel& channel = clip.channels.emplace_back();
-                channel.node = ch->mNodeName.C_Str();
-                auto seconds = [&](double ticks) { return float(ticks) / clip.ticksPerSecond; };
-                for (unsigned k = 0; k < ch->mNumPositionKeys; k++) {
-                    const auto& key = ch->mPositionKeys[k];
-                    channel.positions.push_back({ seconds(key.mTime), { key.mValue.x, key.mValue.y, key.mValue.z } });
-                }
-                for (unsigned k = 0; k < ch->mNumRotationKeys; k++) {
-                    const auto& key = ch->mRotationKeys[k];
-                    channel.rotations.push_back({ seconds(key.mTime),
-                                                  glm::quat(key.mValue.w, key.mValue.x, key.mValue.y, key.mValue.z) });
-                }
-                for (unsigned k = 0; k < ch->mNumScalingKeys; k++) {
-                    const auto& key = ch->mScalingKeys[k];
-                    channel.scales.push_back({ seconds(key.mTime), { key.mValue.x, key.mValue.y, key.mValue.z } });
-                }
+    // Animation-only files that animate the source's skeleton by node name, e.g. one FBX per clip.
+    void buildExternalClips() {
+        if (!m_def.animations.empty() && m_boneNames.empty()) {
+            throw CompileError("animations: the source has no skinned mesh to animate");
+        }
+
+        for (const auto& [name, path] : m_def.animations) {
+            const fs::path animationPath = m_definitionDir / path;
+            Assimp::Importer importer;
+            importer.SetIOHandler(new RecordingIOSystem(m_out.dependencies));
+            // A file without meshes is flagged incomplete, which is fine: only its animations are read.
+            const aiScene* scene = importer.ReadFile(toUtf8(animationPath), 0);
+            if (!scene || !scene->mRootNode) {
+                throw CompileError("animation \"" + name + "\": cannot import '" + toUtf8(animationPath) + "': " +
+                                   importer.GetErrorString());
+            }
+            if (scene->mNumAnimations == 0) {
+                throw CompileError("animation \"" + name + "\": '" + toUtf8(animationPath) + "' has no animations");
+            }
+
+            for (unsigned i = 0; i < scene->mNumAnimations; i++) {
+                const aiAnimation* anim = scene->mAnimations[i];
+                addClip(anim, scene->mNumAnimations == 1 ? name : name + "/" + anim->mName.C_Str());
             }
         }
     }
 
-    void buildInstances(const aiNode* node, const glm::mat4& parentTransform) {
+    void addClip(const aiAnimation* anim, const std::string& name) {
+        Clip& clip = m_pkg.clips.emplace_back();
+        clip.name = name;
+        clip.ticksPerSecond = anim->mTicksPerSecond > 0.0 ? float(anim->mTicksPerSecond) : 25.0f;
+        clip.duration = float(anim->mDuration) / clip.ticksPerSecond;
+
+        for (unsigned j = 0; j < anim->mNumChannels; j++) {
+            const aiNodeAnim* ch = anim->mChannels[j];
+            Channel& channel = clip.channels.emplace_back();
+            channel.node = ch->mNodeName.C_Str();
+            auto seconds = [&](double ticks) { return float(ticks) / clip.ticksPerSecond; };
+            for (unsigned k = 0; k < ch->mNumPositionKeys; k++) {
+                const auto& key = ch->mPositionKeys[k];
+                channel.positions.push_back({ seconds(key.mTime), { key.mValue.x, key.mValue.y, key.mValue.z } });
+            }
+            for (unsigned k = 0; k < ch->mNumRotationKeys; k++) {
+                const auto& key = ch->mRotationKeys[k];
+                channel.rotations.push_back({ seconds(key.mTime),
+                                              glm::quat(key.mValue.w, key.mValue.x, key.mValue.y, key.mValue.z) });
+            }
+            for (unsigned k = 0; k < ch->mNumScalingKeys; k++) {
+                const auto& key = ch->mScalingKeys[k];
+                channel.scales.push_back({ seconds(key.mTime), { key.mValue.x, key.mValue.y, key.mValue.z } });
+            }
+        }
+    }
+
+    // `path` is the node's ancestors' names below the root, joined by '/'.
+    void buildInstances(const aiNode* node, const glm::mat4& parentTransform, const std::string& parentPath) {
         glm::mat4 transform = parentTransform * toGlm(node->mTransformation);
+        const std::string name = node->mName.C_Str();
+        const std::string path = node == m_scene->mRootNode ? "" : parentPath.empty() ? name : parentPath + "/" + name;
+
+        // A node's material is a package material of its own, without parameters: meshes of one source material can
+        // only be told apart by their nodes. A path picks one node out of several with the same name.
+        std::optional<uint32_t> nodeMaterial;
+        if (node->mNumMeshes > 0) {
+            m_meshNodePaths.push_back(path);
+            auto it = m_def.nodeMaterials.find(path);
+            if (it == m_def.nodeMaterials.end()) it = m_def.nodeMaterials.find(name);
+            if (it != m_def.nodeMaterials.end()) {
+                m_usedNodeMaterials.insert(it->first);
+                auto [entry, added] = m_nodeMaterialIndices.try_emplace(it->second, uint32_t(m_pkg.materials.size()));
+                if (added) {
+                    Material& material = m_pkg.materials.emplace_back();
+                    material.name = name;
+                    material.material = it->second;
+                }
+                nodeMaterial = entry->second;
+            }
+        }
+
         for (unsigned i = 0; i < node->mNumMeshes; i++) {
             unsigned meshIndex = node->mMeshes[i];
-            m_pkg.instances.push_back({ meshIndex, m_scene->mMeshes[meshIndex]->mMaterialIndex, transform });
+            m_pkg.instances.push_back({ meshIndex, nodeMaterial.value_or(m_scene->mMeshes[meshIndex]->mMaterialIndex), transform });
         }
-        for (unsigned i = 0; i < node->mNumChildren; i++) buildInstances(node->mChildren[i], transform);
+        for (unsigned i = 0; i < node->mNumChildren; i++) buildInstances(node->mChildren[i], transform, path);
+    }
+
+    void checkNodeMaterials() {
+        for (const auto& [node, key] : m_def.nodeMaterials) {
+            if (m_usedNodeMaterials.contains(node)) continue;
+            std::string available;
+            for (const auto& path : m_meshNodePaths) available += (available.empty() ? "" : ", ") + path;
+            throw CompileError("nodeMaterials: the source has no node with meshes named or at \"" + node +
+                               "\" (it has: " + (available.empty() ? "none" : available) + ")");
+        }
     }
 
     const ModelDefinition& m_def;
@@ -443,6 +510,9 @@ private:
     bool m_percentEncodedUris = false;
     std::set<std::string> m_textureUris;     // every texture URI the source references, decoded
     std::unordered_set<std::string> m_boneNames;
+    std::vector<std::string> m_meshNodePaths;                          // paths of the nodes that have meshes
+    std::set<std::string> m_usedNodeMaterials;                         // nodeMaterials keys that matched a node
+    std::unordered_map<std::string, uint32_t> m_nodeMaterialIndices;   // nodeMaterials key -> package material
     std::unordered_map<std::string, int32_t> m_boneOutputs;     // bone name -> SkeletonNode::boneOutputIndex
     std::map<std::pair<const aiTexture*, bool>, uint32_t> m_embedded;   // (texture, srgb) -> package texture
 };

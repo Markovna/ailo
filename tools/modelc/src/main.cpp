@@ -162,8 +162,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // The compiler and the package's texture URIs work relative to the .model file, so root-relative paths (the
-    // source and the texture overrides) are rewritten as such (e.g. ../../models/x/y.gltf).
+    // The compiler and the package's texture URIs and materials work relative to the .model file, so root-relative
+    // paths (the source, the texture overrides, the animations and the materials) are rewritten as such
+    // (e.g. ../../models/x/y.gltf).
     auto makeRelative = [&](fs::path& path) {
         if (!isRootRelative(path)) return true;
         if (root.empty()) {
@@ -188,6 +189,34 @@ int main(int argc, char** argv) {
             return 1;
         }
         if (!makeRelative(path)) return 1;
+    }
+    for (auto& [name, path] : def.animations) {
+        if (!makeRelative(path)) return 1;
+    }
+
+    // Material entries are paths like the textures, stored relative to the .model file, except keys with a source
+    // ("engine:/materials/lit.mat", "builtin://..."), which are kept as they are. The runtime tells them apart the same way.
+    auto resolveMaterial = [&](std::string& key, const std::string& what) {
+        const fs::path path(std::u8string(key.begin(), key.end()));
+        if (path.has_root_name()) {
+            std::cerr << sourceName << ": error: " << what << ": absolute paths are not supported\n";
+            return false;
+        }
+        const size_t separator = key.find(":/");
+        if (separator != std::string::npos && key.find('/') > separator) return true;
+
+        fs::path relative = path;
+        if (!makeRelative(relative)) return false;
+        const std::u8string generic = relative.lexically_normal().generic_u8string();
+        key.assign(generic.begin(), generic.end());
+        return true;
+    };
+    if (!resolveMaterial(def.material, "material")) return 1;
+    for (auto& [name, key] : def.materials) {
+        if (!resolveMaterial(key, "material of \"" + name + "\"")) return 1;
+    }
+    for (auto& [node, key] : def.nodeMaterials) {
+        if (!resolveMaterial(key, "material of node \"" + node + "\"")) return 1;
     }
 
     CompileOutput result;

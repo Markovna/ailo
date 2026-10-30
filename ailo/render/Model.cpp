@@ -53,8 +53,9 @@ Aabb computeBounds(const model::Mesh& mesh) {
 
 static_assert(offsetof(model::StaticVertex, tangent) == offsetof(model::SkinnedVertex, tangent));
 
-// URIs are relative to the folder of the model's key; normalized so that a texture shared through "../" has one key.
-std::string textureKey(const std::string& modelKey, const std::string& uri) {
+// Texture URIs and materials are relative to the folder of the model's key; normalized so that an asset shared through
+// "../" has one key.
+std::string relativeKey(const std::string& modelKey, const std::string& uri) {
     auto u8 = [](const std::string& s) { return std::u8string(s.begin(), s.end()); };
     auto path = (std::filesystem::path(u8(modelKey)).parent_path() / std::filesystem::path(u8(uri))).lexically_normal();
     auto key = path.generic_u8string();
@@ -80,7 +81,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
 
     auto resolveTexture = [&](const model::TextureRef& ref) -> AssetPtr<Texture> {
         switch (ref.source) {
-            case model::TextureSource::Uri:      return ctx.load<Texture>(textureKey(key, ref.path));
+            case model::TextureSource::Uri:      return ctx.load<Texture>(relativeKey(key, ref.path));
             case model::TextureSource::Embedded: return embedded[ref.embeddedIndex];
             case model::TextureSource::Key:      return ctx.load<Texture>(ref.path);
         }
@@ -94,10 +95,22 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
     materials.reserve(pkg->materials.size());
 
     for (const auto& src : pkg->materials) {
-        auto& material = loadedMaterials[src.material];
-        if (!material) material = ctx.load<Material>(src.material);
+        // Keys with a source (engine:/, builtin://) are written as they are; anything else is relative to the model.
+        const std::string materialKey = AssetPath::parse(src.material).source.empty() ? relativeKey(key, src.material)
+                                                                                     : src.material;
+
+        // A material instance asset already holds every value; the source's parameters are not applied to it.
+        if (materialKey.ends_with(".matinst")) {
+            auto instance = ctx.load<MaterialInstance>(materialKey);
+            if (!instance) log::error("Failed to load material instance '{}'", materialKey);
+            materials.push_back(std::move(instance));
+            continue;
+        }
+
+        auto& material = loadedMaterials[materialKey];
+        if (!material) material = ctx.load<Material>(materialKey);
         if (!material) {
-            log::error("Failed to load material '{}'", src.material);
+            log::error("Failed to load material '{}'", materialKey);
             materials.emplace_back();
             continue;
         }
@@ -105,7 +118,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         auto instance = MaterialInstance::create(*m_storages.materialInstances, *m_server, *renderApi, material);
         for (const auto& p : src.floats) {
             if (!material->findParameter(p.name)) {
-                skipped.emplace(src.material, p.name);
+                skipped.emplace(materialKey, p.name);
                 continue;
             }
             const auto& v = p.value;
@@ -118,7 +131,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         }
         for (const auto& p : src.textures) {
             if (!material->findParameter(p.name)) {
-                skipped.emplace(src.material, p.name);
+                skipped.emplace(materialKey, p.name);
                 continue;
             }
             instance->setParameter(p.name, resolveTexture(p.texture));

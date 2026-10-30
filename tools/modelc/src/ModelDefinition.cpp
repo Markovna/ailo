@@ -50,6 +50,13 @@ ModelDefinition parseModelDefinition(std::string_view source) {
                     fail(material.line, "material \"" + name + "\" is listed twice");
                 }
             }
+        } else if (key == "nodeMaterials") {
+            expect(v, v.isObject(), "an object", "nodeMaterials");
+            for (const auto& [name, material] : v.asObject()) {
+                if (!def.nodeMaterials.emplace(name, getNonEmptyString(material, "material of node \"" + name + "\"")).second) {
+                    fail(material.line, "node \"" + name + "\" is listed twice");
+                }
+            }
         } else if (key == "textures") {
             expect(v, v.isObject(), "an object", "textures");
             for (const auto& [uri, path] : v.asObject()) {
@@ -57,11 +64,19 @@ ModelDefinition parseModelDefinition(std::string_view source) {
                     fail(path.line, "texture \"" + uri + "\" is listed twice");
                 }
             }
+        } else if (key == "animations") {
+            expect(v, v.isObject(), "an object", "animations");
+            for (const auto& [name, path] : v.asObject()) {
+                if (name.empty()) fail(path.line, "an animation name is empty");
+                if (!def.animations.emplace(name, getNonEmptyString(path, "animation \"" + name + "\"")).second) {
+                    fail(path.line, "animation \"" + name + "\" is listed twice");
+                }
+            }
         } else if (key == "optimize") {
             expect(v, v.isBool(), "a boolean", "optimize");
             def.optimize = v.asBool();
         } else {
-            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, textures, optimize)");
+            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, nodeMaterials, textures, animations, optimize)");
         }
     }
 

@@ -31,12 +31,23 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | Property    | Type   | Meaning |
 |-------------|--------|---------|
 | `source`    | string | Required. The model file, relative to the `.model` file, or to the assets folder if it starts with `/` . |
-| `material`  | string | Required. Asset key of the material every mesh uses. |
-| `materials` | object | Optional. Source material name -> material key, overriding `material`. Naming a material the source doesn't have is an error. |
+| `material`  | string | Required. The material every mesh uses, a path like `source` or a key with a source (see [Materials](#materials)). |
+| `materials` | object | Optional. Source material name -> material, written like `material`, overriding it. Naming a material the source doesn't have is an error. |
+| `nodeMaterials` | object | Optional. Source node -> material for every mesh of that node, written like `material`, overriding `material` and `materials`, for meshes that share a source material (`{ "Cockpit": "glass.matinst" }`). A node is named, which matches every node of that name, or given by its path below the root, its ancestors' names joined by `/` (`"Ship/Ship"`), which tells apart nodes with the same name and wins over a name. The source's parameters are not written for it. An entry that matches no node with meshes is an error, which lists their paths. |
 | `textures`  | object | Optional. Source texture URI -> texture key written instead (see [Textures](#textures)), like `materials`. Naming a URI the source doesn't reference is an error. |
+| `animations` | object | Optional. Clip name -> file whose animations are added to the model's clips, relative like `source` (see [Animations](#animations)). |
 | `optimize`  | bool   | Optional, default `true`. Optimizes the meshes with meshoptimizer (see [Geometry](#geometry)); `false` keeps assimp's vertex and triangle order. |
 
-modelc never reads the materials: it writes their keys. It writes these parameters when the source has them, whether
+## Materials
+
+A material is a path, relative to the `.model` file or to the assets folder if it starts with `/`, like `source`, or a
+key with a source (`engine:/materials/lit.mat`, `builtin://...`), which is written as it is. Paths are written relative
+to the `.model` file, so `"/materials/lit.mat"` in `models/rock.model` is written as `../materials/lit.mat`; they are
+not checked to exist. Absolute paths are errors.
+
+modelc never reads the materials: it writes their paths. A path ending in `.matinst` names a material instance
+(`tools/matc/README.md`), which the runtime uses as it is: the parameters below are not applied to it, so it suits
+sources whose materials carry nothing useful (an FBX without texture paths). It writes these parameters when the source has them, whether
 or not the material declares them:
 
 | Parameter              | From |
@@ -49,6 +60,7 @@ or not the material declares them:
 
 ## Textures
 
+- **Unnamed** texture slots (some exporters write a slot with an empty file name) are skipped.
 - **Embedded** textures are packed into the model package, sRGB for base color and linear for the other maps.
 - **Referenced by URI**, the package stores a reference: the URI (percent-decoded for glTF) relative to the source
   model, rewritten relative to the `.model` file, with its own extension. With `"source": "model.gltf"`, `white.png`
@@ -59,6 +71,22 @@ or not the material declares them:
   it starts with `/`, and stored as given (normalized), extension included: `"white.png": "white.png.tex"` refers
   to the texture texc builds from `white.png.tex`. modelc doesn't check that it exists. An overridden URI may be
   absolute in the source.
+
+## Animations
+
+`animations` adds clips from other files, typically one FBX per clip exported without a mesh. Only their
+animations are read: their channels animate the source's skeleton by node name, so they must come from the same
+skeleton, and channels for nodes the skeleton doesn't have are ignored at runtime. A file with one animation adds a clip
+with the given name; a file with several adds `<name>/<animation name>` for each. Every file is listed in the depfile.
+It is an error if the source has no skinned mesh or a file has no animations.
+
+```
+{
+    "source": ".source/character.fbx",
+    "material": "engine:/materials/lit.mat",
+    "animations": { "walk": "/animations/.source/walk.fbx", "jump": "/animations/.source/jump.fbx" }
+}
+```
 
 ## Geometry
 
