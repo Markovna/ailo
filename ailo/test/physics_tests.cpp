@@ -461,6 +461,21 @@ void testMassOverride() {
     CHECK_NEAR(inverseMass(defaultMass), 1.0f / 1000.0f, 1e-6f);   // 1 m^3 at the default density
 }
 
+void testLockRotation() {
+    Fixture f;
+    RigidBody spinning = kFloating;
+    spinning.angularVelocity = { 1.0f, 2.0f, 3.0f };
+    RigidBody locked = spinning;
+    locked.lockRotation = true;
+    const Collider capsule { .shape = CapsuleShape {} };
+    const entt::entity free = f.spawn(Transform { .position = { -5.0f, 0.0f, 0.0f } }, spinning, capsule);
+    const entt::entity upright = f.spawn(Transform { .position = { 5.0f, 0.0f, 0.0f } }, locked, capsule);
+    f.tick(30);
+
+    CHECK(glm::angle(f.pose(free).rotation) > 0.1f);
+    CHECK_NEAR(glm::angle(f.pose(upright).rotation), 0.0f, 1e-4f);
+}
+
 // Through the real plugin: bodies are created, simulated and written back as the App runs.
 void testPluginSimulatesEntities() {
     App app;
@@ -516,5 +531,6 @@ void runPhysicsTests() {
     ailo::test::run("physics/testScale", testScale);
     ailo::test::run("physics/testInvalidColliderIsSkipped", testInvalidColliderIsSkipped);
     ailo::test::run("physics/testMassOverride", testMassOverride);
+    ailo::test::run("physics/testLockRotation", testLockRotation);
     ailo::test::run("physics/testPluginSimulatesEntities", testPluginSimulatesEntities);
 }

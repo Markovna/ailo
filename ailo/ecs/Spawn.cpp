@@ -63,7 +63,9 @@ Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const Transform&
         renderable.mesh = instance.mesh;
         renderable.materials.push_back(instance.material);
 
-        scene.addComponent<TransformComponent>(entity, Transform::fromMatrix(instance.transform));
+        // The bone matrices already place skinned vertices in model space, through the whole node hierarchy.
+        const glm::mat4 local = instance.skinned ? glm::mat4(1.0f) : instance.transform;
+        scene.addComponent<TransformComponent>(entity, Transform::fromMatrix(local));
         hierarchy::setParent(scene.registry(), entity, root, hierarchy::Keep::Local);
 
         if (instance.skinned)

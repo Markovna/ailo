@@ -175,6 +175,10 @@ void createPendingBodies(entt::registry& registry, PhysicsWorld& world) {
             settings.mAngularDamping = rb.angularDamping;
             settings.mGravityFactor = rb.gravityFactor;
             settings.mAllowSleeping = rb.allowSleeping;
+            if (rb.lockRotation) {
+                settings.mAllowedDOFs = JPH::EAllowedDOFs::TranslationX | JPH::EAllowedDOFs::TranslationY |
+                                        JPH::EAllowedDOFs::TranslationZ;
+            }
             if (rb.motionType != MotionType::Static) {
                 settings.mLinearVelocity = toJolt(rb.linearVelocity);
                 settings.mAngularVelocity = toJolt(rb.angularVelocity);

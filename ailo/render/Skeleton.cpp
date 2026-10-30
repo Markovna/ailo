@@ -11,8 +11,7 @@ void Skeleton::updateBoneTransforms(float time, const AnimationClip& clip, Bones
         channelMap[channel.boneName] = &channel;
     }
 
-    for (size_t i = 0; i < nodes.size(); i++) {
-        NodeInfo& node = nodes[i];
+    for (auto& node : nodes) {
         glm::mat4 localTransform = node.localTransform;
 
         auto it = channelMap.find(node.name);

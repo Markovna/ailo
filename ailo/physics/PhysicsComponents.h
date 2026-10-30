@@ -31,6 +31,7 @@ struct RigidBody {
     float angularDamping = 0.05f;
     float gravityFactor = 1.0f;
     bool allowSleeping = true;
+    bool lockRotation = false;            // collisions never rotate the body, e.g. an upright character capsule
     glm::vec3 linearVelocity { 0.0f };    // initial velocities, applied when the body is created
     glm::vec3 angularVelocity { 0.0f };
 };
