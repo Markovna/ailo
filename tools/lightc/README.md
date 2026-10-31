@@ -50,3 +50,4 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `source`  | string |         | Equirectangular HDR image, relative to the `.light` file, or to the assets folder if it starts with `/`. |
 | `size`    | int    | `256`   | Face size of level 0, a power of two. |
 | `samples` | int    | `1024`  | GGX samples per texel for the rough levels. |
+| `maxRadiance` | number | none | Caps the luminance of every source texel, keeping its color, before prefiltering and the SH. Set it above the sky and below the sun to leave the sun to a directional light: otherwise the IBL lights the sun's shadows too. |

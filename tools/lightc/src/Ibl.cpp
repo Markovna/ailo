@@ -246,6 +246,9 @@ std::optional<TexturePackage> prefilterEnvironment(const fs::path& source, const
     }
     std::vector<float> pixels(image, image + size_t(width) * height * 3);
     stbi_image_free(image);
+    if (options.maxRadiance > 0.0f) {
+        clampRadiance(pixels, options.maxRadiance);
+    }
 
     const uint32_t baseExp = std::countr_zero(options.size);
     uint32_t minExp = std::countr_zero(kMinPrefilterSize);

@@ -1,10 +1,12 @@
 #include "Cubemap.h"
+#include "Ibl.h"
 #include "SphericalHarmonics.h"
 #include "Testing.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "render/texture/TexturePackage.h"
 
@@ -72,12 +74,27 @@ void testOrientation() {
     CHECK(towards > side && side > away);
 }
 
+
+// A sun capped to the sky's level keeps its color; dimmer texels are untouched.
+void testClampRadiance() {
+    std::vector<float> rgb = { 1000.0f, 800.0f, 600.0f, 0.5f, 0.6f, 0.7f };
+    lightc::clampRadiance(rgb, 10.0f);
+    const float luminance = 0.2126f * rgb[0] + 0.7152f * rgb[1] + 0.0722f * rgb[2];
+    CHECK_NEAR(luminance, 10.0f, 1e-4f);
+    CHECK_NEAR(rgb[1] / rgb[0], 0.8f, 1e-5f);
+    CHECK_NEAR(rgb[2] / rgb[0], 0.6f, 1e-5f);
+    CHECK_EQ(rgb[3], 0.5f);
+    CHECK_EQ(rgb[4], 0.6f);
+    CHECK_EQ(rgb[5], 0.7f);
+}
+
 }
 
 void runSphericalHarmonicsTests() {
     ailo::test::run("spherical_harmonics/testConstantEnvironment", testConstantEnvironment);
     ailo::test::run("spherical_harmonics/testHemisphere", testHemisphere);
     ailo::test::run("spherical_harmonics/testOrientation", testOrientation);
+    ailo::test::run("spherical_harmonics/testClampRadiance", testClampRadiance);
 }
 
 int main() {

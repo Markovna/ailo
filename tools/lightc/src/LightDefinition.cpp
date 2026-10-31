@@ -59,8 +59,13 @@ LightDefinition parseLightDefinition(std::string_view source) {
             }
         } else if (key == "samples") {
             def.prefilter.samples = getCount(v, "samples");
+        } else if (key == "maxRadiance") {
+            if (!v.isNumber() || !(v.asNumber() > 0.0)) {
+                fail(v.line, "maxRadiance must be a positive number");
+            }
+            def.prefilter.maxRadiance = float(v.asNumber());
         } else {
-            fail(v.line, "unknown light property \"" + key + "\" (expected source, size, samples)");
+            fail(v.line, "unknown light property \"" + key + "\" (expected source, size, samples, maxRadiance)");
         }
     }
 
