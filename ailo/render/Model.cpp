@@ -189,9 +189,12 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         clip->ticksPerSecond = src.ticksPerSecond;
         clip->duration = src.duration;
         clip->channels.reserve(src.channels.size());
+        clip->nameToIndex.reserve(src.channels.size());
         for (auto& channel : src.channels) {
             BoneChannel& bc = clip->channels.emplace_back();
             bc.boneName = std::move(channel.node);
+            clip->nameToIndex[bc.boneName] = static_cast<uint32_t>(clip->channels.size()) - 1;
+
             for (const auto& k : channel.positions) bc.positionKeys.push_back({ k.time, k.value });
             for (const auto& k : channel.rotations) bc.rotationKeys.push_back({ k.time, k.value });
             for (const auto& k : channel.scales) bc.scaleKeys.push_back({ k.time, k.value });

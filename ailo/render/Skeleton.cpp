@@ -5,18 +5,13 @@
 namespace ailo {
 
 void Skeleton::updateBoneTransforms(float time, const AnimationClip& clip, BonesUniform& out) {
-    std::unordered_map<std::string, const BoneChannel*> channelMap;
-    channelMap.reserve(clip.channels.size());
-    for (const auto& channel : clip.channels) {
-        channelMap[channel.boneName] = &channel;
-    }
-
     for (auto& node : nodes) {
         glm::mat4 localTransform = node.localTransform;
 
-        auto it = channelMap.find(node.name);
-        if (it != channelMap.end()) {
-            const BoneChannel& channel = *it->second;
+        auto it = clip.nameToIndex.find(node.name);
+        if (it != clip.nameToIndex.end()) {
+            uint32_t channelIndex = it->second;
+            const BoneChannel& channel = clip.channels[channelIndex];
             glm::vec3 pos   = BoneChannel::interpolate(time, channel.positionKeys);
             glm::quat rot   = BoneChannel::interpolate(time, channel.rotationKeys);
             glm::vec3 scale = BoneChannel::interpolate(time, channel.scaleKeys);

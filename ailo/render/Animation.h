@@ -2,6 +2,7 @@
 #include <ctime>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -63,6 +64,7 @@ struct AnimationClip {
     float duration = 0.0f; // seconds
     float ticksPerSecond = 25.0f;
     std::vector<BoneChannel> channels;
+    std::unordered_map<std::string, uint32_t> nameToIndex;
 };
 
 } // namespace ailo
