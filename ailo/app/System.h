@@ -3,7 +3,9 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 #include "World.h"
 
@@ -77,10 +79,27 @@ private:
     view_type m_view;
 };
 
+// State owned by one system instance, persisting across its runs. Default-constructed when the system is added.
+// Taken by value (or const&) as a system parameter; it is a handle, the value lives in the system.
+template<typename T>
+class Local {
+public:
+    explicit Local(T& value) : m_value(&value) {}
+
+    T& operator*() const { return *m_value; }
+    T* operator->() const { return m_value; }
+    T& get() const { return *m_value; }
+
+private:
+    T* m_value;
+};
+
+// A specialization may declare `using State = ...;` and take `fetch(World&, State&)`: the state is stored per system.
 template<typename T>
 struct SystemParam {
     static_assert(always_false<T>,
-        "Unsupported system parameter: take resources as T& / const T& / T*, queries as Query<...>");
+        "Unsupported system parameter: take resources as T& / const T& / T*, queries as Query<...>, "
+        "system state as Local<T>");
 };
 
 template<typename T>
@@ -126,7 +145,45 @@ struct SystemParam<Query<Cs...>&> {
     static_assert(always_false<Cs...>, "Take Query<...> by value or const&, not by non-const reference");
 };
 
+template<typename T>
+struct SystemParam<Local<T>> {
+    static_assert(std::is_default_constructible_v<T>, "Local<T> requires a default-constructible T");
+    using State = T;
+    static Local<T> fetch(World&, T& state) { return Local<T> { state }; }
+    static bool available(const World&) { return true; }
+    static std::string_view typeName() { return entt::type_name<Local<T>>::value(); }
+};
+
+template<typename T>
+struct SystemParam<const Local<T>&> : SystemParam<Local<T>> {};
+
+template<typename T>
+struct SystemParam<Local<T>&> {
+    static_assert(always_false<T>, "Take Local<T> by value or const&, not by non-const reference");
+};
+
 namespace detail {
+
+struct no_state {};
+
+template<typename P>
+struct param_state { using type = no_state; };
+
+template<typename P>
+    requires requires { typename SystemParam<P>::State; }
+struct param_state<P> { using type = typename SystemParam<P>::State; };
+
+template<typename P>
+using param_state_t = typename param_state<P>::type;
+
+template<typename P>
+decltype(auto) fetchParam(World& world, param_state_t<P>& state) {
+    if constexpr (std::is_same_v<param_state_t<P>, no_state>) {
+        return SystemParam<P>::fetch(world);
+    } else {
+        return SystemParam<P>::fetch(world, state);
+    }
+}
 
 // Generic lambdas (auto parameters) are not supported: parameter types must be concrete.
 template<typename F>
@@ -167,8 +224,11 @@ template<typename F, typename... Args>
 System makeSystem(F&& f, type_list<Args...>, std::string name) {
     System system;
     system.name = std::move(name);
-    system.run = [f = std::forward<F>(f)](World& world) mutable {
-        f(SystemParam<Args>::fetch(world)...);
+    // States are indexed by parameter position, so two Local<T> of the same T get separate slots.
+    system.run = [f = std::forward<F>(f), states = std::tuple<param_state_t<Args>...> {}](World& world) mutable {
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            f(fetchParam<Args>(world, std::get<I>(states))...);
+        }(std::index_sequence_for<Args...> {});
     };
     system.validator = [](const World& world, std::string_view name) {
         ((SystemParam<Args>::available(world) ? void() : throwMissingSystemParam(name, SystemParam<Args>::typeName())), ...);

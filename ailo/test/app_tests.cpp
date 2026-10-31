@@ -3,6 +3,7 @@
 #include "Testing.h"
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -308,6 +309,59 @@ void testFixedUpdateCanRunZeroTimes() {
     CHECK_EQ(fixed.alpha, 0.5f);
 }
 
+std::vector<int> g_localCounts;
+
+void countFrames(Local<int> count, AppControl& control) {
+    g_localCounts.push_back(++*count);
+    if (*count == 3) control.requestExit();
+}
+
+void testLocalPersistsAcrossRuns() {
+    g_localCounts.clear();
+    App app;
+    app.addSystem(Stage::Update, countFrames);
+    app.run();
+    CHECK((g_localCounts == std::vector { 1, 2, 3 }));
+}
+
+void testLocalIsPerSystemInstance() {
+    g_localCounts.clear();
+    App app;
+    app.addSystem(Stage::Update, countFrames)
+       .addSystem(Stage::Update, countFrames);
+    app.run();
+    // Each instance counts on its own; both reach 3 in the third frame.
+    CHECK((g_localCounts == std::vector { 1, 1, 2, 2, 3, 3 }));
+}
+
+void testMultipleLocalsOfSameType() {
+    App app;
+    int lastA = 0;
+    int lastB = 0;
+    app.addSystem(Stage::Update, [&](Local<int> a, const Local<int>& b, AppControl& control) {
+        *a += 1;
+        *b += 10;
+        lastA = *a;
+        lastB = *b;
+        if (*a == 2) control.requestExit();
+    });
+    app.run();
+    CHECK_EQ(lastA, 2);
+    CHECK_EQ(lastB, 20);
+}
+
+void testLocalMoveOnly() {
+    App app;
+    int seen = 0;
+    app.addSystem(Stage::Update, [&](Local<std::unique_ptr<int>> ptr, AppControl& control) {
+        if (!*ptr) *ptr = std::make_unique<int>(0);
+        seen = ++**ptr;
+        if (seen == 2) control.requestExit();
+    });
+    app.run();
+    CHECK_EQ(seen, 2);
+}
+
 }
 
 void runAppTests() {
@@ -323,4 +377,8 @@ void runAppTests() {
     ailo::test::run("app/testFixedUpdate", testFixedUpdate);
     ailo::test::run("app/testFixedUpdateCanRunZeroTimes", testFixedUpdateCanRunZeroTimes);
     ailo::test::run("app/testQueryExclude", testQueryExclude);
+    ailo::test::run("app/testLocalPersistsAcrossRuns", testLocalPersistsAcrossRuns);
+    ailo::test::run("app/testLocalIsPerSystemInstance", testLocalIsPerSystemInstance);
+    ailo::test::run("app/testMultipleLocalsOfSameType", testMultipleLocalsOfSameType);
+    ailo::test::run("app/testLocalMoveOnly", testLocalMoveOnly);
 }
