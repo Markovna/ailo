@@ -16,6 +16,24 @@ namespace ailo {
 
 namespace {
 
+// Ignores shear, which node transforms from the model tools don't have.
+NodeTransform decompose(const glm::mat4& m) {
+    NodeTransform t;
+    t.position = glm::vec3(m[3]);
+    glm::mat3 basis(m);
+    t.scale = { glm::length(basis[0]), glm::length(basis[1]), glm::length(basis[2]) };
+    if (glm::determinant(basis) < 0.0f) {
+        t.scale.x = -t.scale.x;
+    }
+    for (int i = 0; i < 3; ++i) {
+        if (t.scale[i] != 0.0f) {
+            basis[i] /= t.scale[i];
+        }
+    }
+    t.rotation = glm::normalize(glm::quat_cast(basis));
+    return t;
+}
+
 VertexInputDescription vertexInput(model::VertexLayout layout) {
     VertexInputDescription input;
     input.bindings.push_back(vk::VertexInputBindingDescription { 0, model::vertexStride(layout), vk::VertexInputRate::eVertex });
@@ -169,6 +187,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         skeleton = m_storages.skeletons->emplace(noname_t{});
         skeleton->nodes.reserve(pkg->skeleton.size());
         skeleton->bindPose.reserve(pkg->skeleton.size());
+        skeleton->bindPoseTransforms.reserve(pkg->skeleton.size());
         skeleton->inverseBindPose.reserve(pkg->skeleton.size());
         for (const auto& src : pkg->skeleton) {
             skeleton->nodeNameToIndex[src.name] = static_cast<uint32_t>(skeleton->nodes.size());
@@ -178,6 +197,7 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
                 .boneOutputIndex = src.boneOutputIndex,
             });
             skeleton->bindPose.push_back(src.localTransform);
+            skeleton->bindPoseTransforms.push_back(decompose(src.localTransform));
             skeleton->inverseBindPose.push_back(src.inverseBindPose);
         }
     }

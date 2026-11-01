@@ -20,6 +20,7 @@ class Skeleton {
 public:
     // All nodes in parent-first (DFS) order: bones + their non-bone ancestors.
     std::vector<NodeInfo> nodes;
+    std::vector<NodeTransform> bindPoseTransforms; // bindPose decomposed, so clips can be blended per component
     std::vector<glm::mat4> bindPose;
     std::vector<glm::mat4> inverseBindPose;
     std::unordered_map<std::string, uint32_t> nodeNameToIndex;

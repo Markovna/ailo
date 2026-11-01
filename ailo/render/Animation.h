@@ -30,6 +30,12 @@ inline glm::quat interpolate<glm::quat>(const glm::quat& l, const glm::quat& r, 
     return glm::slerp(l, r, t);
 }
 
+struct NodeTransform {
+    glm::vec3 position { 0.0f };
+    glm::quat rotation { 1.0f, 0.0f, 0.0f, 0.0f };
+    glm::vec3 scale { 1.0f };
+};
+
 struct BoneChannel {
     std::string boneName;
     std::vector<AnimationKey<glm::vec3>> positionKeys;
