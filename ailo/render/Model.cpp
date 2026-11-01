@@ -168,16 +168,17 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
     if (!pkg->skeleton.empty()) {
         skeleton = m_storages.skeletons->emplace(noname_t{});
         skeleton->nodes.reserve(pkg->skeleton.size());
+        skeleton->bindPose.reserve(pkg->skeleton.size());
+        skeleton->inverseBindPose.reserve(pkg->skeleton.size());
         for (const auto& src : pkg->skeleton) {
             skeleton->nodeNameToIndex[src.name] = static_cast<uint32_t>(skeleton->nodes.size());
             skeleton->nodes.push_back(NodeInfo {
                 .name = src.name,
                 .parentIndex = src.parent,
-                .localTransform = src.localTransform,
-                .inverseBindPose = src.inverseBindPose,
-                .worldTransform = glm::mat4(1.0f),
                 .boneOutputIndex = src.boneOutputIndex,
             });
+            skeleton->bindPose.push_back(src.localTransform);
+            skeleton->inverseBindPose.push_back(src.inverseBindPose);
         }
     }
 
