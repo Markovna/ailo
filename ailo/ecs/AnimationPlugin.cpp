@@ -29,21 +29,22 @@ float advance(float time, float delta, const AnimationClip& clip, bool looping) 
 }
 
 void samplePose(float time, const Skeleton& skeleton, const AnimationClip& clip, std::vector<NodeTransform>& pose) {
-    pose = skeleton.bindPoseTransforms;
-
-    for (auto& channel : clip.channels) {
-        auto it = skeleton.nodeNameToIndex.find(channel.boneName);
-        if (it == skeleton.nodeNameToIndex.end()) { continue; }
-
-        assert(it->second < skeleton.nodes.size());
-        auto& node = pose[it->second];
+    pose.resize(skeleton.nodes.size());
+    for (size_t i = 0; i < skeleton.nodes.size(); ++i) {
+        auto& node = pose[i];
+        auto it = clip.nameToIndex.find(skeleton.nodes[i].name);
+        if (it == clip.nameToIndex.end()) {
+            node = skeleton.bindPoseTransforms[i];
+            continue;
+        }
+        auto& channel = clip.channels[it->second];
         node.position = BoneChannel::interpolate(time, channel.positionKeys);
         node.rotation = BoneChannel::interpolate(time, channel.rotationKeys);
         node.scale    = BoneChannel::interpolate(time, channel.scaleKeys);
     }
 }
 
-void blendPose(std::vector<NodeTransform>& pose, const std::vector<NodeTransform>& from, float weight) {
+void blendPose(const std::span<NodeTransform>& pose, const std::span<NodeTransform>& from, float weight) {
     for (size_t i = 0; i < pose.size(); ++i) {
         auto& to = pose[i];
         to.position = glm::mix(from[i].position, to.position, weight);
@@ -52,7 +53,7 @@ void blendPose(std::vector<NodeTransform>& pose, const std::vector<NodeTransform
     }
 }
 
-void composeLocal(const std::vector<NodeTransform>& pose, std::vector<glm::mat4>& local) {
+void composeLocal(const std::span<NodeTransform>& pose, std::vector<glm::mat4>& local) {
     local.resize(pose.size());
     for (size_t i = 0; i < pose.size(); ++i) {
         local[i] = glm::translate(glm::mat4(1.0f), pose[i].position)
@@ -83,7 +84,7 @@ void startFadeOnClipChange(AnimatorComponent& animator) {
     fade.appliedClip = animator.currentClip;
 }
 
-void writeBoneTransforms(const Skeleton& skeleton, std::vector<glm::mat4>& pose, BonesUniform& out) {
+void writeBoneTransforms(const Skeleton& skeleton, const std::span<glm::mat4>& pose, BonesUniform& out) {
     for (uint32_t i = 0; i < skeleton.nodes.size(); ++i) {
         const auto& node = skeleton.nodes[i];
         auto& model = pose[i];
