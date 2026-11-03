@@ -27,7 +27,6 @@ struct AnimatorComponent {
     std::vector<AssetPtr<AnimationClip>> clips;
     uint32_t currentClip = 0;
     float fadeInTime     = 0.0f;
-    float currentTime    = 0.0f;
     bool  playing        = true;
     bool  looping        = true;
     BufferObject boneBuffer;

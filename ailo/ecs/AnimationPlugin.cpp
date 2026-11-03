@@ -112,13 +112,13 @@ void startSamplerOnClipChange(AnimatorComponent& animator, PosePool& pool) {
     samplers.reserve(AnimatorComponent::kMaxSamplers);
     auto& sampler = samplers.emplace_back();
     sampler.clip = animator.currentClip;
-    sampler.time = animator.currentTime;
     sampler.looping = animator.looping;
     sampler.fadeDuration = animator.fadeInTime;
     sampler.pose = pool.acquire();
 }
 
 void retireHidden(std::vector<AnimationSampler>& samplers, PosePool& pool) {
+    // TODO: use ring buffer?
     for (size_t i = samplers.size(); i-- > 1;) {
         if (samplers[i].fade() >= 1.0f) {
             releaseOldest(samplers, pool, i);
@@ -163,15 +163,10 @@ void animate(Query<AnimatorComponent, Exclude<Disabled>> animators, Local<Animat
 
         const auto& skeleton = *animator.skeleton;
         auto& samplers = animator.samplers;
-        animator.currentTime = advance(animator.currentTime, time.delta, *animator.clips[animator.currentClip], animator.looping);
-        samplers.back().time = animator.currentTime;
         samplers.back().looping = animator.looping;
 
-        for (size_t i = 0; i < samplers.size(); ++i) {
-            auto& sampler = samplers[i];
-            if (i + 1 < samplers.size()) {
-                sampler.time = advance(sampler.time, time.delta, *animator.clips[sampler.clip], sampler.looping);
-            }
+        for (auto& sampler : samplers) {
+            sampler.time = advance(sampler.time, time.delta, *animator.clips[sampler.clip], sampler.looping);
             sampler.fadeElapsed += time.delta;
         }
 
