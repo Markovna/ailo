@@ -17,9 +17,25 @@ namespace ailo {
 
 namespace {
 
+struct PosePool {
+    std::vector<std::vector<NodeTransform>> free;
+
+    std::vector<NodeTransform> acquire() {
+        if (free.empty()) {
+            return {};
+        }
+        auto pose = std::move(free.back());
+        free.pop_back();
+        return pose;
+    }
+
+    void release(std::vector<NodeTransform>&& pose) { free.push_back(std::move(pose)); }
+};
+
 struct AnimationCache {
+    BonesUniform bonesData {};
+    PosePool pool;
     std::vector<NodeTransform> pose;
-    std::vector<NodeTransform> fromPose;
     std::vector<glm::mat4> local;
 };
 
@@ -44,13 +60,25 @@ void samplePose(float time, const Skeleton& skeleton, const AnimationClip& clip,
     }
 }
 
-void blendPose(const std::span<NodeTransform>& pose, const std::span<NodeTransform>& from, float weight) {
-    for (size_t i = 0; i < pose.size(); ++i) {
-        auto& to = pose[i];
-        to.position = glm::mix(from[i].position, to.position, weight);
-        to.rotation = glm::slerp(from[i].rotation, to.rotation, weight);
-        to.scale    = glm::mix(from[i].scale, to.scale, weight);
+void blendPose(const std::span<NodeTransform>& out, const std::span<const NodeTransform>& pose, float weight) {
+    for (size_t i = 0; i < out.size(); ++i) {
+        auto& node = out[i];
+        node.position = glm::mix(node.position, pose[i].position, weight);
+        node.rotation = glm::slerp(node.rotation, pose[i].rotation, weight);
+        node.scale    = glm::mix(node.scale, pose[i].scale, weight);
     }
+}
+
+// Each sampler fades in over the ones below it, so sampler i weighs fade_i * prod_{j>i}(1 - fade_j).
+std::span<NodeTransform> blendStack(std::vector<AnimationSampler>& samplers, std::vector<NodeTransform>& out) {
+    if (samplers.size() == 1) {
+        return samplers[0].pose;
+    }
+    out = samplers[0].pose;
+    for (size_t i = 1; i < samplers.size(); ++i) {
+        blendPose(out, samplers[i].pose, samplers[i].fade());
+    }
+    return out;
 }
 
 void composeLocal(const std::span<NodeTransform>& pose, std::vector<glm::mat4>& local) {
@@ -62,26 +90,41 @@ void composeLocal(const std::span<NodeTransform>& pose, std::vector<glm::mat4>& 
     }
 }
 
-void startFadeOnClipChange(AnimatorComponent& animator) {
-    auto& fade = animator.crossFade;
-    if (fade.appliedClip == animator.currentClip) {
+void releaseOldest(std::vector<AnimationSampler>& samplers, PosePool& pool, size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        pool.release(std::move(samplers[i].pose));
+    }
+    samplers.erase(samplers.begin(), samplers.begin() + count);
+}
+
+void startSamplerOnClipChange(AnimatorComponent& animator, PosePool& pool) {
+    auto& samplers = animator.samplers;
+    if (!samplers.empty() && samplers.back().clip == animator.currentClip) {
         return;
     }
 
-    // Only two clips are blended, so switching mid-fade keeps whichever of the two weighs more as the outgoing one.
-    const bool fading = fade.fromClip != AnimatorComponent::kNoClip;
-    if (!fading || fade.elapsed >= 0.5f * fade.duration) {
-        fade.fromClip = fade.appliedClip;
-        fade.fromTime = fade.appliedTime;
-        fade.fromLooping = fade.appliedLooping;
-    }
     if (animator.fadeInTime <= 0.0f) {
-        fade.fromClip = AnimatorComponent::kNoClip;
+        releaseOldest(samplers, pool, samplers.size());
+    } else if (samplers.size() >= AnimatorComponent::kMaxSamplers) {
+        releaseOldest(samplers, pool, samplers.size() - AnimatorComponent::kMaxSamplers + 1);
     }
 
-    fade.elapsed = 0.0f;
-    fade.duration = animator.fadeInTime;
-    fade.appliedClip = animator.currentClip;
+    samplers.reserve(AnimatorComponent::kMaxSamplers);
+    auto& sampler = samplers.emplace_back();
+    sampler.clip = animator.currentClip;
+    sampler.time = animator.currentTime;
+    sampler.looping = animator.looping;
+    sampler.fadeDuration = animator.fadeInTime;
+    sampler.pose = pool.acquire();
+}
+
+void retireHidden(std::vector<AnimationSampler>& samplers, PosePool& pool) {
+    for (size_t i = samplers.size(); i-- > 1;) {
+        if (samplers[i].fade() >= 1.0f) {
+            releaseOldest(samplers, pool, i);
+            return;
+        }
+    }
 }
 
 void writeBoneTransforms(const Skeleton& skeleton, const std::span<glm::mat4>& pose, BonesUniform& out) {
@@ -102,7 +145,6 @@ void writeBoneTransforms(const Skeleton& skeleton, const std::span<glm::mat4>& p
 }
 
 void animate(Query<AnimatorComponent, Exclude<Disabled>> animators, Local<AnimationCache> cache, const Time& time, RenderAPI& api) {
-    BonesUniform bonesData {};
     for (auto [entity, animator] : animators.each()) {
         if (!animator.boneBuffer.getHandle()) {
             animator.boneBuffer = BufferObject(&api, BufferBinding::UNIFORM, sizeof(BonesUniform));
@@ -117,32 +159,31 @@ void animate(Query<AnimatorComponent, Exclude<Disabled>> animators, Local<Animat
             continue;
         }
 
-        startFadeOnClipChange(animator);
+        startSamplerOnClipChange(animator, cache->pool);
 
         const auto& skeleton = *animator.skeleton;
-        const auto& clip = *animator.clips[animator.currentClip];
-        animator.currentTime = advance(animator.currentTime, time.delta, clip, animator.looping);
-        samplePose(animator.currentTime, skeleton, clip, cache->pose);
+        auto& samplers = animator.samplers;
+        animator.currentTime = advance(animator.currentTime, time.delta, *animator.clips[animator.currentClip], animator.looping);
+        samplers.back().time = animator.currentTime;
+        samplers.back().looping = animator.looping;
 
-        auto& fade = animator.crossFade;
-        fade.appliedTime = animator.currentTime;
-        fade.appliedLooping = animator.looping;
-
-        if (fade.fromClip < animator.clips.size()) {
-            fade.elapsed += time.delta;
-            if (fade.elapsed < fade.duration) {
-                const auto& from = *animator.clips[fade.fromClip];
-                fade.fromTime = advance(fade.fromTime, time.delta, from, fade.fromLooping);
-                samplePose(fade.fromTime, skeleton, from, cache->fromPose);
-                blendPose(cache->pose, cache->fromPose, fade.elapsed / fade.duration);
-            } else {
-                fade.fromClip = AnimatorComponent::kNoClip;
+        for (size_t i = 0; i < samplers.size(); ++i) {
+            auto& sampler = samplers[i];
+            if (i + 1 < samplers.size()) {
+                sampler.time = advance(sampler.time, time.delta, *animator.clips[sampler.clip], sampler.looping);
             }
+            sampler.fadeElapsed += time.delta;
         }
 
-        composeLocal(cache->pose, cache->local);
-        writeBoneTransforms(skeleton, cache->local, bonesData);
-        animator.boneBuffer.updateBuffer(&api, &bonesData, sizeof(bonesData));
+        retireHidden(samplers, cache->pool);
+
+        for (auto& sampler : samplers) {
+            samplePose(sampler.time, skeleton, *animator.clips[sampler.clip], sampler.pose);
+        }
+
+        composeLocal(blendStack(samplers, cache->pose), cache->local);
+        writeBoneTransforms(skeleton, cache->local, cache->bonesData);
+        animator.boneBuffer.updateBuffer(&api, &cache->bonesData, sizeof(cache->bonesData));
     }
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <limits>
+#include <algorithm>
 #include <vector>
 
 #include "render/Animation.h"
@@ -9,30 +9,29 @@
 
 namespace ailo {
 
-struct AnimatorComponent {
-    static constexpr uint32_t kNoClip = std::numeric_limits<uint32_t>::max();
+struct AnimationSampler {
+    uint32_t clip         = 0;
+    float    time         = 0.0f;
+    bool     looping      = true;
+    float    fadeElapsed  = 0.0f;
+    float    fadeDuration = 0.0f;
+    std::vector<NodeTransform> pose;
 
-    // Kept by AnimationPlugin to crossfade from the previous clip when currentClip changes.
-    struct CrossFade {
-        uint32_t appliedClip = kNoClip; // the clip the plugin last played; currentClip differing from it starts a fade
-        float    appliedTime = 0.0f;    // its time then, since the game resets currentTime when it switches clips
-        bool     appliedLooping = true;
-        uint32_t fromClip = kNoClip;    // kNoClip when not fading
-        float    fromTime = 0.0f;
-        bool     fromLooping = true;
-        float    elapsed = 0.0f;
-        float    duration = 0.0f;       // fadeInTime when the fade started
-    };
+    float fade() const { return fadeDuration > 0.0f ? std::min(fadeElapsed / fadeDuration, 1.0f) : 1.0f; }
+};
+
+struct AnimatorComponent {
+    static constexpr uint32_t kMaxSamplers = 8;
 
     AssetPtr<Skeleton> skeleton;
     std::vector<AssetPtr<AnimationClip>> clips;
     uint32_t currentClip = 0;
-    float fadeInTime     = 0.0f;   // seconds to crossfade from the previous clip when currentClip changes
+    float fadeInTime     = 0.0f;
     float currentTime    = 0.0f;
     bool  playing        = true;
     bool  looping        = true;
-    BufferObject boneBuffer; // bone matrices read by every Skin that points at this entity; created by AnimationPlugin
-    CrossFade crossFade;
+    BufferObject boneBuffer;
+    std::vector<AnimationSampler> samplers;
 };
 
 } // namespace ailo
