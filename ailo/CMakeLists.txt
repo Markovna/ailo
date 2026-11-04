@@ -135,6 +135,8 @@ add_library(ailo STATIC
     ecs/AnimatorComponent.h
     ecs/AnimationPlugin.cpp
     ecs/AnimationPlugin.h
+    ecs/AnimationStateMachine.cpp
+    ecs/AnimationStateMachine.h
     ecs/Spawn.cpp
     ecs/Spawn.h
     platform/Platform.cpp
