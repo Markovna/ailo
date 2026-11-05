@@ -34,11 +34,6 @@ set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${CMAKE_SOURCE_DIR}/third_party/glslang ${CMAKE_CURRENT_BINARY_DIR}/glslang)
-# On MinGW glslang links its executables with -static, which pulls in the static libwinpthread.a that fails to link
-# with CLion's toolchain (same as assimp in the root). Link the runtime like every other target.
-if (MINGW)
-    set_target_properties(glslang-standalone PROPERTIES LINK_OPTIONS "")
-endif ()
 
 target_link_libraries(matc PRIVATE
         ailo_fileio
