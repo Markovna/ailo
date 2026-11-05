@@ -92,7 +92,7 @@ It is an error if the source has no skinned mesh or a file has no animations.
 
 Meshes are triangulated; points and lines are dropped. Indices are stored 16-bit when the mesh has at most 65536
 vertices (after optimization) and 32-bit otherwise; meshes are never split.
-Vertices are stored in the package's layout (`StaticVertex`, or `SkinnedVertex` with up to 4 bone weights for
+Vertices are stored in the package's layout (`StaticVertex`, or `SkinnedVertex` with up to 4 normalized bone weights for
 skinned meshes); identical vertices are merged. Unless `"optimize": false`, each mesh is then optimized with
 [meshoptimizer](https://github.com/zeux/meshoptimizer): vertices identical in that layout are merged again,
 triangles are reordered for the post-transform vertex cache and then for overdraw (accepting up to 5% worse cache

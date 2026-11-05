@@ -367,6 +367,12 @@ private:
                     sv.boneIndices[int(k)] = bws[k].first;
                     sv.boneWeights[int(k)] = bws[k].second;
                 }
+                // Exporters don't always write weights that sum to 1, and assimp only normalizes the vertices it trims.
+                // Skinning scales a vertex toward the model origin by the sum, which tears the mesh.
+                const float total = sv.boneWeights[0] + sv.boneWeights[1] + sv.boneWeights[2] + sv.boneWeights[3];
+                if (total > 0.0f) {
+                    for (int k = 0; k < 4; k++) sv.boneWeights[k] /= total;
+                }
                 vertices.push_back(sv);
             }
             storeVertices(mesh, vertices);
