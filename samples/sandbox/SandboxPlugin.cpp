@@ -8,6 +8,7 @@
 
 #include "app/App.h"
 #include "assets/AssetServer.h"
+#include "ecs/AnimatorComponent.h"
 #include "ecs/Camera.h"
 #include "ecs/Lights.h"
 #include "ecs/SceneLighting.h"
@@ -87,6 +88,25 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
     // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMaterial));
 }
 
+void cycleClips(Query<AnimatorComponent> animators) {
+    constexpr float kCrossFade = 0.3f;
+
+    for (auto [entity, animator] : animators.each()) {
+        if (animator.clips.size() < 2) {
+            continue;
+        }
+        animator.looping = false;
+        if (animator.samplers.empty()) {
+            continue;
+        }
+        const auto& sampler = animator.samplers.back();
+        if (sampler.time >= animator.clips[sampler.clip]->duration - kCrossFade) {
+            animator.currentClip = (animator.currentClip + 1) % animator.clips.size();
+            animator.fadeInTime = kCrossFade;
+        }
+    }
+}
+
 void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances,
                  RenderAPI& api, Renderer& renderer, const PhysicsWorld* physics) {
     ImGui::Begin("Console");
@@ -125,6 +145,7 @@ void SandboxPlugin::build(App& app) {
     app.addPlugin(ImGuiPlugin {});   // the console needs ImGui; no-op if already added
 
     app.addSystem(Stage::Startup, setupScene, "Sandbox::setupScene");
+    app.addSystem(Stage::Update, cycleClips, "Sandbox::cycleClips");
     app.addSystem(Stage::Update, drawConsole, "Sandbox::drawConsole");
 }
 

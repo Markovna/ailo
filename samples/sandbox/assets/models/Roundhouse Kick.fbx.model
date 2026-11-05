@@ -1,4 +1,5 @@
 {
     "source": "Roundhouse Kick.fbx",
-    "material": "engine:/materials/lit.mat"
+    "material": "engine:/materials/lit.mat",
+    "animations": { "jab": "Lead Jab.fbx" }
 }
