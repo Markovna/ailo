@@ -15,7 +15,9 @@
 namespace ailo::model {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
-static constexpr uint32_t kModelPackageVersion = 2;
+static constexpr uint32_t kModelPackageVersion = 3;
+
+static constexpr uint32_t kMaxSkinBones = 256;
 
 // Vertices are stored in the layout the engine uploads; the attribute locations are VertexLocation's.
 struct StaticVertex {
@@ -32,7 +34,7 @@ struct SkinnedVertex {
     glm::vec2 texCoord;
     glm::vec3 normal;
     glm::vec4 tangent;
-    glm::ivec4 boneIndices; // into the skeleton's bone outputs (SkeletonNode::boneOutputIndex)
+    glm::ivec4 boneIndices; // into the mesh's Skin
     glm::vec4 boneWeights;
 };
 
@@ -45,6 +47,7 @@ uint32_t vertexStride(VertexLayout layout);
 
 struct Mesh {
     VertexLayout layout = VertexLayout::Static;
+    int32_t skin = -1;                  // into ModelPackage::skins; -1 for a static mesh
     uint32_t vertexCount = 0;
     std::vector<uint8_t> vertices;      // vertexCount * vertexStride(layout) bytes
     std::vector<uint32_t> indices;      // triangle list; stored 16-bit when fitsUint16Indices
@@ -94,8 +97,11 @@ struct SkeletonNode {
     std::string name;
     int32_t parent = -1;                // earlier in ModelPackage::skeleton, -1 for a root
     glm::mat4 localTransform { 1.0f };
-    glm::mat4 inverseBindPose { 1.0f };
-    int32_t boneOutputIndex = -1;       // -1: an ancestor of bones, not a bone itself
+};
+
+struct Skin {
+    std::vector<uint32_t> nodeIndices;      // skin bone -> ModelPackage::skeleton
+    std::vector<glm::mat4> inverseBinds;    // same order
 };
 
 template<typename T>
@@ -123,6 +129,7 @@ struct ModelPackage {
     std::vector<Material> materials;
     std::vector<Instance> instances;
     std::vector<SkeletonNode> skeleton; // parent-first; empty if no mesh is skinned
+    std::vector<Skin> skins;
     std::vector<Clip> clips;
     std::vector<texture::TexturePackage> textures;
 

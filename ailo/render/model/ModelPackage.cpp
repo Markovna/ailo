@@ -13,13 +13,14 @@ using binary::makeTag;
 using binary::Reader;
 using binary::Writer;
 
-// Package layout: "AMDL" | u32 version | chunks... (see common/BinaryStream.h). Meshes, materials, clips and
+// Package layout: "AMDL" | u32 version | chunks... (see common/BinaryStream.h). Meshes, materials, skins, clips and
 // textures are one chunk each, in index order; instances and the skeleton are one chunk for all.
 constexpr uint32_t kMagic         = makeTag("AMDL");
 constexpr uint32_t kChunkMesh     = makeTag("MESH");
 constexpr uint32_t kChunkMaterial = makeTag("MTRL");
 constexpr uint32_t kChunkInstance = makeTag("INST");
 constexpr uint32_t kChunkSkeleton = makeTag("SKEL");
+constexpr uint32_t kChunkSkin     = makeTag("SKIN");
 constexpr uint32_t kChunkClip     = makeTag("CLIP");
 constexpr uint32_t kChunkTexture  = makeTag("TXTR");
 
@@ -113,6 +114,24 @@ std::string checkTexture(const TextureRef& t, size_t textureCount, const std::st
     return {};
 }
 
+std::string checkSkinnedMesh(const Mesh& mesh, const std::vector<Skin>& skins, const std::string& what) {
+    if (mesh.skin < 0 || size_t(mesh.skin) >= skins.size()) {
+        return what + " uses skin " + std::to_string(mesh.skin) + ", the package has " + std::to_string(skins.size());
+    }
+    const auto boneCount = int32_t(skins[mesh.skin].nodeIndices.size());
+    for (uint32_t v = 0; v < mesh.vertexCount; v++) {
+        SkinnedVertex vertex;
+        std::memcpy(&vertex, mesh.vertices.data() + size_t(v) * sizeof(SkinnedVertex), sizeof(vertex));
+        for (int k = 0; k < 4; k++) {
+            if (vertex.boneWeights[k] != 0.0f && (vertex.boneIndices[k] < 0 || vertex.boneIndices[k] >= boneCount)) {
+                return what + " vertex " + std::to_string(v) + " uses bone " + std::to_string(vertex.boneIndices[k]) +
+                       ", its skin has " + std::to_string(boneCount);
+            }
+        }
+    }
+    return {};
+}
+
 }
 
 uint32_t vertexStride(VertexLayout layout) {
@@ -142,6 +161,9 @@ std::string ModelPackage::validate() const {
         }
         if (mesh.layout == VertexLayout::Skinned && skeleton.empty()) {
             return what + " is skinned but the package has no skeleton";
+        }
+        if (mesh.layout == VertexLayout::Skinned) {
+            if (auto error = checkSkinnedMesh(mesh, skins, what); !error.empty()) return error;
         }
     }
 
@@ -180,6 +202,25 @@ std::string ModelPackage::validate() const {
         }
     }
 
+    for (size_t i = 0; i < skins.size(); i++) {
+        const auto& skin = skins[i];
+        const std::string what = "skin " + std::to_string(i);
+        if (skin.nodeIndices.size() != skin.inverseBinds.size()) {
+            return what + " has " + std::to_string(skin.nodeIndices.size()) + " nodes and " +
+                   std::to_string(skin.inverseBinds.size()) + " inverse binds";
+        }
+        if (skin.nodeIndices.size() > kMaxSkinBones) {
+            return what + " has " + std::to_string(skin.nodeIndices.size()) + " bones, the limit is " +
+                   std::to_string(kMaxSkinBones);
+        }
+        for (uint32_t node : skin.nodeIndices) {
+            if (node >= skeleton.size()) {
+                return what + " uses node " + std::to_string(node) + ", the skeleton has " +
+                       std::to_string(skeleton.size());
+            }
+        }
+    }
+
     for (size_t i = 0; i < textures.size(); i++) {
         if (auto error = textures[i].validate(); !error.empty()) {
             return "embedded texture " + std::to_string(i) + ": " + error;
@@ -196,6 +237,7 @@ std::vector<uint8_t> ModelPackage::serialize() const {
     for (const auto& mesh : meshes) {
         w.beginChunk(kChunkMesh);
         w.u8(uint8_t(mesh.layout));
+        w.i32(mesh.skin);
         w.u32(mesh.vertexCount);
         w.u32(uint32_t(mesh.vertices.size()));
         w.bytes(mesh.vertices.data(), mesh.vertices.size());
@@ -244,9 +286,16 @@ std::vector<uint8_t> ModelPackage::serialize() const {
             w.string(node.name);
             w.i32(node.parent);
             writeMat4(w, node.localTransform);
-            writeMat4(w, node.inverseBindPose);
-            w.i32(node.boneOutputIndex);
         }
+        w.endChunk();
+    }
+
+    for (const auto& skin : skins) {
+        w.beginChunk(kChunkSkin);
+        w.u32(uint32_t(skin.nodeIndices.size()));
+        for (uint32_t node : skin.nodeIndices) w.u32(node);
+        w.u32(uint32_t(skin.inverseBinds.size()));
+        for (const auto& inverseBind : skin.inverseBinds) writeMat4(w, inverseBind);
         w.endChunk();
     }
 
@@ -302,6 +351,7 @@ std::optional<ModelPackage> ModelPackage::deserialize(std::span<const uint8_t> d
             case kChunkMesh: {
                 auto& mesh = pkg.meshes.emplace_back();
                 mesh.layout = c.enumeration(VertexLayout::Skinned);
+                mesh.skin = c.i32();
                 mesh.vertexCount = c.u32();
                 auto vertices = c.sub(c.u32());
                 mesh.vertices.assign(vertices.begin(), vertices.end());
@@ -360,11 +410,16 @@ std::optional<ModelPackage> ModelPackage::deserialize(std::span<const uint8_t> d
                     node.name = r.string();
                     node.parent = r.i32();
                     node.localTransform = readMat4(r);
-                    node.inverseBindPose = readMat4(r);
-                    node.boneOutputIndex = r.i32();
                     return node;
                 });
                 break;
+
+            case kChunkSkin: {
+                auto& skin = pkg.skins.emplace_back();
+                readArray(c, skin.nodeIndices, [](Reader& r) { return r.u32(); });
+                readArray(c, skin.inverseBinds, [](Reader& r) { return readMat4(r); });
+                break;
+            }
 
             case kChunkClip: {
                 auto& clip = pkg.clips.emplace_back();

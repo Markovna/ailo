@@ -182,24 +182,23 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
         meshes.push_back(std::move(mesh));
     }
 
-    AssetPtr<Skeleton> skeleton;
-    if (!pkg->skeleton.empty()) {
-        skeleton = m_storages.skeletons->emplace(noname_t{});
-        skeleton->nodes.reserve(pkg->skeleton.size());
-        skeleton->bindPose.reserve(pkg->skeleton.size());
-        skeleton->bindPoseTransforms.reserve(pkg->skeleton.size());
-        skeleton->inverseBindPose.reserve(pkg->skeleton.size());
-        for (const auto& src : pkg->skeleton) {
-            skeleton->nodeNameToIndex[src.name] = static_cast<uint32_t>(skeleton->nodes.size());
-            skeleton->nodes.push_back(NodeInfo {
-                .name = src.name,
-                .parentIndex = src.parent,
-                .boneOutputIndex = src.boneOutputIndex,
-            });
-            skeleton->bindPose.push_back(src.localTransform);
-            skeleton->bindPoseTransforms.push_back(decompose(src.localTransform));
-            skeleton->inverseBindPose.push_back(src.inverseBindPose);
-        }
+    Skeleton skeleton;
+    skeleton.nodes.reserve(pkg->skeleton.size());
+    skeleton.restPose.reserve(pkg->skeleton.size());
+    for (const auto& src : pkg->skeleton) {
+        skeleton.nodes.push_back(NodeInfo { .name = src.name, .parentIndex = src.parent });
+        skeleton.restPose.push_back(decompose(src.localTransform));
+    }
+    skeleton.pose = skeleton.restPose;
+    skeleton.updateModelPose();
+
+    std::vector<AssetPtr<Skin>> skins;
+    skins.reserve(pkg->skins.size());
+    for (auto& src : pkg->skins) {
+        auto skin = m_storages.skins->emplace(noname_t{});
+        skin->nodeIndices = std::move(src.nodeIndices);
+        skin->inverseBinds = std::move(src.inverseBinds);
+        skins.push_back(std::move(skin));
     }
 
     std::vector<AssetPtr<AnimationClip>> clips;
@@ -226,11 +225,12 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
     Model& model = ctx.construct();
     model.instances.reserve(pkg->instances.size());
     for (const auto& src : pkg->instances) {
+        const int32_t skin = pkg->meshes[src.mesh].skin;
         model.instances.push_back(Model::MeshInstance {
             .mesh = meshes[src.mesh],
             .material = materials[src.material],
             .transform = src.transform,
-            .skinned = pkg->meshes[src.mesh].layout == model::VertexLayout::Skinned,
+            .skin = skin >= 0 ? skins[skin] : AssetPtr<Skin> {},
         });
     }
     model.skeleton = std::move(skeleton);

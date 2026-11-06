@@ -1,5 +1,8 @@
 #include "RenderPlugin.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "DefaultAssetFactory.h"
 #include "DefaultAssets.h"
 #include "IndirectLight.h"
@@ -14,10 +17,46 @@
 #include "ecs/SceneLighting.h"
 #include "ecs/Transform.h"
 #include "platform/PlatformPlugin.h"
+#include "render/model/ModelPackage.h"
+#include "utils/Log.h"
 
 namespace ailo {
 
 namespace {
+
+static_assert(sizeof(BonesUniform::Bone) == sizeof(glm::mat4));
+static_assert(BonesUniform::kMaxBones == model::kMaxSkinBones);
+
+struct SkinningScratch {
+    std::vector<glm::mat4> bones;
+};
+
+// In the Render stage so that it sees the poses every PostUpdate system wrote, whatever the plugin order.
+void updateSkinning(Scene& scene, RenderAPI& api, Query<Renderable, Exclude<Disabled>> renderables,
+                    Local<SkinningScratch> scratch) {
+    for (auto&& [entity, renderable] : renderables.each()) {
+        if (!renderable.skin) continue;
+
+        if (!renderable.boneBuffer.getHandle()) {
+            renderable.boneBuffer = BufferObject(&api, BufferBinding::UNIFORM, sizeof(BonesUniform));
+            BonesUniform identity;
+            for (auto& bone : identity.bones) {
+                bone.transform = glm::mat4(1.0f);
+            }
+            renderable.boneBuffer.updateBuffer(&api, &identity, sizeof(identity));
+        }
+
+        const Skeleton* skeleton = scene.isValid(renderable.skeleton) ? scene.tryGet<Skeleton>(renderable.skeleton) : nullptr;
+        if (!skeleton) continue;
+
+        scratch->bones.resize(std::min<size_t>(renderable.skin->nodeIndices.size(), BonesUniform::kMaxBones));
+        if (!computeBoneMatrices(*skeleton, *renderable.skin, scratch->bones)) {
+            log::error("Renderable {}: its skin uses nodes the skeleton on entity {} doesn't have",
+                       entt::to_integral(entity), entt::to_integral(renderable.skeleton));
+        }
+        renderable.boneBuffer.updateBuffer(&api, scratch->bones.data(), scratch->bones.size() * sizeof(glm::mat4));
+    }
+}
 
 void render(Renderer& renderer, World& world, Query<Renderable> renderables, Query<Camera, TransformComponent> cameras,
             const Window& window) {
@@ -49,7 +88,7 @@ void RenderPlugin::build(App& app) {
     auto& textureStorage = addAssetType<Texture>(app);
     addAssetType<Material>(app);
     auto& meshStorage = addAssetType<Mesh>(app);
-    auto& skeletons = addAssetType<Skeleton>(app);
+    auto& skins = addAssetType<Skin>(app);
     auto& clips = addAssetType<AnimationClip>(app);
     auto& materialInstances = addAssetType<MaterialInstance>(app);
     addAssetType<Model>(app);
@@ -64,7 +103,7 @@ void RenderPlugin::build(App& app) {
         .textures = &textureStorage,
         .meshes = &meshStorage,
         .materialInstances = &materialInstances,
-        .skeletons = &skeletons,
+        .skins = &skins,
         .clips = &clips,
     }));
 
@@ -74,6 +113,7 @@ void RenderPlugin::build(App& app) {
 
     app.insertResource<Renderer>(&api, server, materialInstances, settings);
 
+    app.addSystem(Stage::Render, updateSkinning, "RenderPlugin::updateSkinning");
     app.addSystem(Stage::Render, render, "RenderPlugin::render");
 }
 

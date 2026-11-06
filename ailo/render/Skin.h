@@ -1,12 +1,15 @@
 #pragma once
-#include "ecs/Scene.h"
+#include <cstdint>
+#include <vector>
+#include <glm/glm.hpp>
 
 namespace ailo {
 
-// Marks a mesh entity as skinned. Its bone matrices come from the AnimatorComponent on `animator`;
-// if that entity is gone (or was never created), the renderer binds identity bones instead.
+// Binds a mesh to a skeleton: the mesh's vertices index these bones. Only works with skeletons that have the node order
+// of the one it was compiled against.
 struct Skin {
-    Entity animator = entt::null;
+    std::vector<uint32_t> nodeIndices;      // skin bone -> Skeleton::nodes
+    std::vector<glm::mat4> inverseBinds;    // same order
 };
 
 }

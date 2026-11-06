@@ -3,9 +3,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "assets/AssetServer.h"
 #include "render/Animation.h"
-#include "render/Skeleton.h"
-#include "render/RenderPrimitive.h"
 
 namespace ailo {
 
@@ -23,13 +22,11 @@ struct AnimationSampler {
 struct AnimatorComponent {
     static constexpr uint32_t kMaxSamplers = 8;
 
-    AssetPtr<Skeleton> skeleton;
     std::vector<AssetPtr<AnimationClip>> clips;
     uint32_t currentClip = 0;
     float fadeInTime     = 0.0f;
     bool  playing        = true;
     bool  looping        = true;
-    BufferObject boneBuffer;
     std::vector<AnimationSampler> samplers;
 };
 

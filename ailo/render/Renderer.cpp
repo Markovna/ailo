@@ -19,8 +19,6 @@
 #include "Renderable.h"
 #include "ShadowMapManager.h"
 #include "common/Frustum.h"
-#include "Skin.h"
-#include "ecs/AnimatorComponent.h"
 
 namespace ailo {
 
@@ -405,13 +403,13 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
   for(const auto& [entity, renderable] : renderables.each()) {
     if (scene.registry().all_of<Disabled>(entity)) continue;
     const auto tr = scene.tryGet<TransformComponent>(entity);
-    auto skin = scene.tryGet<Skin>(entity);
+    const bool skinned = static_cast<bool>(renderable.skin);
     auto mesh = renderable.mesh;
     const glm::mat4 model = tr ? tr->world().toMatrix() : glm::mat4(1.0f);
 
     // Skinned meshes are never culled: their bind-pose bounds don't follow the animation.
     uint32_t visibility = visibleEverywhere;
-    if (!skin) {
+    if (!skinned) {
       const Aabb bounds = mesh->bounds.transformed(model);
       visibility = viewFrustum.intersects(bounds) ? kVisibleInView : 0u;
       if (renderable.castShadows) {
@@ -426,10 +424,10 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
     uniformBufferData.model = model;
     uniformBufferData.modelInverse = inverse(uniformBufferData.model);
     uniformBufferData.modelInverseTranspose = transpose(uniformBufferData.modelInverse);
-    uniformBufferData.flags = skin ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
+    uniformBufferData.flags = skinned ? std::to_underlying(ObjectFlags::SkinningEnabled) : 0u;
 
     material::Variant variant {};
-    if (skin) variant.key |= material::Variant::SKINNING;
+    if (skinned) variant.key |= material::Variant::SKINNING;
     if (renderable.receiveShadows) variant.key |= material::Variant::SHADOWS;
 
     for(size_t i = 0; i < mesh->faces.size(); i++) {
@@ -445,19 +443,10 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
 
       auto& entry = m_renderData.emplace_back();
 
-      if (skin) {
-        BufferHandle bones = m_dummyBonesBuffer;
-        if (scene.isValid(skin->animator)) {
-          auto animator = scene.tryGet<AnimatorComponent>(skin->animator);
-          if (animator && animator->boneBuffer.getHandle()) {
-            bones = animator->boneBuffer.getHandle();
-          }
-        }
-
+      if (skinned) {
         auto& objectDescriptor = renderable.descriptorSet;
-        if (!objectDescriptor || renderable.descriptorSetBones != bones) {
+        if (!objectDescriptor) {
           objectDescriptor = backend.createDescriptorSet(m_objectDescriptorSetLayout);
-          renderable.descriptorSetBones = bones;
 
           backend.updateDescriptorSetBuffer(
           objectDescriptor, m_objectsUniformBufferHandle,
@@ -465,7 +454,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
           0, sizeof(PerObjectUniforms));
 
           backend.updateDescriptorSetBuffer(
-            objectDescriptor, bones,
+            objectDescriptor, renderable.boneBuffer.getHandle(),
             std::to_underlying(PerObjectDescriptorBindings::BONE_UNIFORMS),
             0, sizeof(BonesUniform));
         }

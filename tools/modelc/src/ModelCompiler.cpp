@@ -145,7 +145,7 @@ private:
         if (m_boneNames.empty()) return;
 
         // Bones and all their ancestors, so that intermediate node transforms (e.g. "Armature") are accumulated into
-        // the bones' world transforms: inverseBindPose was computed from the full hierarchy.
+        // the bones' world transforms: the inverse binds were computed from the full hierarchy.
         std::unordered_set<std::string> included;
         std::function<bool(const aiNode*)> markAncestors = [&](const aiNode* node) {
             bool anyChildIncluded = false;
@@ -161,36 +161,20 @@ private:
         };
         markAncestors(m_scene->mRootNode);
 
-        std::unordered_map<std::string, uint32_t> nodeIndices;
-        int32_t nextBoneOutput = 0;
         std::function<void(const aiNode*, int32_t)> addNodes = [&](const aiNode* node, int32_t parent) {
             std::string name = node->mName.C_Str();
             if (!included.contains(name)) return;
 
             auto index = int32_t(m_pkg.skeleton.size());
-            nodeIndices[name] = index;
+            m_nodeIndices[name] = uint32_t(index);
             SkeletonNode& n = m_pkg.skeleton.emplace_back();
             n.name = name;
             n.parent = parent;
             n.localTransform = toGlm(node->mTransformation);
-            if (m_boneNames.contains(name)) {
-                n.boneOutputIndex = nextBoneOutput;
-                m_boneOutputs[name] = nextBoneOutput++;
-            }
 
             for (unsigned i = 0; i < node->mNumChildren; i++) addNodes(node->mChildren[i], index);
         };
         addNodes(m_scene->mRootNode, -1);
-
-        for (unsigned i = 0; i < m_scene->mNumMeshes; i++) {
-            const aiMesh* mesh = m_scene->mMeshes[i];
-            for (unsigned j = 0; j < mesh->mNumBones; j++) {
-                const aiBone* bone = mesh->mBones[j];
-                if (auto it = nodeIndices.find(bone->mName.C_Str()); it != nodeIndices.end()) {
-                    m_pkg.skeleton[it->second].inverseBindPose = toGlm(bone->mOffsetMatrix);
-                }
-            }
-        }
     }
 
     void buildMaterials() {
@@ -347,17 +331,23 @@ private:
                 continue;
             }
 
+            Skin skin;
             std::vector<std::vector<std::pair<int32_t, float>>> weights(src->mNumVertices);
             for (unsigned j = 0; j < src->mNumBones; j++) {
                 const aiBone* bone = src->mBones[j];
-                auto it = m_boneOutputs.find(bone->mName.C_Str());
-                if (it == m_boneOutputs.end()) continue;
+                auto it = m_nodeIndices.find(bone->mName.C_Str());
+                if (it == m_nodeIndices.end()) continue;
+                const auto skinBone = int32_t(skin.nodeIndices.size());
+                skin.nodeIndices.push_back(it->second);
+                skin.inverseBinds.push_back(toGlm(bone->mOffsetMatrix));
                 for (unsigned k = 0; k < bone->mNumWeights; k++) {
-                    weights[bone->mWeights[k].mVertexId].push_back({ it->second, bone->mWeights[k].mWeight });
+                    weights[bone->mWeights[k].mVertexId].push_back({ skinBone, bone->mWeights[k].mWeight });
                 }
             }
 
             mesh.layout = VertexLayout::Skinned;
+            mesh.skin = int32_t(m_pkg.skins.size());
+            m_pkg.skins.push_back(std::move(skin));
             std::vector<SkinnedVertex> vertices;
             vertices.reserve(src->mNumVertices);
             for (unsigned v = 0; v < src->mNumVertices; v++) {
@@ -519,7 +509,7 @@ private:
     std::vector<std::string> m_meshNodePaths;                          // paths of the nodes that have meshes
     std::set<std::string> m_usedNodeMaterials;                         // nodeMaterials keys that matched a node
     std::unordered_map<std::string, uint32_t> m_nodeMaterialIndices;   // nodeMaterials key -> package material
-    std::unordered_map<std::string, int32_t> m_boneOutputs;     // bone name -> SkeletonNode::boneOutputIndex
+    std::unordered_map<std::string, uint32_t> m_nodeIndices;           // bone or ancestor name -> skeleton node
     std::map<std::pair<const aiTexture*, bool>, uint32_t> m_embedded;   // (texture, srgb) -> package texture
 };
 

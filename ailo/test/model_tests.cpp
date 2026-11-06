@@ -47,6 +47,7 @@ ModelPackage makePackage() {
     triangle[1].boneIndices = glm::ivec4(1, 0, 0, 0);
     triangle[1].boneWeights = glm::vec4(1.0f, 0.0f, 0.0f, 0.0f);
     pkg.meshes.push_back(makeMesh(VertexLayout::Skinned, triangle, { 0, 1, 2 }));
+    pkg.meshes.back().skin = 0;
 
     Material& lit = pkg.materials.emplace_back();
     lit.name = "Stone";
@@ -64,9 +65,11 @@ ModelPackage makePackage() {
     pkg.instances.push_back({ 0, 0, glm::mat4(1.0f) });
     pkg.instances.push_back({ 1, 1, glm::mat4(2.0f) });
 
-    pkg.skeleton.push_back({ "Armature", -1, glm::mat4(1.0f), glm::mat4(1.0f), -1 });
-    pkg.skeleton.push_back({ "Hips", 0, glm::mat4(3.0f), glm::mat4(0.5f), 0 });
-    pkg.skeleton.push_back({ "Spine", 1, glm::mat4(1.0f), glm::mat4(1.0f), 1 });
+    pkg.skeleton.push_back({ "Armature", -1, glm::mat4(1.0f) });
+    pkg.skeleton.push_back({ "Hips", 0, glm::mat4(3.0f) });
+    pkg.skeleton.push_back({ "Spine", 1, glm::mat4(1.0f) });
+
+    pkg.skins.push_back({ { 2, 1 }, { glm::mat4(1.0f), glm::mat4(0.5f) } });
 
     Clip& clip = pkg.clips.emplace_back();
     clip.name = "Kick";
@@ -102,6 +105,8 @@ void testRoundTrip() {
     CHECK_EQ(out->meshes[0].indices, pkg.meshes[0].indices);
     CHECK_EQ(out->meshes[1].layout, VertexLayout::Skinned);
     CHECK_EQ(out->meshes[1].vertices, pkg.meshes[1].vertices);
+    CHECK_EQ(out->meshes[0].skin, -1);
+    CHECK_EQ(out->meshes[1].skin, 0);
 
     REQUIRE_EQ(out->materials.size(), 2);
     const auto& lit = out->materials[0];
@@ -123,8 +128,11 @@ void testRoundTrip() {
     REQUIRE_EQ(out->skeleton.size(), 3);
     CHECK(out->skeleton[1].name == "Hips" && out->skeleton[1].parent == 0);
     CHECK_EQ(out->skeleton[1].localTransform, glm::mat4(3.0f));
-    CHECK_EQ(out->skeleton[1].inverseBindPose, glm::mat4(0.5f));
-    CHECK(out->skeleton[0].boneOutputIndex == -1 && out->skeleton[2].boneOutputIndex == 1);
+
+    REQUIRE_EQ(out->skins.size(), 1);
+    CHECK_EQ(out->skins[0].nodeIndices, std::vector<uint32_t>({ 2, 1 }));
+    REQUIRE_EQ(out->skins[0].inverseBinds.size(), 2);
+    CHECK_EQ(out->skins[0].inverseBinds[1], glm::mat4(0.5f));
 
     REQUIRE_EQ(out->clips.size(), 1);
     const auto& clip = out->clips[0];
@@ -195,6 +203,38 @@ void testValidate() {
         auto pkg = makePackage();
         pkg.skeleton[1].parent = 2;
         CHECK(contains(pkg.validate(), "parents must come first"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.meshes[1].skin = 1;
+        CHECK(contains(pkg.validate(), "uses skin 1"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.meshes[1].skin = -1;
+        CHECK(contains(pkg.validate(), "uses skin -1"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.skins[0].nodeIndices.resize(1);
+        pkg.skins[0].inverseBinds.resize(1);
+        CHECK(contains(pkg.validate(), "uses bone 1"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.skins[0].nodeIndices[0] = 3;
+        CHECK(contains(pkg.validate(), "uses node 3"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.skins[0].inverseBinds.pop_back();
+        CHECK(contains(pkg.validate(), "inverse binds"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.skins[0].nodeIndices.assign(kMaxSkinBones + 1, 0);
+        pkg.skins[0].inverseBinds.assign(kMaxSkinBones + 1, glm::mat4(1.0f));
+        CHECK(contains(pkg.validate(), "the limit is"));
     }
     {
         auto pkg = makePackage();

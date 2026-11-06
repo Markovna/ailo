@@ -98,9 +98,12 @@ int dump(const fs::path& path) {
 
     std::cout << "instances: " << pkg->instances.size() << "\n";
 
-    size_t bones = 0;
-    for (const auto& node : pkg->skeleton) bones += node.boneOutputIndex >= 0;
-    std::cout << "skeleton: " << pkg->skeleton.size() << " nodes, " << bones << " bones\n";
+    std::cout << "skeleton: " << pkg->skeleton.size() << " nodes\n";
+
+    std::cout << "skins: " << pkg->skins.size() << "\n";
+    for (size_t i = 0; i < pkg->skins.size(); i++) {
+        std::cout << "  " << i << ": " << pkg->skins[i].nodeIndices.size() << " bones\n";
+    }
 
     std::cout << "clips: " << pkg->clips.size() << "\n";
     for (const auto& clip : pkg->clips) {

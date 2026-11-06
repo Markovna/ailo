@@ -7,11 +7,12 @@ namespace ailo {
 class App;
 
 // Requires: PlatformPlugin (Window), AssetPlugin (AssetServer).
-// Resources: RenderAPI, AssetStorage<T> for Texture, Material, Mesh, Skeleton, AnimationClip, MaterialInstance, Model
+// Resources: RenderAPI, AssetStorage<T> for Texture, Material, Mesh, Skin, AnimationClip, MaterialInstance, Model
 //            and IndirectLight, DefaultAssets, Renderer. Registers the asset loaders, chosen by the key's extension:
 //            Texture (.tex, or an image: .png, .jpg, .jpeg, .tga, .bmp, .hdr), Material (.mat), Model
 //            (.model) and IndirectLight (.light).
-// Render:   Renderer::render(scene) from the first entity with Camera + TransformComponent (identity view if none).
+// Render:   Uploads the bone matrices of skinned Renderables from their Skeletons, then
+//           Renderer::render(scene) from the first entity with Camera + TransformComponent (identity view if none).
 // Teardown: the World clears the scene, then destroys resources in reverse insertion order: the Renderer and the
 //           DefaultAssets (dropping their asset references), the asset storages and finally ~RenderAPI, which waits
 //           for the GPU and destroys the device.

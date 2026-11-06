@@ -16,11 +16,11 @@ struct Model {
         AssetPtr<Mesh> mesh;
         AssetPtr<MaterialInstance> material;
         glm::mat4 transform;
-        bool skinned = false;
+        AssetPtr<Skin> skin;    // null for a static mesh
     };
 
     std::vector<MeshInstance> instances;
-    AssetPtr<Skeleton> skeleton;
+    Skeleton skeleton;          // in rest pose, copied to each spawned instance; no nodes if no mesh is skinned
     std::vector<AssetPtr<AnimationClip>> clips;
 };
 
@@ -30,7 +30,7 @@ public:
         AssetStorage<Texture>* textures;
         AssetStorage<Mesh>* meshes;
         AssetStorage<MaterialInstance>* materialInstances;
-        AssetStorage<Skeleton>* skeletons;
+        AssetStorage<Skin>* skins;
         AssetStorage<AnimationClip>* clips;
     };
 

@@ -6,7 +6,6 @@
 #include "render/DefaultAssetFactory.h"
 #include "render/Model.h"
 #include "render/Renderable.h"
-#include "render/Skin.h"
 #include "render/Texture.h"
 
 namespace ailo::scene {
@@ -49,11 +48,12 @@ Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const Transform&
     const Entity root = scene.addEntity();
     scene.addComponent<TransformComponent>(root, transform);
 
-    // The animator owns the bone buffer that every skinned mesh of this instance reads.
-    if (prefab->skeleton && !prefab->clips.empty()) {
-        auto& animator = scene.addComponent<AnimatorComponent>(root);
-        animator.skeleton = prefab->skeleton;
-        animator.clips = prefab->clips;
+    if (!prefab->skeleton.nodes.empty()) {
+        scene.addComponent<Skeleton>(root, prefab->skeleton);
+        if (!prefab->clips.empty()) {
+            auto& animator = scene.addComponent<AnimatorComponent>(root);
+            animator.clips = prefab->clips;
+        }
     }
 
     for (const auto& instance : prefab->instances) {
@@ -62,14 +62,15 @@ Entity spawnPrefab(Scene& scene, const AssetPtr<Model>& prefab, const Transform&
         Renderable& renderable = scene.addComponent<Renderable>(entity);
         renderable.mesh = instance.mesh;
         renderable.materials.push_back(instance.material);
+        if (instance.skin) {
+            renderable.skin = instance.skin;
+            renderable.skeleton = root;
+        }
 
         // The bone matrices already place skinned vertices in model space, through the whole node hierarchy.
-        const glm::mat4 local = instance.skinned ? glm::mat4(1.0f) : instance.transform;
+        const glm::mat4 local = instance.skin ? glm::mat4(1.0f) : instance.transform;
         scene.addComponent<TransformComponent>(entity, Transform::fromMatrix(local));
         hierarchy::setParent(scene.registry(), entity, root, hierarchy::Keep::Local);
-
-        if (instance.skinned)
-            scene.addComponent<Skin>(entity, root);
     }
 
     return root;

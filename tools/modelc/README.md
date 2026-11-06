@@ -12,7 +12,7 @@ modelc --dump <package.model>
 - `--depfile` lists the `.model` file and every file assimp opened (the source, `.bin` buffers, `.mtl` libraries,
   ...).
 - `--dump` prints the package's meshes (with meshoptimizer's ACMR and ATVR for a 16-entry cache, overfetch and
-  overdraw), materials with their parameters, instances, skeleton, clips and embedded
+  overdraw), materials with their parameters, instances, skeleton, skins, clips and embedded
   textures.
 
 ## Format
@@ -97,5 +97,6 @@ skinned meshes); identical vertices are merged. Unless `"optimize": false`, each
 [meshoptimizer](https://github.com/zeux/meshoptimizer): vertices identical in that layout are merged again,
 triangles are reordered for the post-transform vertex cache and then for overdraw (accepting up to 5% worse cache
 efficiency), and vertices are reordered by first use for vertex fetch. The node hierarchy is flattened into mesh instances with their
-transforms relative to the root. A skeleton (bones and their ancestors) and animation clips are written if any mesh is
-skinned.
+transforms relative to the root. A skeleton (bones and their ancestors), one skin per skinned mesh (its bones as
+skeleton node indices, with their inverse bind matrices, at most 256) and animation clips are written if any mesh is
+skinned. A mesh's vertices index its skin's bones.

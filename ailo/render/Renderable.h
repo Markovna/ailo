@@ -1,6 +1,9 @@
 #pragma once
 #include "MaterialInstance.h"
 #include "Mesh.h"
+#include "RenderPrimitive.h"
+#include "Skin.h"
+#include "ecs/Scene.h"
 
 namespace ailo {
 
@@ -11,10 +14,12 @@ struct Renderable {
     bool castShadows = true;
     bool receiveShadows = true;
 
-    // Per-object set for skinned meshes (their bone buffer differs per entity); created lazily by the Renderer.
+    AssetPtr<Skin> skin;
+    Entity skeleton = entt::null;
+
+    // For skinned meshes; created lazily by RenderPlugin and the Renderer.
+    BufferObject boneBuffer;
     Unique<gpu::DescriptorSet> descriptorSet;
-    // Bone buffer `descriptorSet` was written with; the set is rebuilt when the animator's buffer changes.
-    BufferHandle descriptorSetBones;
 };
 
 }
