@@ -5,7 +5,9 @@
 
 #include "AnimatorComponent.h"
 #include "Transform.h"
+#include "AnimationStateMachine.h"
 #include "app/App.h"
+#include "assets/AssetPlugin.h"
 #include "platform/PlatformPlugin.h"
 #include "render/Skeleton.h"
 
@@ -73,13 +75,9 @@ void releaseOldest(std::vector<AnimationSampler>& samplers, PosePool& pool, size
     samplers.erase(samplers.begin(), samplers.begin() + count);
 }
 
-void startSamplerOnClipChange(AnimatorComponent& animator, PosePool& pool) {
+void pushSampler(AnimatorComponent& animator, PosePool& pool, uint32_t clip, bool looping, float fade) {
     auto& samplers = animator.samplers;
-    if (!samplers.empty() && samplers.back().clip == animator.currentClip) {
-        return;
-    }
-
-    if (animator.fadeInTime <= 0.0f) {
+    if (fade <= 0.0f) {
         releaseOldest(samplers, pool, samplers.size());
     } else if (samplers.size() >= AnimatorComponent::kMaxSamplers) {
         releaseOldest(samplers, pool, samplers.size() - AnimatorComponent::kMaxSamplers + 1);
@@ -87,9 +85,9 @@ void startSamplerOnClipChange(AnimatorComponent& animator, PosePool& pool) {
 
     samplers.reserve(AnimatorComponent::kMaxSamplers);
     auto& sampler = samplers.emplace_back();
-    sampler.clip = animator.currentClip;
-    sampler.looping = animator.looping;
-    sampler.fadeDuration = animator.fadeInTime;
+    sampler.clip = clip;
+    sampler.looping = looping;
+    sampler.fadeDuration = fade;
     sampler.pose = pool.acquire();
 }
 
@@ -105,14 +103,20 @@ void retireHidden(std::vector<AnimationSampler>& samplers, PosePool& pool) {
 
 void animate(Query<AnimatorComponent, Skeleton, Exclude<Disabled>> animators, Local<PosePool> pool, const Time& time) {
     for (auto [entity, animator, skeleton] : animators.each()) {
-        if (!animator.playing || animator.clips.empty()) {
+        if (!animator.playing || !animator.stateMachine || animator.stateMachine->definition().stateCount() == 0) {
             continue;
         }
 
-        startSamplerOnClipChange(animator, *pool);
-
+        auto& stateMachine = *animator.stateMachine;
         auto& samplers = animator.samplers;
-        samplers.back().looping = animator.looping;
+        if (samplers.empty()) {
+            pushSampler(animator, *pool, stateMachine.currentClip(), stateMachine.currentState().looping, 0.0f);
+        }
+        // A transition always starts a new sampler, even into the clip already playing, so re-entering restarts it.
+        if (const auto* transition = stateMachine.update(time.delta)) {
+            pushSampler(animator, *pool, stateMachine.currentClip(), stateMachine.currentState().looping,
+                        transition->fadeDuration);
+        }
 
         for (auto& sampler : samplers) {
             sampler.time = advance(sampler.time, time.delta, *animator.clips[sampler.clip], sampler.looping);
@@ -133,6 +137,7 @@ void animate(Query<AnimatorComponent, Skeleton, Exclude<Disabled>> animators, Lo
 }
 
 void AnimationPlugin::build(App& app) {
+    addAssetType<AnimationStateMachine>(app);
     app.addSystem(Stage::PostUpdate, animate, "AnimationPlugin::animate");
 }
 

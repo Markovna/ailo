@@ -28,8 +28,32 @@ namespace ailo {
 
 namespace {
 
+// Plays every clip in turn, crossfading into the next one before the current one ends.
+void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimationStateMachine>& machines) {
+    constexpr float kCrossFade = 0.3f;
+
+    auto* animator = scene.registry().try_get<AnimatorComponent>(entity);
+    if (!animator || animator->clips.empty()) {
+        return;
+    }
+
+    const auto& clips = animator->clips;
+    const auto count = static_cast<uint32_t>(clips.size());
+    AnimationStateMachine definition;
+    for (const auto& clip : clips) {
+        definition.addState(clip->name, count == 1);
+    }
+    if (count > 1) {
+        for (uint32_t i = 0; i < count; ++i) {
+            definition.addTransition(i, (i + 1) % count, {}, kCrossFade, clips[i]->duration - kCrossFade);
+        }
+    }
+    animator->setStateMachine(machines.emplace(noname_t {}, std::move(definition)));
+}
+
 void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
-                AssetStorage<MaterialInstance>& materialInstances, RenderAPI& api) {
+                AssetStorage<MaterialInstance>& materialInstances, AssetStorage<AnimationStateMachine>& machines,
+                RenderAPI& api) {
     scene::spawn(scene,
         TransformComponent { },
         Camera { .exposure = 1.2 },
@@ -62,10 +86,11 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
     const glm::quat yaw90 = glm::angleAxis(glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
     scene::spawnPrefab(scene, server.load<Model>("models/sponza/Sponza.gltf.model"));
-    scene::spawnPrefab(scene, server.load<Model>("models/Roundhouse Kick.fbx.model"), {
+    const Entity kick = scene::spawnPrefab(scene, server.load<Model>("models/Roundhouse Kick.fbx.model"), {
         .rotation = yaw90,
         .scale = glm::vec3(0.01f),
     });
+    cycleClips(scene, kick, machines);
     scene::spawnPrefab(scene, server.load<Model>("models/DamagedHelmet.glb.model"), {
         .position = { 1.2f, 3.0f, 0.0f },
         .rotation = yaw90,
@@ -86,25 +111,6 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
     }
 
     // useMaterial(scene, api, materialInstances, server, server.load<Material>(kToonMaterial));
-}
-
-void cycleClips(Query<AnimatorComponent> animators) {
-    constexpr float kCrossFade = 0.3f;
-
-    for (auto [entity, animator] : animators.each()) {
-        if (animator.clips.size() < 2) {
-            continue;
-        }
-        animator.looping = false;
-        if (animator.samplers.empty()) {
-            continue;
-        }
-        const auto& sampler = animator.samplers.back();
-        if (sampler.time >= animator.clips[sampler.clip]->duration - kCrossFade) {
-            animator.currentClip = (animator.currentClip + 1) % animator.clips.size();
-            animator.fadeInTime = kCrossFade;
-        }
-    }
 }
 
 void drawConsole(Scene& scene, AssetServer& server, AssetStorage<MaterialInstance>& materialInstances,
@@ -145,7 +151,6 @@ void SandboxPlugin::build(App& app) {
     app.addPlugin(ImGuiPlugin {});   // the console needs ImGui; no-op if already added
 
     app.addSystem(Stage::Startup, setupScene, "Sandbox::setupScene");
-    app.addSystem(Stage::Update, cycleClips, "Sandbox::cycleClips");
     app.addSystem(Stage::Update, drawConsole, "Sandbox::drawConsole");
 }
 

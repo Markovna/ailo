@@ -39,7 +39,7 @@ void updateSkinning(Scene& scene, RenderAPI& api, Query<Renderable, Exclude<Disa
 
         if (!renderable.boneBuffer.getHandle()) {
             renderable.boneBuffer = BufferObject(&api, BufferBinding::UNIFORM, sizeof(BonesUniform));
-            BonesUniform identity;
+            BonesUniform identity{};
             for (auto& bone : identity.bones) {
                 bone.transform = glm::mat4(1.0f);
             }

@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "ecs/AnimationStateMachine.h"
 #include "Testing.h"
 
@@ -5,31 +7,54 @@ using namespace ailo;
 
 namespace {
 
-void testStartsInFirstState() {
-    AnimationStateMachine definition;
-    definition.addState(5);
-    definition.addState(6);
+struct Fixture {
+    AssetStorage<AnimationClip> clipStorage;
+    AssetStorage<AnimationStateMachine> machines;
+    std::vector<AssetPtr<AnimationClip>> clips;
 
-    AnimationStateMachineInstance sm(definition);
+    Fixture() {
+        for (const char* name : { "c0", "c1", "c2", "c3" }) {
+            clips.push_back(clipStorage.emplace(noname_t {}, AnimationClip { .name = name }));
+        }
+    }
+
+    AssetPtr<AnimationStateMachine> add(const AnimationStateMachine& definition) {
+        return machines.emplace(noname_t {}, definition);
+    }
+
+    AnimationStateMachineInstance instance(const AnimationStateMachine& definition) {
+        return AnimationStateMachineInstance(add(definition), clips);
+    }
+};
+
+void testStartsInFirstState() {
+    Fixture fixture;
+    AnimationStateMachine definition;
+    definition.addState("c3");
+    definition.addState("c1");
+
+    auto sm = fixture.instance(definition);
     CHECK_EQ(sm.currentStateIndex(), 0u);
-    CHECK_EQ(sm.currentState().clip, 5u);
+    CHECK_EQ(sm.currentClip(), 3u);
     CHECK(sm.update(0.0f) == nullptr);
 }
 
 void testEmptyDefinitionNeverTransitions() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     CHECK(sm.update(0.0f) == nullptr);
 }
 
 void testTriggerFiresAndIsConsumed() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto idle = definition.addState(0);
-    auto run = definition.addState(1);
+    auto idle = definition.addState("c0");
+    auto run = definition.addState("c1");
     definition.addTransition(idle, run, "go", 0.25f);
     definition.addTransition(run, idle, "go");
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("go");
     auto* taken = sm.update(0.0f);
     REQUIRE(taken != nullptr);
@@ -42,12 +67,13 @@ void testTriggerFiresAndIsConsumed() {
 }
 
 void testResetTriggerCancels() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
     definition.addTransition(a, b, "go");
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("go");
     sm.resetTrigger("go");
     CHECK(sm.update(0.0f) == nullptr);
@@ -55,14 +81,15 @@ void testResetTriggerCancels() {
 }
 
 void testTriggerStaysSetUntilAStateUsesIt() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
-    auto c = definition.addState(2);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
+    auto c = definition.addState("c2");
     definition.addTransition(a, b, "first");
     definition.addTransition(b, c, "second");
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("second");
     CHECK(sm.update(0.0f) == nullptr);
     CHECK_EQ(sm.currentStateIndex(), a);
@@ -75,28 +102,65 @@ void testTriggerStaysSetUntilAStateUsesIt() {
 }
 
 void testFirstAddedTransitionWins() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
-    auto c = definition.addState(2);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
+    auto c = definition.addState("c2");
     definition.addTransition(a, b, "toB");
     definition.addTransition(a, c, "toC");
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("toC");
     sm.setTrigger("toB");
     REQUIRE(sm.update(0.0f) != nullptr);
     CHECK_EQ(sm.currentStateIndex(), b);
 }
 
-void testInstancesAreIndependent() {
+void testMissingClipThrows() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
+    definition.addState("c0");
+    definition.addState("missing");
+    CHECK_THROWS(fixture.instance(definition));
+}
+
+void testClipFollowsState() {
+    Fixture fixture;
+    AnimationStateMachine definition;
+    auto a = definition.addState("c2");
+    auto b = definition.addState("c0");
     definition.addTransition(a, b, "go");
 
-    AnimationStateMachineInstance first(definition);
-    AnimationStateMachineInstance second(definition);
+    auto sm = fixture.instance(definition);
+    CHECK_EQ(sm.currentClip(), 2u);
+    sm.setTrigger("go");
+    REQUIRE(sm.update(0.0f) != nullptr);
+    CHECK_EQ(sm.currentClip(), 0u);
+}
+
+void testInstanceKeepsDefinitionAlive() {
+    Fixture fixture;
+    AnimationStateMachine definition;
+    definition.addState("c0");
+
+    auto asset = fixture.add(definition);
+    AnimationStateMachineInstance sm(asset, fixture.clips);
+    asset.reset();
+    CHECK_EQ(fixture.machines.size(), size_t(1));
+    CHECK_EQ(sm.definition().stateCount(), 1u);
+}
+
+void testInstancesAreIndependent() {
+    Fixture fixture;
+    AnimationStateMachine definition;
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
+    definition.addTransition(a, b, "go");
+
+    auto asset = fixture.add(definition);
+    AnimationStateMachineInstance first(asset, fixture.clips);
+    AnimationStateMachineInstance second(asset, fixture.clips);
 
     first.setTrigger("go");
     CHECK(second.update(0.0f) == nullptr);
@@ -108,10 +172,11 @@ void testInstancesAreIndependent() {
 }
 
 void testTransitionsStayGroupedByFromState() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
-    auto c = definition.addState(2);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
+    auto c = definition.addState("c2");
     definition.addTransition(c, a, "t0");
     definition.addTransition(a, b, "t1");
     definition.addTransition(b, c, "t2");
@@ -136,9 +201,10 @@ void testTransitionsStayGroupedByFromState() {
 }
 
 void testSharedTriggerNameReusesIndex() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
     definition.addTransition(a, b, "go");
     definition.addTransition(b, a, "go");
 
@@ -150,12 +216,13 @@ void testSharedTriggerNameReusesIndex() {
 }
 
 void testTriggerWaitsForExitTime() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
     definition.addTransition(a, b, "go", 0.0f, 1.0f);
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("go");
     CHECK(sm.update(0.5f) == nullptr);
     CHECK_EQ(sm.currentStateIndex(), a);
@@ -167,12 +234,13 @@ void testTriggerWaitsForExitTime() {
 }
 
 void testExitTimeWithoutTriggerTransitionsAutomatically() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0, false);
-    auto b = definition.addState(1);
+    auto a = definition.addState("c0", false);
+    auto b = definition.addState("c1");
     definition.addTransition(a, b, {}, 0.1f, 2.0f);
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     CHECK(sm.update(1.0f) == nullptr);
     auto* taken = sm.update(1.5f);
     REQUIRE(taken != nullptr);
@@ -181,13 +249,14 @@ void testExitTimeWithoutTriggerTransitionsAutomatically() {
 }
 
 void testExitTimeRestartsOnStateEntry() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
     definition.addTransition(a, b, "go");
     definition.addTransition(b, a, "go", 0.0f, 1.0f);
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.update(5.0f);
     sm.setTrigger("go");
     REQUIRE(sm.update(0.0f) != nullptr);
@@ -201,14 +270,15 @@ void testExitTimeRestartsOnStateEntry() {
 }
 
 void testLaterTransitionFiresWhileEarlierWaitsForExitTime() {
+    Fixture fixture;
     AnimationStateMachine definition;
-    auto a = definition.addState(0);
-    auto b = definition.addState(1);
-    auto c = definition.addState(2);
+    auto a = definition.addState("c0");
+    auto b = definition.addState("c1");
+    auto c = definition.addState("c2");
     definition.addTransition(a, b, "go", 0.0f, 1.0f);
     definition.addTransition(a, c, "go");
 
-    AnimationStateMachineInstance sm(definition);
+    auto sm = fixture.instance(definition);
     sm.setTrigger("go");
     REQUIRE(sm.update(0.1f) != nullptr);
     CHECK_EQ(sm.currentStateIndex(), c);
@@ -223,6 +293,9 @@ void runAnimationStateMachineTests() {
     ailo::test::run("animsm/testResetTriggerCancels", testResetTriggerCancels);
     ailo::test::run("animsm/testTriggerStaysSetUntilAStateUsesIt", testTriggerStaysSetUntilAStateUsesIt);
     ailo::test::run("animsm/testFirstAddedTransitionWins", testFirstAddedTransitionWins);
+    ailo::test::run("animsm/testMissingClipThrows", testMissingClipThrows);
+    ailo::test::run("animsm/testClipFollowsState", testClipFollowsState);
+    ailo::test::run("animsm/testInstanceKeepsDefinitionAlive", testInstanceKeepsDefinitionAlive);
     ailo::test::run("animsm/testInstancesAreIndependent", testInstancesAreIndependent);
     ailo::test::run("animsm/testTransitionsStayGroupedByFromState", testTransitionsStayGroupedByFromState);
     ailo::test::run("animsm/testSharedTriggerNameReusesIndex", testSharedTriggerNameReusesIndex);

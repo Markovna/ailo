@@ -1,13 +1,16 @@
 #include "AnimationStateMachine.h"
 
+#include <algorithm>
 #include <cassert>
+#include <format>
+#include <stdexcept>
 
 namespace ailo {
 
-uint32_t AnimationStateMachine::addState(uint32_t clip, bool looping) {
+uint32_t AnimationStateMachine::addState(std::string clip, bool looping) {
     auto index = static_cast<uint32_t>(m_states.size());
     m_states.push_back({
-        .clip = clip,
+        .clip = std::move(clip),
         .looping = looping,
         .firstTransition = static_cast<uint32_t>(m_transitions.size()),
     });
@@ -51,8 +54,21 @@ std::optional<uint32_t> AnimationStateMachine::findTrigger(const std::string& na
     return it->second;
 }
 
-AnimationStateMachineInstance::AnimationStateMachineInstance(const AnimationStateMachine& definition)
-    : m_definition(&definition), m_triggers(definition.triggerCount(), 0) {}
+AnimationStateMachineInstance::AnimationStateMachineInstance(AssetPtr<AnimationStateMachine> definition,
+                                                             std::span<const AssetPtr<AnimationClip>> clips)
+    : m_definition(std::move(definition)) {
+    assert(m_definition);
+    m_triggers.resize(m_definition->triggerCount(), 0);
+    m_stateClips.reserve(m_definition->stateCount());
+    for (uint32_t i = 0; i < m_definition->stateCount(); ++i) {
+        const auto& name = m_definition->state(i).clip;
+        auto it = std::ranges::find_if(clips, [&](const auto& clip) { return clip && clip->name == name; });
+        if (it == clips.end()) {
+            throw std::invalid_argument(std::format("animation state machine: no clip named '{}'", name));
+        }
+        m_stateClips.push_back(static_cast<uint32_t>(it - clips.begin()));
+    }
+}
 
 void AnimationStateMachineInstance::setTrigger(const std::string& name) {
     writeTrigger(name, 1);
