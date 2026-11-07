@@ -13,13 +13,13 @@ void testStartsInFirstState() {
     AnimationStateMachineInstance sm(definition);
     CHECK_EQ(sm.currentStateIndex(), 0u);
     CHECK_EQ(sm.currentState().clip, 5u);
-    CHECK(sm.update() == nullptr);
+    CHECK(sm.update(0.0f) == nullptr);
 }
 
 void testEmptyDefinitionNeverTransitions() {
     AnimationStateMachine definition;
     AnimationStateMachineInstance sm(definition);
-    CHECK(sm.update() == nullptr);
+    CHECK(sm.update(0.0f) == nullptr);
 }
 
 void testTriggerFiresAndIsConsumed() {
@@ -31,13 +31,13 @@ void testTriggerFiresAndIsConsumed() {
 
     AnimationStateMachineInstance sm(definition);
     sm.setTrigger("go");
-    auto* taken = sm.update();
+    auto* taken = sm.update(0.0f);
     REQUIRE(taken != nullptr);
     CHECK_EQ(taken->to, run);
     CHECK_NEAR(taken->fadeDuration, 0.25f, 1e-6f);
     CHECK_EQ(sm.currentStateIndex(), run);
 
-    CHECK(sm.update() == nullptr);
+    CHECK(sm.update(0.0f) == nullptr);
     CHECK_EQ(sm.currentStateIndex(), run);
 }
 
@@ -50,7 +50,7 @@ void testResetTriggerCancels() {
     AnimationStateMachineInstance sm(definition);
     sm.setTrigger("go");
     sm.resetTrigger("go");
-    CHECK(sm.update() == nullptr);
+    CHECK(sm.update(0.0f) == nullptr);
     CHECK_EQ(sm.currentStateIndex(), a);
 }
 
@@ -64,13 +64,13 @@ void testTriggerStaysSetUntilAStateUsesIt() {
 
     AnimationStateMachineInstance sm(definition);
     sm.setTrigger("second");
-    CHECK(sm.update() == nullptr);
+    CHECK(sm.update(0.0f) == nullptr);
     CHECK_EQ(sm.currentStateIndex(), a);
 
     sm.setTrigger("first");
-    REQUIRE(sm.update() != nullptr);
+    REQUIRE(sm.update(0.0f) != nullptr);
     CHECK_EQ(sm.currentStateIndex(), b);
-    REQUIRE(sm.update() != nullptr);
+    REQUIRE(sm.update(0.0f) != nullptr);
     CHECK_EQ(sm.currentStateIndex(), c);
 }
 
@@ -85,7 +85,7 @@ void testFirstAddedTransitionWins() {
     AnimationStateMachineInstance sm(definition);
     sm.setTrigger("toC");
     sm.setTrigger("toB");
-    REQUIRE(sm.update() != nullptr);
+    REQUIRE(sm.update(0.0f) != nullptr);
     CHECK_EQ(sm.currentStateIndex(), b);
 }
 
@@ -99,10 +99,10 @@ void testInstancesAreIndependent() {
     AnimationStateMachineInstance second(definition);
 
     first.setTrigger("go");
-    CHECK(second.update() == nullptr);
+    CHECK(second.update(0.0f) == nullptr);
     CHECK_EQ(second.currentStateIndex(), a);
 
-    REQUIRE(first.update() != nullptr);
+    REQUIRE(first.update(0.0f) != nullptr);
     CHECK_EQ(first.currentStateIndex(), b);
     CHECK_EQ(second.currentStateIndex(), a);
 }
@@ -149,6 +149,71 @@ void testSharedTriggerNameReusesIndex() {
     CHECK(!definition.findTrigger("missing").has_value());
 }
 
+void testTriggerWaitsForExitTime() {
+    AnimationStateMachine definition;
+    auto a = definition.addState(0);
+    auto b = definition.addState(1);
+    definition.addTransition(a, b, "go", 0.0f, 1.0f);
+
+    AnimationStateMachineInstance sm(definition);
+    sm.setTrigger("go");
+    CHECK(sm.update(0.5f) == nullptr);
+    CHECK_EQ(sm.currentStateIndex(), a);
+    CHECK_NEAR(sm.stateTime(), 0.5f, 1e-6f);
+
+    REQUIRE(sm.update(0.5f) != nullptr);
+    CHECK_EQ(sm.currentStateIndex(), b);
+    CHECK_NEAR(sm.stateTime(), 0.0f, 1e-6f);
+}
+
+void testExitTimeWithoutTriggerTransitionsAutomatically() {
+    AnimationStateMachine definition;
+    auto a = definition.addState(0, false);
+    auto b = definition.addState(1);
+    definition.addTransition(a, b, {}, 0.1f, 2.0f);
+
+    AnimationStateMachineInstance sm(definition);
+    CHECK(sm.update(1.0f) == nullptr);
+    auto* taken = sm.update(1.5f);
+    REQUIRE(taken != nullptr);
+    CHECK_EQ(taken->to, b);
+    CHECK_NEAR(taken->exitTime, 2.0f, 1e-6f);
+}
+
+void testExitTimeRestartsOnStateEntry() {
+    AnimationStateMachine definition;
+    auto a = definition.addState(0);
+    auto b = definition.addState(1);
+    definition.addTransition(a, b, "go");
+    definition.addTransition(b, a, "go", 0.0f, 1.0f);
+
+    AnimationStateMachineInstance sm(definition);
+    sm.update(5.0f);
+    sm.setTrigger("go");
+    REQUIRE(sm.update(0.0f) != nullptr);
+    CHECK_EQ(sm.currentStateIndex(), b);
+
+    sm.setTrigger("go");
+    CHECK(sm.update(0.25f) == nullptr);
+    CHECK_EQ(sm.currentStateIndex(), b);
+    REQUIRE(sm.update(0.75f) != nullptr);
+    CHECK_EQ(sm.currentStateIndex(), a);
+}
+
+void testLaterTransitionFiresWhileEarlierWaitsForExitTime() {
+    AnimationStateMachine definition;
+    auto a = definition.addState(0);
+    auto b = definition.addState(1);
+    auto c = definition.addState(2);
+    definition.addTransition(a, b, "go", 0.0f, 1.0f);
+    definition.addTransition(a, c, "go");
+
+    AnimationStateMachineInstance sm(definition);
+    sm.setTrigger("go");
+    REQUIRE(sm.update(0.1f) != nullptr);
+    CHECK_EQ(sm.currentStateIndex(), c);
+}
+
 }
 
 void runAnimationStateMachineTests() {
@@ -161,4 +226,8 @@ void runAnimationStateMachineTests() {
     ailo::test::run("animsm/testInstancesAreIndependent", testInstancesAreIndependent);
     ailo::test::run("animsm/testTransitionsStayGroupedByFromState", testTransitionsStayGroupedByFromState);
     ailo::test::run("animsm/testSharedTriggerNameReusesIndex", testSharedTriggerNameReusesIndex);
+    ailo::test::run("animsm/testTriggerWaitsForExitTime", testTriggerWaitsForExitTime);
+    ailo::test::run("animsm/testExitTimeWithoutTriggerTransitionsAutomatically", testExitTimeWithoutTriggerTransitionsAutomatically);
+    ailo::test::run("animsm/testExitTimeRestartsOnStateEntry", testExitTimeRestartsOnStateEntry);
+    ailo::test::run("animsm/testLaterTransitionFiresWhileEarlierWaitsForExitTime", testLaterTransitionFiresWhileEarlierWaitsForExitTime);
 }
