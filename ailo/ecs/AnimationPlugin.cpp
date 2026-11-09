@@ -6,6 +6,7 @@
 #include "AnimatorComponent.h"
 #include "Transform.h"
 #include "AnimationStateMachine.h"
+#include "PoseOps.h"
 #include "app/App.h"
 #include "assets/AssetPlugin.h"
 #include "platform/PlatformPlugin.h"
@@ -33,31 +34,6 @@ struct PosePool {
 float advance(float time, float delta, const AnimationClip& clip, bool looping) {
     time += delta;
     return looping ? std::fmod(time, clip.duration) : time;
-}
-
-void samplePose(float time, const Skeleton& skeleton, const AnimationClip& clip, std::vector<NodeTransform>& pose) {
-    pose.resize(skeleton.nodes.size());
-    for (size_t i = 0; i < skeleton.nodes.size(); ++i) {
-        auto& node = pose[i];
-        auto it = clip.nameToIndex.find(skeleton.nodes[i].name);
-        if (it == clip.nameToIndex.end()) {
-            node = skeleton.restPose[i];
-            continue;
-        }
-        auto& channel = clip.channels[it->second];
-        node.position = BoneChannel::interpolate(time, channel.positionKeys);
-        node.rotation = BoneChannel::interpolate(time, channel.rotationKeys);
-        node.scale    = BoneChannel::interpolate(time, channel.scaleKeys);
-    }
-}
-
-void blendPose(const std::span<NodeTransform>& out, const std::span<const NodeTransform>& pose, float weight) {
-    for (size_t i = 0; i < out.size(); ++i) {
-        auto& node = out[i];
-        node.position = glm::mix(node.position, pose[i].position, weight);
-        node.rotation = glm::slerp(node.rotation, pose[i].rotation, weight);
-        node.scale    = glm::mix(node.scale, pose[i].scale, weight);
-    }
 }
 
 // Each sampler fades in over the ones below it, so sampler i weighs fade_i * prod_{j>i}(1 - fade_j).

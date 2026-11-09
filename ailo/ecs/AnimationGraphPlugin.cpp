@@ -18,8 +18,7 @@ void animate(Query<AnimationGraphComponent, Skeleton, Exclude<Disabled>> animato
         }
 
         animator.graph->update(time.delta);
-        if (const auto* pose = animator.graph->computePose(skeleton, animator.clips)) {
-            skeleton.pose = *pose;
+        if (animator.graph->evaluate(skeleton, animator.clips, skeleton.pose)) {
             skeleton.updateModelPose();
         }
     }
