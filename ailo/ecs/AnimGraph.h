@@ -94,98 +94,75 @@ private:
     std::unordered_map<std::string, uint32_t> m_triggerNames;
 };
 
-// Fade in and fade out ramp to 1 independently over the time left on each, so a fade can restart from any point.
-struct AnimCrossfade {
-    float fadeIn      = 0.0f;
-    float fadeOut     = 0.0f;
-    float fadeInLeft  = 0.0f;
-    float fadeOutLeft = 0.0f;
+struct PosePool {
+    std::vector<std::vector<NodeTransform>> free;
 
-    float blend() const { return std::max(0.0f, fadeIn - fadeOut); }
-    void step(float deltaTime);
-    // Continues from the current blend.
-    void startFadeIn(float duration);
-    // Starts fading out, or shortens a fade out already running to at most duration.
-    void fadeOutWithin(float duration);
+    std::vector<NodeTransform> acquire() {
+        if (free.empty()) {
+            return {};
+        }
+        auto pose = std::move(free.back());
+        free.pop_back();
+        return pose;
+    }
+
+    void release(std::vector<NodeTransform>&& pose) { free.push_back(std::move(pose)); }
 };
 
-// Runs a graph on per-instance runtime nodes, one per graph node, laid out in a flat preorder array. update() walks
-// it forward: each node steps its crossfade and takes its weight from its parent, and each machine fires at most one
-// transition, starting the fades of its states before they are reached. evaluate() descends from the root through
-// the nodes with a non-zero blend and blends their poses, normalizing within each machine.
-class AnimGraphInstance {
-public:
-    // Resolves each clip node's clip name to an index into clips. Throws std::invalid_argument if a clip is missing
-    // or the graph isn't a tree rooted at node 0.
-    AnimGraphInstance(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips);
+class AnimGraphRunner {
+private:
+    struct Clip {
+        AssetPtr<AnimationClip> clip;
+        float rate = 1.0f;
+        bool looping = true;
+        float time = 0.0f;
+        float duration = 0.0f;
+    };
 
+    struct Transition {
+        uint32_t fromNode;
+        uint32_t toNode;
+        float time = 0.0f;
+        float duration = 0.0f;
+
+        float alpha() const { return duration <= 0.0f ? 1.0f : std::min(time / duration, 1.0f); }
+    };
+
+    struct StateMachine {
+        const StateMachineNode* sm;
+        uint32_t currentState = 0;
+        uint32_t currentNode = 0;
+        float stateTime = 0.0f; // since currentState was entered
+        std::vector<Transition> m_transitionStack;
+    };
+
+    struct Node {
+        std::variant<Clip, StateMachine> data;
+        uint8_t depth = 0;
+        bool active = 0.0f;
+        bool wasActive = 0.0f;
+    };
+
+public:
+    AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips);
+
+    // A set trigger stays set until a transition that uses it fires.
     void setTrigger(const std::string& name);
     void resetTrigger(const std::string& name);
 
-    void update(float deltaTime);
-    // clips must be the ones the instance was built with. Returns false, leaving out alone, if the root has no states.
-    bool evaluate(const Skeleton& skeleton, std::span<const AssetPtr<AnimationClip>> clips,
-                  std::vector<NodeTransform>& out);
-
-    const AnimGraph& definition() const { return *m_definition; }
-
-    uint32_t currentState(uint32_t machineNode = 0) const;
-    float stateTime(uint32_t machineNode = 0) const;
-    // Product of the blends from the root down to node. Not normalized: blends overlap while fades do.
-    float weight(uint32_t node) const;
-    float blend(uint32_t node) const;
-    float clipTime(uint32_t clipNode) const;
+    void update(float dt);
+    void evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
 private:
-    struct RuntimeNode {
-        uint32_t graphNode   = 0;
-        uint32_t subtreeSize = 1;
-        uint32_t depth       = 0;
-        uint32_t data        = 0;     // into m_clips or m_machines
-        uint32_t parent      = kAnimNone;
-        uint32_t state       = 0;     // index in the parent machine
-        bool     machine     = false;
-        bool     active      = false; // on the chain of current states from the root
-        float    weight      = 0.0f;
-        AnimCrossfade fade;
-    };
-
-    struct ClipRuntime {
-        uint32_t clip     = 0;
-        float    time     = 0.0f;
-        float    duration = 0.0f;
-        float    rate     = 1.0f;
-        bool     looping  = true;
-    };
-
-    struct MachineRuntime {
-        uint32_t firstStateNode = 0; // into m_stateNodes
-        uint32_t stateCount     = 0;
-        uint32_t current        = 0;
-        float    stateTime      = 0.0f;
-    };
-
-    uint32_t build(uint32_t graphNode, uint32_t parent, uint32_t state, uint32_t depth, std::vector<bool>& visited,
-                   std::span<const AssetPtr<AnimationClip>> clips);
-    void reset(uint32_t node);
-    void updateMachine(const RuntimeNode& node, float deltaTime);
-    const AnimTransition* findTransition(const StateMachineNode& machine, const MachineRuntime& runtime);
-    void evaluateNode(uint32_t index, const Skeleton& skeleton, std::span<const AssetPtr<AnimationClip>> clips,
-                      std::vector<NodeTransform>& out);
-    RuntimeNode& stateNode(const MachineRuntime& machine, uint32_t state) {
-        return m_nodes[m_stateNodes[machine.firstStateNode + state]];
-    }
-    const MachineRuntime& machineAt(uint32_t graphNode) const;
-    void writeTrigger(const std::string& name, uint8_t value);
+    static void updateClip(Clip& clip, float dt);
+    // Picks a transition and writes the children's local weights.
+    void updateMachine(StateMachine& sm, float dt);
+    void evaluateNode(uint32_t index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
     AssetPtr<AnimGraph> m_definition;
-    std::vector<RuntimeNode> m_nodes;     // preorder
-    std::vector<uint32_t> m_runtimeIndex; // per graph node
-    std::vector<ClipRuntime> m_clips;
-    std::vector<MachineRuntime> m_machines;
-    std::vector<uint32_t> m_stateNodes;   // runtime index of each machine's states
-    std::vector<std::vector<NodeTransform>> m_scratch; // per depth
+    std::vector<Node> m_tree;
     std::vector<uint8_t> m_triggers;
+    std::vector<uint32_t> m_nodesMap; // maps definition nodes to tree indexes
 };
 
 } // namespace ailo

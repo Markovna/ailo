@@ -5,6 +5,7 @@
 #include <cmath>
 #include <format>
 #include <stdexcept>
+#include <utility>
 
 #include "PoseOps.h"
 
@@ -100,307 +101,206 @@ std::optional<uint32_t> AnimGraph::findTrigger(const std::string& name) const {
     return it->second;
 }
 
-void AnimCrossfade::step(float deltaTime) {
-    auto ramp = [deltaTime](float& value, float& left) {
-        if (left <= 0.0f) return;
-        if (deltaTime >= left) {
-            value = 1.0f;
-            left = 0.0f;
-        } else {
-            value += (1.0f - value) * deltaTime / left;
-            left -= deltaTime;
-        }
-    };
-    ramp(fadeIn, fadeInLeft);
-    ramp(fadeOut, fadeOutLeft);
-}
+template<class... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
 
-void AnimCrossfade::startFadeIn(float duration) {
-    fadeIn = blend();
-    fadeOut = 0.0f;
-    fadeOutLeft = 0.0f;
-    fadeInLeft = duration;
-    if (duration <= 0.0f) {
-        fadeIn = 1.0f;
-        fadeInLeft = 0.0f;
-    }
-}
-
-void AnimCrossfade::fadeOutWithin(float duration) {
-    const bool running = fadeOut > 0.0f || fadeOutLeft > 0.0f;
-    fadeOutLeft = running ? std::min(fadeOutLeft, duration) : duration;
-    if (duration <= 0.0f) {
-        fadeOut = 1.0f;
-        fadeOutLeft = 0.0f;
-    }
-}
-
-AnimGraphInstance::AnimGraphInstance(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips)
+AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips)
     : m_definition(std::move(definition)) {
     assert(m_definition);
-    const auto& graph = *m_definition;
-    m_triggers.resize(graph.triggerCount(), 0);
-    m_runtimeIndex.assign(graph.nodeCount(), kNone);
+    const AnimGraph& graph = *m_definition;
+    m_triggers.assign(graph.triggerCount(), 0);
+    m_nodesMap.assign(graph.nodeCount(), kNone);
+    m_tree.reserve(graph.nodeCount());
 
-    std::vector<bool> visited(graph.nodeCount(), false);
-    build(0, kNone, 0, 0, visited, clips);
-
-    uint32_t maxDepth = 0;
-    for (const auto& node : m_nodes) {
-        maxDepth = std::max(maxDepth, node.depth);
-    }
-    m_scratch.resize(maxDepth + 1);
-
-    auto& root = m_nodes[0];
-    root.active = true;
-    root.fade.fadeIn = 1.0f;
-    root.weight = 1.0f;
-    reset(0);
-}
-
-uint32_t AnimGraphInstance::build(uint32_t graphNode, uint32_t parent, uint32_t state, uint32_t depth,
-                                  std::vector<bool>& visited, std::span<const AssetPtr<AnimationClip>> clips) {
-    const auto& graph = *m_definition;
-    if (graphNode >= graph.nodeCount()) {
-        throw std::invalid_argument(std::format("animation graph: state refers to missing node {}", graphNode));
-    }
-    if (visited[graphNode]) {
-        throw std::invalid_argument(std::format("animation graph: node {} is reached more than once", graphNode));
-    }
-    visited[graphNode] = true;
-
-    const auto index = static_cast<uint32_t>(m_nodes.size());
-    m_runtimeIndex[graphNode] = index;
-    m_nodes.push_back({ .graphNode = graphNode, .depth = depth, .parent = parent, .state = state });
-
-    if (const auto* clipNode = std::get_if<ClipNode>(&graph.node(graphNode))) {
-        auto it = std::ranges::find_if(clips, [&](const auto& clip) { return clip && clip->name == clipNode->clip; });
-        if (it == clips.end()) {
-            throw std::invalid_argument(std::format("animation graph: no clip named '{}'", clipNode->clip));
+    // Depth-first, so m_tree is in preorder: every node comes after its parent.
+    auto build = [&](this auto& self, uint32_t graphNode, uint8_t depth) -> void {
+        if (graphNode >= graph.nodeCount()) {
+            throw std::invalid_argument(std::format("animation graph: state refers to missing node {}", graphNode));
         }
-        m_nodes[index].data = static_cast<uint32_t>(m_clips.size());
-        m_clips.push_back({
-            .clip = static_cast<uint32_t>(it - clips.begin()),
-            .duration = (*it)->duration,
-            .rate = clipNode->rate,
-            .looping = clipNode->looping,
-        });
-        return index;
-    }
-
-    const auto& machine = graph.machine(graphNode);
-    const auto machineIndex = static_cast<uint32_t>(m_machines.size());
-    const auto firstStateNode = static_cast<uint32_t>(m_stateNodes.size());
-    m_machines.push_back({
-        .firstStateNode = firstStateNode,
-        .stateCount = static_cast<uint32_t>(machine.states.size()),
-        .current = machine.entryState,
-    });
-    m_nodes[index].machine = true;
-    m_nodes[index].data = machineIndex;
-    m_stateNodes.resize(m_stateNodes.size() + machine.states.size());
-
-    for (uint32_t i = 0; i < machine.states.size(); ++i) {
-        m_stateNodes[firstStateNode + i] = build(machine.states[i].node, index, i, depth + 1, visited, clips);
-    }
-    m_nodes[index].subtreeSize = static_cast<uint32_t>(m_nodes.size()) - index;
-    return index;
-}
-
-void AnimGraphInstance::reset(uint32_t index) {
-    const uint32_t end = index + m_nodes[index].subtreeSize;
-    for (uint32_t i = index + 1; i < end; ++i) {
-        m_nodes[i].fade = {};
-        m_nodes[i].weight = 0.0f;
-        m_nodes[i].active = false;
-    }
-    for (uint32_t i = index; i < end; ++i) {
-        const auto& node = m_nodes[i];
-        if (!node.machine) {
-            m_clips[node.data].time = 0.0f;
-            continue;
+        if (m_nodesMap[graphNode] != kNone) {
+            throw std::invalid_argument(std::format("animation graph: node {} is reached more than once", graphNode));
         }
-        auto& machine = m_machines[node.data];
-        machine.current = m_definition->machine(node.graphNode).entryState;
-        machine.stateTime = 0.0f;
-        if (machine.stateCount > 0) {
-            stateNode(machine, machine.current).fade.fadeIn = 1.0f;
-        }
-    }
-}
+        const auto index = static_cast<uint32_t>(m_tree.size());
+        m_nodesMap[graphNode] = index;
 
-void AnimGraphInstance::setTrigger(const std::string& name) {
-    writeTrigger(name, 1);
-}
-
-void AnimGraphInstance::resetTrigger(const std::string& name) {
-    writeTrigger(name, 0);
-}
-
-void AnimGraphInstance::update(float deltaTime) {
-    for (uint32_t i = 0; i < m_nodes.size();) {
-        auto& node = m_nodes[i];
-        if (i != 0) {
-            const auto& parent = m_nodes[node.parent];
-            node.fade.step(deltaTime);
-            node.weight = parent.weight * node.fade.blend();
-            node.active = parent.active && m_machines[parent.data].current == node.state;
-        }
-        if (node.weight <= 0.0f) {
-            i += node.subtreeSize;
-            continue;
-        }
-        if (node.machine) {
-            updateMachine(node, deltaTime);
-        } else {
-            auto& clip = m_clips[node.data];
-            clip.time += deltaTime * clip.rate;
-            if (clip.duration > 0.0f) {
-                if (clip.looping) {
-                    clip.time = std::fmod(clip.time, clip.duration);
-                    if (clip.time < 0.0f) clip.time += clip.duration;
-                } else {
-                    clip.time = std::clamp(clip.time, 0.0f, clip.duration);
-                }
+        if (const auto* clipNode = std::get_if<ClipNode>(&graph.node(graphNode))) {
+            auto it = std::ranges::find_if(clips, [&](const auto& clip) { return clip && clip->name == clipNode->clip; });
+            if (it == clips.end()) {
+                throw std::invalid_argument(std::format("animation graph: no clip named '{}'", clipNode->clip));
             }
+            Clip clip {
+                .clip = *it,
+                .rate = clipNode->rate,
+                .looping = clipNode->looping,
+                .duration = (*it)->duration,
+            };
+            clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
+            m_tree.push_back({ .data = std::move(clip), .depth = depth });
+            return;
         }
-        ++i;
+
+        const auto& machine = graph.machine(graphNode);
+        if (machine.states.empty()) {
+            throw std::invalid_argument(std::format("animation graph: machine {} has no states", graphNode));
+        }
+        m_tree.push_back({
+            .data = StateMachine { .sm = &machine, .currentState = machine.entryState },
+            .depth = depth,
+        });
+        for (const auto& state : machine.states) {
+            assert(depth < std::numeric_limits<uint8_t>::max());
+            self(state.node, depth + 1);
+        }
+
+        auto& sm = std::get<StateMachine>(m_tree[index].data);
+        sm.currentNode = m_nodesMap[machine.states[machine.entryState].node];
+    };
+    build(0, 0);
+}
+
+void AnimGraphRunner::setTrigger(const std::string& name) {
+    const auto trigger = m_definition->findTrigger(name);
+    assert(trigger.has_value());
+    if (trigger) {
+        m_triggers[*trigger] = 1;
     }
 }
 
-void AnimGraphInstance::updateMachine(const RuntimeNode& node, float deltaTime) {
-    auto& machine = m_machines[node.data];
-    if (machine.stateCount == 0) {
-        return;
+void AnimGraphRunner::resetTrigger(const std::string& name) {
+    const auto trigger = m_definition->findTrigger(name);
+    assert(trigger.has_value());
+    if (trigger) {
+        m_triggers[*trigger] = 0;
     }
-
-    machine.stateTime += deltaTime;
-    if (!node.active) {
-        return;
-    }
-    const auto* transition = findTransition(m_definition->machine(node.graphNode), machine);
-    if (!transition) {
-        return;
-    }
-
-    machine.current = transition->to;
-    machine.stateTime = 0.0f;
-    const uint32_t entered = m_stateNodes[machine.firstStateNode + machine.current];
-    if (m_nodes[entered].fade.blend() <= 0.0f) {
-        reset(entered);
-    }
-    for (uint32_t state = 0; state < machine.stateCount; ++state) {
-        auto& fade = stateNode(machine, state).fade;
-        if (state != machine.current && fade.blend() > 0.0f) {
-            fade.fadeOutWithin(transition->fadeDuration);
-        }
-    }
-    m_nodes[entered].fade.startFadeIn(transition->fadeDuration);
 }
 
-const AnimTransition* AnimGraphInstance::findTransition(const StateMachineNode& machine,
-                                                        const MachineRuntime& runtime) {
-    for (const auto& transition : AnimGraph::transitions(machine, runtime.current)) {
-        if (runtime.stateTime < transition.exitTime) {
+void AnimGraphRunner::update(float dt) {
+    for (auto& node : m_tree) {
+        node.wasActive = std::exchange(node.active, false);
+    }
+
+    m_tree[0].active = true;
+
+    for (uint32_t i = 0; i < m_tree.size(); ++i) {
+        auto& node = m_tree[i];
+        if (!node.active) {
+            if (node.wasActive) {
+                std::visit(Overloaded {
+                    [&](Clip& clip) {
+                        clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
+                    },
+                    [&](StateMachine& sm) {
+                        sm.currentState = sm.sm->entryState;
+                        sm.currentNode = m_nodesMap[sm.sm->states[sm.currentState].node];
+                        sm.stateTime = 0.0f;
+                        sm.m_transitionStack.clear();
+                    },
+                }, node.data);
+            }
             continue;
         }
+
+        std::visit(Overloaded {
+            [&](Clip& clip) { updateClip(clip, dt); },
+            [&](StateMachine& sm) { updateMachine(sm, dt); },
+        }, node.data);
+    }
+}
+
+void AnimGraphRunner::evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out) {
+    evaluateNode(0, skeleton, posePool, out);
+}
+
+void AnimGraphRunner::evaluateNode(uint32_t index, const Skeleton& skeleton, PosePool& posePool,
+                                   std::vector<NodeTransform>& out) {
+    std::visit(Overloaded {
+        [&](const Clip& clip) {
+            if (const AnimationClip* asset = clip.clip.get()) {
+                samplePose(clip.time, skeleton, *asset, out);
+            } else {
+                out = skeleton.restPose;
+            }
+        },
+        [&](const StateMachine& sm) {
+            const auto& stack = sm.m_transitionStack;
+            if (stack.empty()) {
+                evaluateNode(sm.currentNode, skeleton, posePool, out);
+                return;
+            }
+
+            // The stack is newest first: start from the oldest source and blend each target over it.
+            evaluateNode(stack.back().fromNode, skeleton, posePool, out);
+
+            auto pose = posePool.acquire();
+            for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+                const float alpha = it->alpha();
+                if (alpha <= 0.0f) continue;
+                evaluateNode(it->toNode, skeleton, posePool, pose);
+                blendPose(out, pose, alpha);
+            }
+            posePool.release(std::move(pose));
+        },
+    }, m_tree[index].data);
+}
+
+void AnimGraphRunner::updateClip(Clip& clip, float dt) {
+    clip.time += dt * clip.rate;
+    if (clip.duration <= 0.0f) return;
+    if (clip.looping) {
+        clip.time = std::fmod(clip.time, clip.duration);
+        if (clip.time < 0.0f) clip.time += clip.duration;
+    } else {
+        clip.time = std::clamp(clip.time, 0.0f, clip.duration);
+    }
+}
+
+void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
+    sm.stateTime += dt;
+
+    auto& machine = *sm.sm;
+    auto& states = machine.states;
+    auto transitions = m_definition->transitions(machine, sm.currentState);
+
+    for (auto& transition : transitions) {
+        if (sm.stateTime < transition.exitTime) continue;
+
         const uint32_t trigger = transition.trigger;
-        if (trigger != kNone && !m_triggers[trigger]) {
-            continue;
-        }
+        if (trigger != kNone && !m_triggers[trigger]) continue;
         if (trigger != kNone) {
             m_triggers[trigger] = 0;
         }
-        return &transition;
-    }
-    return nullptr;
-}
 
-bool AnimGraphInstance::evaluate(const Skeleton& skeleton, std::span<const AssetPtr<AnimationClip>> clips,
-                                 std::vector<NodeTransform>& out) {
-    if (m_machines[0].stateCount == 0) {
-        return false;
+        const uint32_t to   = m_nodesMap[states[transition.to].node];
+        // newest first
+        sm.m_transitionStack.insert(sm.m_transitionStack.begin(), Transition {
+            .fromNode = sm.currentNode,
+            .toNode = to,
+            .duration = transition.fadeDuration
+        });
+        sm.currentState = transition.to;
+        sm.currentNode = to;
+        sm.stateTime = 0.0f;
+        break;
     }
-    evaluateNode(0, skeleton, clips, out);
-    return true;
-}
 
-void AnimGraphInstance::evaluateNode(uint32_t index, const Skeleton& skeleton,
-                                     std::span<const AssetPtr<AnimationClip>> clips,
-                                     std::vector<NodeTransform>& out) {
-    const auto& node = m_nodes[index];
-    if (!node.machine) {
-        const auto& clip = m_clips[node.data];
-        if (clip.clip < clips.size() && clips[clip.clip]) {
-            samplePose(clip.time, skeleton, *clips[clip.clip], out);
-        } else {
-            out = skeleton.restPose;
-        }
+    auto& stack = sm.m_transitionStack;
+    for (auto& transition : stack) {
+        transition.time += dt;
+    }
+
+    stack.erase(std::ranges::find_if(stack, [](const Transition& t) { return t.alpha() >= 1.0f; }), stack.end());
+
+    if (stack.empty()) {
+        m_tree[sm.currentNode].active = true;
         return;
     }
 
-    const auto& machine = m_machines[node.data];
-    float accumulated = 0.0f;
-    for (uint32_t state = 0; state < machine.stateCount; ++state) {
-        const uint32_t child = m_stateNodes[machine.firstStateNode + state];
-        const float weight = m_nodes[child].fade.blend();
-        if (weight <= 0.0f) {
-            continue;
-        }
-        if (accumulated == 0.0f) {
-            evaluateNode(child, skeleton, clips, out);
-        } else {
-            auto& scratch = m_scratch[node.depth + 1];
-            evaluateNode(child, skeleton, clips, scratch);
-            blendPose(out, scratch, weight / (accumulated + weight));
-        }
-        accumulated += weight;
+    for (const auto& transition : stack) {
+        m_tree[transition.toNode].active = true;
     }
-    if (accumulated == 0.0f) {
-        out = skeleton.restPose;
-    }
-}
-
-uint32_t AnimGraphInstance::currentState(uint32_t machineNode) const {
-    return machineAt(machineNode).current;
-}
-
-float AnimGraphInstance::stateTime(uint32_t machineNode) const {
-    return machineAt(machineNode).stateTime;
-}
-
-float AnimGraphInstance::weight(uint32_t node) const {
-    assert(m_runtimeIndex[node] != kNone);
-    float weight = 1.0f;
-    for (uint32_t i = m_runtimeIndex[node]; i != kNone; i = m_nodes[i].parent) {
-        weight *= m_nodes[i].fade.blend();
-    }
-    return weight;
-}
-
-float AnimGraphInstance::blend(uint32_t node) const {
-    assert(m_runtimeIndex[node] != kNone);
-    return m_nodes[m_runtimeIndex[node]].fade.blend();
-}
-
-float AnimGraphInstance::clipTime(uint32_t clipNode) const {
-    const auto& node = m_nodes[m_runtimeIndex[clipNode]];
-    assert(!node.machine);
-    return m_clips[node.data].time;
-}
-
-const AnimGraphInstance::MachineRuntime& AnimGraphInstance::machineAt(uint32_t graphNode) const {
-    const auto& node = m_nodes[m_runtimeIndex[graphNode]];
-    assert(node.machine);
-    return m_machines[node.data];
-}
-
-void AnimGraphInstance::writeTrigger(const std::string& name, uint8_t value) {
-    auto trigger = m_definition->findTrigger(name);
-    assert(trigger.has_value());
-    if (trigger) {
-        m_triggers[*trigger] = value;
-    }
+    m_tree[stack.back().fromNode].active = true;
 }
 
 } // namespace ailo

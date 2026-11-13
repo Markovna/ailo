@@ -11,16 +11,16 @@ namespace ailo {
 
 namespace {
 
-void animate(Query<AnimationGraphComponent, Skeleton, Exclude<Disabled>> animators, const Time& time) {
+void animate(Query<AnimationGraphComponent, Skeleton, Exclude<Disabled>> animators, const Time& time,
+             PosePool& posePool) {
     for (auto [entity, animator, skeleton] : animators.each()) {
         if (!animator.playing || !animator.graph) {
             continue;
         }
 
         animator.graph->update(time.delta);
-        if (animator.graph->evaluate(skeleton, animator.clips, skeleton.pose)) {
-            skeleton.updateModelPose();
-        }
+        animator.graph->evaluate(skeleton, posePool, skeleton.pose);
+        skeleton.updateModelPose();
     }
 }
 
@@ -28,6 +28,7 @@ void animate(Query<AnimationGraphComponent, Skeleton, Exclude<Disabled>> animato
 
 void AnimationGraphPlugin::build(App& app) {
     addAssetType<AnimGraph>(app);
+    app.insertResource<PosePool>();
     app.addSystem(Stage::PostUpdate, animate, "AnimationGraphPlugin::animate");
 }
 
