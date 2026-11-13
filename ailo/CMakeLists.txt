@@ -139,9 +139,6 @@ add_library(ailo STATIC
     ecs/AnimationStateMachine.h
     ecs/AnimGraph.cpp
     ecs/AnimGraph.h
-    ecs/AnimationGraphComponent.h
-    ecs/AnimationGraphPlugin.cpp
-    ecs/AnimationGraphPlugin.h
     ecs/PoseOps.h
     ecs/Spawn.cpp
     ecs/Spawn.h

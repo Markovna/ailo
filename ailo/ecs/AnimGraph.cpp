@@ -17,82 +17,109 @@ constexpr uint16_t kNone = AnimGraph::kNone;
 
 }
 
-AnimGraph::AnimGraph() {
-    addNode(StateMachineNode {});
+AnimGraph::Builder& AnimGraph::Builder::state(std::string clip, bool looping, float rate) {
+    m_states.push_back({ .clip = { .clip = std::move(clip), .rate = rate, .looping = looping } });
+    return *this;
 }
 
-NodeId AnimGraph::addNode(AnimNode node) {
-    assert(m_nodes.size() < NodeId::kInvalid);
-    m_nodes.push_back(std::move(node));
-    return NodeId { static_cast<uint16_t>(m_nodes.size() - 1) };
+AnimGraph::Builder& AnimGraph::Builder::state(Builder machine) {
+    m_states.push_back({ .machine = static_cast<uint16_t>(m_machines.size()) });
+    m_machines.push_back(std::move(machine));
+    return *this;
 }
 
-NodeId AnimGraph::addMachine() {
-    return addNode(StateMachineNode {});
-}
-
-uint16_t AnimGraph::addState(std::string clip, bool looping) {
-    return addState(kRoot, std::move(clip), looping);
-}
-
-uint16_t AnimGraph::addState(NodeId machine, std::string clip, bool looping) {
-    const NodeId node = addNode(ClipNode { .clip = std::move(clip), .looping = looping });
-    return addStateNode(machine, node);
-}
-
-uint16_t AnimGraph::addMachineState(NodeId machine, NodeId child) {
-    assert(child.value < m_nodes.size() && std::holds_alternative<StateMachineNode>(m_nodes[child.value]));
-    return addStateNode(machine, child);
-}
-
-uint16_t AnimGraph::addStateNode(NodeId machineNode, NodeId node) {
-    auto& m = mutableMachine(machineNode);
-    assert(m.states.size() < std::numeric_limits<uint16_t>::max());
-    const auto index = static_cast<uint16_t>(m.states.size());
-    m.states.push_back({
-        .node = node,
-        .firstTransition = static_cast<uint16_t>(m.transitions.size()),
+AnimGraph::Builder& AnimGraph::Builder::transition(uint16_t from, uint16_t to, std::string trigger,
+                                                   float fadeDuration, float exitTime) {
+    m_transitions.push_back({
+        .from = from,
+        .to = to,
+        .trigger = std::move(trigger),
+        .fadeDuration = fadeDuration,
+        .exitTime = exitTime,
     });
-    return index;
+    return *this;
+}
+
+AnimGraph::Builder& AnimGraph::Builder::entryState(uint16_t state) {
+    m_entryState = state;
+    return *this;
+}
+
+AnimGraph AnimGraph::Builder::build() const {
+    AnimGraph graph;
+    build(graph, graph.addNode(StateMachineNode {}));
+    return graph;
+}
+
+// Each machine's node is added before its states are, so the nodes end up in preorder.
+void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
+    if (m_states.empty()) {
+        throw std::invalid_argument(std::format("animation graph: machine {} has no states", self.value));
+    }
+    if (m_states.size() >= kNone || m_transitions.size() >= kNone) {
+        throw std::invalid_argument(std::format("animation graph: machine {} is too large", self.value));
+    }
+    if (m_entryState >= m_states.size()) {
+        throw std::invalid_argument(
+            std::format("animation graph: entry state {} of machine {} is out of range", m_entryState, self.value));
+    }
+
+    StateMachineNode machine { .entryState = m_entryState };
+    machine.states.resize(m_states.size());
+    for (size_t i = 0; i < m_states.size(); ++i) {
+        const auto& desc = m_states[i];
+        if (desc.machine == kNone) {
+            machine.states[i].node = graph.addNode(desc.clip);
+        } else {
+            const NodeIndex child = graph.addNode(StateMachineNode {});
+            m_machines[desc.machine].build(graph, child);
+            machine.states[i].node = child;
+        }
+    }
+
+    std::vector<const TransitionDesc*> sorted;
+    sorted.reserve(m_transitions.size());
+    for (const auto& transition : m_transitions) {
+        if (transition.from >= m_states.size() || transition.to >= m_states.size()) {
+            throw std::invalid_argument(std::format("animation graph: transition {} -> {} of machine {} is out of range",
+                                                    transition.from, transition.to, self.value));
+        }
+        sorted.push_back(&transition);
+    }
+    std::ranges::stable_sort(sorted, {}, &TransitionDesc::from);
+
+    machine.transitions.reserve(sorted.size());
+    for (const TransitionDesc* transition : sorted) {
+        auto& from = machine.states[transition->from];
+        if (from.transitionCount == 0) {
+            from.firstTransition = static_cast<uint16_t>(machine.transitions.size());
+        }
+        from.transitionCount++;
+        machine.transitions.push_back({
+            .to = transition->to,
+            .trigger = graph.addTrigger(transition->trigger),
+            .exitTime = transition->exitTime,
+            .fadeDuration = transition->fadeDuration,
+        });
+    }
+
+    graph.m_nodes[self.value] = std::move(machine);
+}
+
+NodeIndex AnimGraph::addNode(AnimNode node) {
+    if (m_nodes.size() >= NodeIndex::kInvalid) {
+        throw std::invalid_argument("animation graph: too many nodes");
+    }
+    m_nodes.push_back(std::move(node));
+    return NodeIndex { static_cast<uint16_t>(m_nodes.size() - 1) };
 }
 
 uint16_t AnimGraph::addTrigger(const std::string& name) {
     if (name.empty()) return kNone;
-    assert(m_triggerNames.size() < kNone);
-    return m_triggerNames.try_emplace(name, static_cast<uint16_t>(m_triggerNames.size())).first->second;
-}
-
-void AnimGraph::addTransition(uint16_t from, uint16_t to, const std::string& trigger, float fadeDuration,
-                              float exitTime) {
-    addTransition(kRoot, from, to, trigger, fadeDuration, exitTime);
-}
-
-void AnimGraph::addTransition(NodeId machineNode, uint16_t from, uint16_t to, const std::string& trigger,
-                              float fadeDuration, float exitTime) {
-    auto& m = mutableMachine(machineNode);
-    auto& states = m.states;
-    assert(from < states.size() && to < states.size());
-    assert(m.transitions.size() < std::numeric_limits<uint16_t>::max());
-
-    auto& state = states[from];
-    auto position = m.transitions.begin() + state.firstTransition + state.transitionCount;
-    m.transitions.insert(position, {
-        .to = to,
-        .trigger = addTrigger(trigger),
-        .exitTime = exitTime,
-        .fadeDuration = fadeDuration,
-    });
-    state.transitionCount++;
-
-    for (uint32_t i = from + 1; i < states.size(); ++i) {
-        states[i].firstTransition++;
+    if (m_triggerNames.size() >= kNone) {
+        throw std::invalid_argument("animation graph: too many triggers");
     }
-}
-
-void AnimGraph::setEntryState(NodeId machineNode, uint16_t state) {
-    auto& m = mutableMachine(machineNode);
-    assert(state < m.states.size());
-    m.entryState = state;
+    return m_triggerNames.try_emplace(name, static_cast<uint16_t>(m_triggerNames.size())).first->second;
 }
 
 std::span<const AnimGraph::Transition> AnimGraph::transitions(const StateMachineNode& machine, uint16_t state) {
@@ -122,7 +149,7 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
     m_tree.reserve(graph.nodeCount());
 
     // Depth-first, so m_tree is in preorder: every node comes after its parent.
-    auto build = [&](this auto& self, NodeId graphNode, uint8_t depth) -> void {
+    auto build = [&](this auto& self, NodeIndex graphNode, uint8_t depth) -> void {
         if (graphNode.value >= graph.nodeCount()) {
             throw std::invalid_argument(
                 std::format("animation graph: state refers to missing node {}", graphNode.value));
@@ -196,18 +223,7 @@ void AnimGraphRunner::update(float dt) {
         auto& node = m_tree[i];
         if (!node.active) {
             if (node.wasActive) {
-                std::visit(Overloaded {
-                    [&](Clip& clip) {
-                        clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
-                    },
-                    [&](StateMachine& sm) {
-                        const auto& machine = m_definition->machine(sm.machine);
-                        sm.currentState = machine.entryState;
-                        sm.currentNode = m_nodesMap[machine.states[sm.currentState].node.value];
-                        sm.stateTime = 0.0f;
-                        sm.m_transitionStack.clear();
-                    },
-                }, node.data);
+                resetNode(node);
             }
             continue;
         }
@@ -216,6 +232,33 @@ void AnimGraphRunner::update(float dt) {
             [&](Clip& clip) { updateClip(clip, dt); },
             [&](StateMachine& sm) { updateMachine(sm, dt); },
         }, node.data);
+    }
+}
+
+uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
+    return std::get<StateMachine>(m_tree[m_nodesMap[machine.value]].data).currentState;
+}
+
+void AnimGraphRunner::resetNode(Node& node) {
+    std::visit(Overloaded {
+        [&](Clip& clip) {
+            clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
+        },
+        [&](StateMachine& sm) {
+            const auto& machine = m_definition->machine(sm.machine);
+            sm.currentState = machine.entryState;
+            sm.currentNode = m_nodesMap[machine.states[sm.currentState].node.value];
+            sm.stateTime = 0.0f;
+            sm.m_transitionStack.clear();
+        },
+    }, node.data);
+}
+
+void AnimGraphRunner::resetSubtree(uint16_t index) {
+    const uint8_t depth = m_tree[index].depth;
+    resetNode(m_tree[index]);
+    for (size_t i = index + 1u; i < m_tree.size() && m_tree[i].depth > depth; ++i) {
+        resetNode(m_tree[i]);
     }
 }
 
@@ -270,7 +313,6 @@ void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
     sm.stateTime += dt;
 
     auto& machine = m_definition->machine(sm.machine);
-    auto& states = machine.states;
     auto transitions = m_definition->transitions(machine, sm.currentState);
 
     for (auto& transition : transitions) {
@@ -282,7 +324,12 @@ void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
             m_triggers[trigger] = 0;
         }
 
+        auto& states = machine.states;
         const uint16_t to = m_nodesMap[states[transition.to].node.value];
+        // A transition into the current state restarts it. One node has one time, so this jumps rather than fades.
+        if (to == sm.currentNode) {
+            resetSubtree(to);
+        }
         // newest first
         sm.m_transitionStack.insert(sm.m_transitionStack.begin(), Transition {
             .fromNode = sm.currentNode,

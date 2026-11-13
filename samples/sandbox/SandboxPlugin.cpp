@@ -29,7 +29,7 @@ namespace ailo {
 namespace {
 
 // Plays every clip in turn, crossfading into the next one before the current one ends.
-void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimationStateMachine>& machines) {
+void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimGraph>& graphs) {
     constexpr float kCrossFade = 0.3f;
 
     auto* animator = scene.registry().try_get<AnimatorComponent>(entity);
@@ -38,21 +38,22 @@ void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimationStateMachine>
     }
 
     const auto& clips = animator->clips;
-    const auto count = static_cast<uint32_t>(clips.size());
-    AnimationStateMachine definition;
+    const auto count = static_cast<uint16_t>(clips.size());
+    AnimGraph::Builder builder;
     for (const auto& clip : clips) {
-        definition.addState(clip->name, count == 1);
+        builder.state(clip->name, count == 1);
     }
     if (count > 1) {
-        for (uint32_t i = 0; i < count; ++i) {
-            definition.addTransition(i, (i + 1) % count, {}, kCrossFade, clips[i]->duration - kCrossFade);
+        for (uint16_t i = 0; i < count; ++i) {
+            builder.transition(i, static_cast<uint16_t>((i + 1) % count), {}, kCrossFade,
+                               clips[i]->duration - kCrossFade);
         }
     }
-    animator->setStateMachine(machines.emplace(noname_t {}, std::move(definition)));
+    animator->setGraph(graphs.emplace(noname_t {}, builder.build()));
 }
 
 void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
-                AssetStorage<MaterialInstance>& materialInstances, AssetStorage<AnimationStateMachine>& machines,
+                AssetStorage<MaterialInstance>& materialInstances, AssetStorage<AnimGraph>& graphs,
                 RenderAPI& api) {
     scene::spawn(scene,
         TransformComponent { },
@@ -90,7 +91,7 @@ void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,
         .rotation = yaw90,
         .scale = glm::vec3(0.01f),
     });
-    cycleClips(scene, kick, machines);
+    cycleClips(scene, kick, graphs);
     scene::spawnPrefab(scene, server.load<Model>("models/DamagedHelmet.glb.model"), {
         .position = { 1.2f, 3.0f, 0.0f },
         .rotation = yaw90,

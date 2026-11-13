@@ -24,18 +24,17 @@ struct ClipNode {
 
 inline constexpr uint16_t kAnimNone = std::numeric_limits<uint16_t>::max();
 
-// Index of a node in an AnimGraph.
-struct NodeId {
+struct NodeIndex {
     static constexpr uint16_t kInvalid = std::numeric_limits<uint16_t>::max();
 
     uint16_t value = kInvalid;
 
     constexpr bool valid() const { return value != kInvalid; }
-    friend constexpr bool operator==(NodeId, NodeId) = default;
+    friend constexpr bool operator==(NodeIndex, NodeIndex) = default;
 };
 
 struct AnimState {
-    NodeId   node;
+    NodeIndex   node;
     uint16_t firstTransition = 0;         // into the machine's transitions
     uint16_t transitionCount = 0;
 };
@@ -57,36 +56,53 @@ struct StateMachineNode {
 
 using AnimNode = std::variant<ClipNode, StateMachineNode>;
 
-// Immutable once shared: a tree of nodes in a flat array that refer to each other by NodeId. kRoot is the root
-// machine. Each node may be the state of at most one machine.
 class AnimGraph {
 public:
     static constexpr uint16_t kNone = kAnimNone;
-    static constexpr NodeId kRoot { 0 };
+    static constexpr NodeIndex kRoot { 0 };
     using State = AnimState;
     using Transition = AnimTransition;
 
-    AnimGraph();
+    class Builder {
+    public:
+        Builder& state(std::string clip, bool looping = true, float rate = 1.0f);
+        Builder& state(Builder machine);
+        Builder& transition(uint16_t from, uint16_t to, std::string trigger = {}, float fadeDuration = 0.0f,
+                            float exitTime = 0.0f);
+        Builder& entryState(uint16_t state);
 
-    // Returns a new empty machine, to be used as a state with addMachineState.
-    NodeId addMachine();
+        // Throws std::invalid_argument if a machine has no states or a transition or entry state is out of range.
+        AnimGraph build() const;
 
-    // Return the state index within the machine.
-    uint16_t addState(std::string clip, bool looping = true);
-    uint16_t addState(NodeId machine, std::string clip, bool looping = true);
-    uint16_t addMachineState(NodeId machine, NodeId child);
+    private:
+        struct StateDesc {
+            ClipNode clip;
+            uint16_t machine = kAnimNone; // into m_machines when the state is a nested machine
+        };
 
-    uint16_t addTrigger(const std::string& name);
-    void addTransition(uint16_t from, uint16_t to, const std::string& trigger = {}, float fadeDuration = 0.0f,
-                       float exitTime = 0.0f);
-    void addTransition(NodeId machine, uint16_t from, uint16_t to, const std::string& trigger = {},
-                       float fadeDuration = 0.0f, float exitTime = 0.0f);
-    void setEntryState(NodeId machine, uint16_t state);
+        struct TransitionDesc {
+            uint16_t from;
+            uint16_t to;
+            std::string trigger;
+            float fadeDuration;
+            float exitTime;
+        };
 
-    const AnimNode& node(NodeId id) const { return m_nodes[id.value]; }
+        void build(AnimGraph& graph, NodeIndex self) const;
+
+        std::vector<StateDesc> m_states;
+        std::vector<Builder> m_machines;
+        std::vector<TransitionDesc> m_transitions;
+        uint16_t m_entryState = 0;
+    };
+
+    AnimGraph(AnimGraph&&) noexcept = default;
+    AnimGraph& operator=(AnimGraph&&) noexcept = default;
+
+    const AnimNode& node(NodeIndex id) const { return m_nodes[id.value]; }
     uint32_t nodeCount() const { return static_cast<uint32_t>(m_nodes.size()); }
     const StateMachineNode& root() const { return machine(kRoot); }
-    const StateMachineNode& machine(NodeId id) const { return std::get<StateMachineNode>(m_nodes[id.value]); }
+    const StateMachineNode& machine(NodeIndex id) const { return std::get<StateMachineNode>(m_nodes[id.value]); }
 
     // The root machine's states.
     uint32_t stateCount() const { return static_cast<uint32_t>(root().states.size()); }
@@ -98,9 +114,10 @@ public:
     std::optional<uint16_t> findTrigger(const std::string& name) const;
 
 private:
-    StateMachineNode& mutableMachine(NodeId id) { return std::get<StateMachineNode>(m_nodes[id.value]); }
-    NodeId addNode(AnimNode node);
-    uint16_t addStateNode(NodeId machine, NodeId node);
+    AnimGraph() = default;
+
+    NodeIndex addNode(AnimNode node);
+    uint16_t addTrigger(const std::string& name);
 
     std::vector<AnimNode> m_nodes;
     std::unordered_map<std::string, uint16_t> m_triggerNames;
@@ -124,7 +141,7 @@ struct PosePool {
 class AnimGraphRunner {
 private:
     // The tree has at most one node per graph node, so its indexes fit below NodeId::kInvalid.
-    static constexpr uint16_t kNoTreeNode = NodeId::kInvalid;
+    static constexpr uint16_t kNoTreeNode = NodeIndex::kInvalid;
 
     struct Clip {
         AssetPtr<AnimationClip> clip;
@@ -144,7 +161,7 @@ private:
     };
 
     struct StateMachine {
-        NodeId machine;
+        NodeIndex machine;
         uint16_t currentState = 0;
         uint16_t currentNode = 0;
         float stateTime = 0.0f; // since currentState was entered
@@ -161,16 +178,20 @@ private:
 public:
     AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips);
 
-    // A set trigger stays set until a transition that uses it fires.
     void setTrigger(const std::string& name);
     void resetTrigger(const std::string& name);
 
     void update(float dt);
     void evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
+    // The state index the machine is in, or is fading into.
+    uint16_t currentState(NodeIndex machine = AnimGraph::kRoot) const;
+
 private:
+    void resetNode(Node& node);
+    // Resets the node at index and everything below it.
+    void resetSubtree(uint16_t index);
     static void updateClip(Clip& clip, float dt);
-    // Picks a transition and writes the children's local weights.
     void updateMachine(StateMachine& sm, float dt);
     void evaluateNode(uint16_t index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
