@@ -29,6 +29,8 @@ struct NodeIndex {
 
     uint16_t value = kInvalid;
 
+    explicit operator uint16_t() const { return value; }
+
     constexpr bool valid() const { return value != kInvalid; }
     friend constexpr bool operator==(NodeIndex, NodeIndex) = default;
 };
@@ -52,9 +54,16 @@ struct StateMachineNode {
     std::vector<AnimState> states;
     std::vector<AnimTransition> transitions; // grouped by from-state
     uint16_t entryState = 0;
+
+    std::span<const AnimTransition> transitionsFrom(uint16_t state) const {
+        const auto& s = states[state];
+        return std::span(transitions).subspan(s.firstTransition, s.transitionCount);
+    }
 };
 
-using AnimNode = std::variant<ClipNode, StateMachineNode>;
+struct AnimNode : std::variant<ClipNode, StateMachineNode> {
+    using std::variant<ClipNode, StateMachineNode>::variant;
+};
 
 class AnimGraph {
 public:
@@ -101,14 +110,6 @@ public:
 
     const AnimNode& node(NodeIndex id) const { return m_nodes[id.value]; }
     uint32_t nodeCount() const { return static_cast<uint32_t>(m_nodes.size()); }
-    const StateMachineNode& root() const { return machine(kRoot); }
-    const StateMachineNode& machine(NodeIndex id) const { return std::get<StateMachineNode>(m_nodes[id.value]); }
-
-    // The root machine's states.
-    uint32_t stateCount() const { return static_cast<uint32_t>(root().states.size()); }
-    const State& state(uint16_t index) const { return root().states[index]; }
-    std::span<const Transition> transitions(uint16_t state) const { return transitions(root(), state); }
-    static std::span<const Transition> transitions(const StateMachineNode& machine, uint16_t state);
 
     uint32_t triggerCount() const { return static_cast<uint32_t>(m_triggerNames.size()); }
     std::optional<uint16_t> findTrigger(const std::string& name) const;
@@ -170,9 +171,8 @@ private:
 
     struct Node {
         std::variant<Clip, StateMachine> data;
-        uint8_t depth = 0;
-        bool active = 0.0f;
-        bool wasActive = 0.0f;
+        bool active = false;
+        bool wasActive = false;
     };
 
 public:
@@ -189,8 +189,7 @@ public:
 
 private:
     void resetNode(Node& node);
-    // Resets the node at index and everything below it.
-    void resetSubtree(uint16_t index);
+
     static void updateClip(Clip& clip, float dt);
     void updateMachine(StateMachine& sm, float dt);
     void evaluateNode(uint16_t index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
