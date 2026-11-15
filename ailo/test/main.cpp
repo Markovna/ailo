@@ -12,6 +12,8 @@ void runPhysicsTests();
 void runSkeletonTests();
 void runExprVMTests();
 void runAnimGraphTests();
+void runSyncTrackTests();
+void runFootMarkerTests();
 
 int main() {
     runAppTests();
@@ -26,6 +28,8 @@ int main() {
     runSkeletonTests();
     runExprVMTests();
     runAnimGraphTests();
+    runSyncTrackTests();
+    runFootMarkerTests();
 
     return ailo::test::finish();
 }

@@ -10,12 +10,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "animation/SyncTrack.h"
 #include "render/texture/TexturePackage.h"
 
 namespace ailo::model {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
-static constexpr uint32_t kModelPackageVersion = 3;
+static constexpr uint32_t kModelPackageVersion = 4;
 
 static constexpr uint32_t kMaxSkinBones = 256;
 
@@ -117,11 +118,18 @@ struct Channel {
     std::vector<Key<glm::vec3>> scales;
 };
 
+// Starts a sync event that lasts until the next marker (animation/SyncTrack.h).
+struct SyncMarker {
+    std::string name;
+    float time = 0.0f;                  // seconds, in [0, duration)
+};
+
 struct Clip {
     std::string name;
     float ticksPerSecond = 25.0f;
     float duration = 0.0f;              // seconds
     std::vector<Channel> channels;
+    std::vector<SyncMarker> syncMarkers; // by time, at most SyncTrack::kMaxEvents; none gives one event over the clip
 };
 
 struct ModelPackage {

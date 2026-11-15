@@ -12,7 +12,7 @@ modelc --dump <package.model>
 - `--depfile` lists the `.model` file and every file assimp opened (the source, `.bin` buffers, `.mtl` libraries,
   ...).
 - `--dump` prints the package's meshes (with meshoptimizer's ACMR and ATVR for a 16-entry cache, overfetch and
-  overdraw), materials with their parameters, instances, skeleton, skins, clips and embedded
+  overdraw), materials with their parameters, instances, skeleton, skins, clips with their sync markers and embedded
   textures.
 
 ## Format
@@ -37,6 +37,7 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `textures`  | object | Optional. Source texture URI -> texture key written instead (see [Textures](#textures)), like `materials`. Naming a URI the source doesn't reference is an error. |
 | `animations` | object | Optional. Clip name -> file whose animations are added to the model's clips, relative like `source` (see [Animations](#animations)). |
 | `optimize`  | bool   | Optional, default `true`. Optimizes the meshes with meshoptimizer (see [Geometry](#geometry)); `false` keeps assimp's vertex and triangle order. |
+| `footMarkers` | object | Optional. Generates sync markers where the feet come down (see [Foot markers](#foot-markers)). |
 
 ## Materials
 
@@ -87,6 +88,37 @@ It is an error if the source has no skinned mesh or a file has no animations.
     "animations": { "walk": "/animations/.source/walk.fbx", "jump": "/animations/.source/jump.fbx" }
 }
 ```
+
+## Foot markers
+
+`footMarkers` puts sync markers on clips at the moments each foot comes down, the way Unreal's footstep animation
+modifier does. The runtime builds each clip's `SyncTrack` from its markers (`ailo/animation/SyncTrack.h`): each marker
+starts a sync event, named after the marker, that lasts until the next marker. A clip with no markers gets one sync event
+over its whole length.
+
+```
+"footMarkers": {
+    "feet": { "LeftFoot": "foot_l", "RightFoot": "foot_r" },
+    "clips": [ "walk", "jog" ],
+    "groundThreshold": 5
+}
+```
+
+| Property          | Type   | Meaning |
+|-------------------|--------|---------|
+| `feet`            | object | Required. Marker name -> foot bone. A bone the skeleton doesn't have is an error. |
+| `groundThreshold` | number | Required. How far above its lowest point in the clip a foot still counts as planted, in source units (centimeters for Unreal FBX files). |
+| `speedThreshold`  | number | Optional, default 0 (off). A planted foot must also move slower than this, in source units per second. This only works for clips that keep their root motion, where a planted foot stands still. |
+| `sampleRate`      | number | Optional, default 60. Samples per second. Markers fall on samples. |
+| `up`              | array  | Optional, default `[0, 1, 0]`. The up axis in the model's space, after assimp's import. |
+| `clips`           | array  | Optional. The clips to mark, by name. All clips if left out. Naming a clip the model doesn't have is an error. A listed clip that gets no markers is a warning. |
+
+Each foot bone is sampled in model space, its ancestors included. A foot comes down at a sample where it is planted and
+was not planted at the sample before. The first sample follows the last, as the clip loops. A foot that is planted for the
+whole clip, or never, adds no markers, so an idle clip keeps the default track. When two feet come down at the same
+sample, the marker whose name sorts first is kept. A clip can have at most `SyncTrack::kMaxEvents` markers. If an ankle bobs above the
+threshold while the foot is planted (a heel-to-toe roll), the foot gets two markers per step: raise `groundThreshold`.
+`--dump` lists each clip's markers, which is how to check the settings.
 
 ## Geometry
 

@@ -108,6 +108,10 @@ int dump(const fs::path& path) {
     std::cout << "clips: " << pkg->clips.size() << "\n";
     for (const auto& clip : pkg->clips) {
         std::cout << "  \"" << clip.name << "\": " << clip.duration << " s, " << clip.channels.size() << " channels\n";
+        for (const auto& marker : clip.syncMarkers) {
+            std::cout << "    " << marker.name << " at " << marker.time << " s ("
+                      << 100.0f * marker.time / clip.duration << "%)\n";
+        }
     }
 
     std::cout << "embedded textures: " << pkg->textures.size() << "\n";

@@ -132,6 +132,7 @@ public:
         }
         buildClips();
         buildExternalClips();
+        buildFootMarkers();
         buildInstances(m_scene->mRootNode, glm::mat4(1.0f), "");
         checkNodeMaterials();
     }
@@ -424,6 +425,33 @@ private:
             for (unsigned i = 0; i < scene->mNumAnimations; i++) {
                 const aiAnimation* anim = scene->mAnimations[i];
                 addClip(anim, scene->mNumAnimations == 1 ? name : name + "/" + anim->mName.C_Str());
+            }
+        }
+    }
+
+    void buildFootMarkers() {
+        if (!m_def.footMarkers) return;
+        const FootMarkerSettings& settings = *m_def.footMarkers;
+        if (m_pkg.skeleton.empty()) throw CompileError("footMarkers: the source has no skinned mesh");
+
+        for (const std::string& name : settings.clips) {
+            if (std::ranges::none_of(m_pkg.clips, [&](const Clip& clip) { return clip.name == name; })) {
+                std::string available;
+                for (const Clip& clip : m_pkg.clips) available += (available.empty() ? "" : ", ") + clip.name;
+                throw CompileError("footMarkers: no clip named \"" + name + "\" (the clips are: " +
+                                   (available.empty() ? "none" : available) + ")");
+            }
+        }
+
+        for (Clip& clip : m_pkg.clips) {
+            if (!settings.clips.empty() && std::ranges::find(settings.clips, clip.name) == settings.clips.end()) continue;
+            try {
+                clip.syncMarkers = findFootMarkers(m_pkg.skeleton, clip, settings);
+            } catch (const std::runtime_error& e) {
+                throw CompileError("footMarkers: clip \"" + clip.name + "\": " + e.what());
+            }
+            if (clip.syncMarkers.empty() && !settings.clips.empty()) {
+                m_out.warnings.push_back("footMarkers: no foot comes down in clip \"" + clip.name + "\"");
             }
         }
     }

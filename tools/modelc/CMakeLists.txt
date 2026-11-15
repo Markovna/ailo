@@ -10,6 +10,8 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_RELEASE}")
 # ailo_texture and stb_image, which are built with the engine's flags (see tools/texc). Assimp is built with them too.
 add_executable(modelc
         src/main.cpp
+        src/FootMarkers.cpp
+        src/FootMarkers.h
         src/ModelCompiler.cpp
         src/ModelCompiler.h
         src/ModelDefinition.cpp

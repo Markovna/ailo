@@ -1,5 +1,6 @@
 #include "Model.h"
 
+#include <array>
 #include <cstring>
 #include <filesystem>
 #include <limits>
@@ -219,6 +220,12 @@ void ModelLoader::load(const std::string& key, std::span<const uint8_t> bytes, L
             for (const auto& k : channel.rotations) bc.rotationKeys.push_back({ k.time, k.value });
             for (const auto& k : channel.scales) bc.scaleKeys.push_back({ k.time, k.value });
         }
+
+        std::array<SyncTrack::Marker, SyncTrack::kMaxEvents> markers;
+        for (size_t i = 0; i < src.syncMarkers.size(); ++i) {
+            markers[i] = { .id = syncEventId(src.syncMarkers[i].name), .start = src.syncMarkers[i].time / src.duration };
+        }
+        clip->syncTrack = SyncTrack(std::span(markers).first(src.syncMarkers.size()));
         clips.push_back(std::move(clip));
     }
 

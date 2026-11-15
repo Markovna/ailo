@@ -2,9 +2,12 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+#include "FootMarkers.h"
 
 namespace modelc {
 
@@ -21,6 +24,7 @@ struct ModelDefinition {
     std::map<std::string, std::filesystem::path> textures;  // source texture URI -> path replacing it, relative like `source`
     std::map<std::string, std::filesystem::path> animations; // clip name -> file whose animations are added, relative like `source`
     bool optimize = true;                           // reorder meshes for the vertex cache, overdraw and vertex fetch
+    std::optional<FootMarkerSettings> footMarkers;  // sync markers generated where the feet come down
 };
 
 ModelDefinition parseModelDefinition(std::string_view source);

@@ -221,6 +221,28 @@ std::string ModelPackage::validate() const {
         }
     }
 
+    for (size_t i = 0; i < clips.size(); i++) {
+        const auto& clip = clips[i];
+        const std::string what = "clip " + std::to_string(i) + " (" + clip.name + ")";
+        if (clip.syncMarkers.size() > SyncTrack::kMaxEvents) {
+            return what + " has " + std::to_string(clip.syncMarkers.size()) + " sync markers, the limit is " +
+                   std::to_string(SyncTrack::kMaxEvents);
+        }
+        for (size_t j = 0; j < clip.syncMarkers.size(); j++) {
+            const auto& marker = clip.syncMarkers[j];
+            if (marker.name.empty()) return what + " sync marker " + std::to_string(j) + " has no name";
+            // Checked as the fraction of the clip the runtime's sync track is built from.
+            const float start = marker.time / clip.duration;
+            if (!(start >= 0.0f && start < 1.0f)) {
+                return what + " sync marker " + marker.name + " at " + std::to_string(marker.time) +
+                       " s is outside the clip";
+            }
+            if (j > 0 && start <= clip.syncMarkers[j - 1].time / clip.duration) {
+                return what + " sync markers are not in increasing time order";
+            }
+        }
+    }
+
     for (size_t i = 0; i < textures.size(); i++) {
         if (auto error = textures[i].validate(); !error.empty()) {
             return "embedded texture " + std::to_string(i) + ": " + error;
@@ -310,6 +332,11 @@ std::vector<uint8_t> ModelPackage::serialize() const {
             writeKeys(w, channel.positions, writeVec3);
             writeKeys(w, channel.rotations, writeQuat);
             writeKeys(w, channel.scales, writeVec3);
+        }
+        w.u32(uint32_t(clip.syncMarkers.size()));
+        for (const auto& marker : clip.syncMarkers) {
+            w.string(marker.name);
+            w.f32(marker.time);
         }
         w.endChunk();
     }
@@ -433,6 +460,12 @@ std::optional<ModelPackage> ModelPackage::deserialize(std::span<const uint8_t> d
                     readKeys(r, channel.rotations, readQuat);
                     readKeys(r, channel.scales, readVec3);
                     return channel;
+                });
+                readArray(c, clip.syncMarkers, [](Reader& r) {
+                    SyncMarker marker;
+                    marker.name = r.string();
+                    marker.time = r.f32();
+                    return marker;
                 });
                 break;
             }

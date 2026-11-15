@@ -80,6 +80,7 @@ ModelPackage makePackage() {
     channel.positions = { { 0.0f, { 1, 2, 3 } }, { 1.0f, { 4, 5, 6 } } };
     channel.rotations = { { 0.5f, glm::quat(0.5f, 0.1f, 0.2f, 0.3f) } };
     channel.scales = { { 0.0f, { 1, 1, 1 } } };
+    clip.syncMarkers = { { "LeftFoot", 0.25f }, { "RightFoot", 1.25f } };
 
     pkg.textures.push_back(makeTexture());
     return pkg;
@@ -145,6 +146,9 @@ void testRoundTrip() {
     CHECK_EQ(clip.channels[0].rotations[0].time, 0.5f);
     CHECK_EQ(clip.channels[0].rotations[0].value, glm::quat(0.5f, 0.1f, 0.2f, 0.3f));
     CHECK_EQ(clip.channels[0].scales.size(), 1);
+    REQUIRE_EQ(clip.syncMarkers.size(), 2);
+    CHECK(clip.syncMarkers[0].name == "LeftFoot" && clip.syncMarkers[0].time == 0.25f);
+    CHECK(clip.syncMarkers[1].name == "RightFoot" && clip.syncMarkers[1].time == 1.25f);
 
     REQUIRE_EQ(out->textures.size(), 1);
     CHECK(out->textures[0].data == pkg.textures[0].data && out->textures[0].generateMipmaps);
@@ -255,6 +259,34 @@ void testValidate() {
         auto pkg = makePackage();
         pkg.materials[1].material.clear();
         CHECK(contains(pkg.validate(), "names no material"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.clips[0].syncMarkers[1].time = 2.0f;
+        CHECK(contains(pkg.validate(), "outside the clip"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.clips[0].syncMarkers[0].time = -0.5f;
+        CHECK(contains(pkg.validate(), "outside the clip"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.clips[0].syncMarkers[1].time = 0.25f;
+        CHECK(contains(pkg.validate(), "increasing time order"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.clips[0].syncMarkers[0].name.clear();
+        CHECK(contains(pkg.validate(), "has no name"));
+    }
+    {
+        auto pkg = makePackage();
+        pkg.clips[0].syncMarkers.clear();
+        for (uint32_t i = 0; i <= SyncTrack::kMaxEvents; i++) {
+            pkg.clips[0].syncMarkers.push_back({ "Step", float(i) * 0.05f });
+        }
+        CHECK(contains(pkg.validate(), "sync markers, the limit is"));
     }
     {
         auto pkg = makePackage();

@@ -6,6 +6,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "animation/SyncTrack.h"
+
 
 namespace ailo {
 
@@ -71,6 +73,7 @@ struct AnimationClip {
     float ticksPerSecond = 25.0f;
     std::vector<BoneChannel> channels;
     std::unordered_map<std::string, uint32_t> nameToIndex;
+    SyncTrack syncTrack;
 };
 
 } // namespace ailo

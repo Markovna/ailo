@@ -22,6 +22,62 @@ const std::string& getNonEmptyString(const json::Value& v, const std::string& wh
     return v.asString();
 }
 
+float getNumber(const json::Value& v, const std::string& what, float min, bool inclusive) {
+    expect(v, v.isNumber(), "a number", what);
+    const auto value = float(v.asNumber());
+    if (inclusive ? !(value >= min) : !(value > min)) {
+        fail(v.line, what + " must be " + (inclusive ? "at least " : "greater than ") + std::to_string(min));
+    }
+    return value;
+}
+
+FootMarkerSettings parseFootMarkers(const json::Value& root) {
+    expect(root, root.isObject(), "an object", "footMarkers");
+    FootMarkerSettings settings;
+    bool hasFeet = false, hasThreshold = false;
+
+    for (const auto& [key, v] : root.asObject()) {
+        if (key == "feet") {
+            expect(v, v.isObject(), "an object", "footMarkers.feet");
+            for (const auto& [marker, bone] : v.asObject()) {
+                if (marker.empty()) fail(bone.line, "a foot marker name is empty");
+                settings.feet.emplace(marker, getNonEmptyString(bone, "bone of foot marker \"" + marker + "\""));
+            }
+            if (settings.feet.empty()) fail(v.line, "footMarkers.feet is empty");
+            hasFeet = true;
+        } else if (key == "clips") {
+            expect(v, v.isArray(), "an array", "footMarkers.clips");
+            for (const auto& clip : v.asArray()) {
+                settings.clips.push_back(getNonEmptyString(clip, "a footMarkers clip"));
+            }
+        } else if (key == "groundThreshold") {
+            settings.groundThreshold = getNumber(v, "footMarkers.groundThreshold", 0.0f, true);
+            hasThreshold = true;
+        } else if (key == "speedThreshold") {
+            settings.speedThreshold = getNumber(v, "footMarkers.speedThreshold", 0.0f, true);
+        } else if (key == "sampleRate") {
+            settings.sampleRate = getNumber(v, "footMarkers.sampleRate", 0.0f, false);
+        } else if (key == "up") {
+            expect(v, v.isArray() && v.asArray().size() == 3, "an array of 3 numbers", "footMarkers.up");
+            glm::vec3 up;
+            for (int i = 0; i < 3; i++) {
+                const auto& c = v.asArray()[i];
+                expect(c, c.isNumber(), "a number", "a footMarkers.up component");
+                up[i] = float(c.asNumber());
+            }
+            if (glm::length(up) == 0.0f) fail(v.line, "footMarkers.up is zero");
+            settings.up = glm::normalize(up);
+        } else {
+            fail(v.line, "unknown footMarkers property \"" + key +
+                         "\" (expected feet, clips, groundThreshold, speedThreshold, sampleRate, up)");
+        }
+    }
+
+    if (!hasFeet) fail(root.line, "footMarkers is missing \"feet\"");
+    if (!hasThreshold) fail(root.line, "footMarkers is missing \"groundThreshold\"");
+    return settings;
+}
+
 }
 
 ModelDefinition parseModelDefinition(std::string_view source) {
@@ -75,8 +131,10 @@ ModelDefinition parseModelDefinition(std::string_view source) {
         } else if (key == "optimize") {
             expect(v, v.isBool(), "a boolean", "optimize");
             def.optimize = v.asBool();
+        } else if (key == "footMarkers") {
+            def.footMarkers = parseFootMarkers(v);
         } else {
-            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, nodeMaterials, textures, animations, optimize)");
+            fail(v.line, "unknown model property \"" + key + "\" (expected source, material, materials, nodeMaterials, textures, animations, optimize, footMarkers)");
         }
     }
 
