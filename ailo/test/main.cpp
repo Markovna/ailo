@@ -9,7 +9,6 @@ void runLightingTests();
 void runMaterialInstanceTests();
 void runTransformTests();
 void runPhysicsTests();
-void runAnimationStateMachineTests();
 void runSkeletonTests();
 
 int main() {
@@ -22,7 +21,6 @@ int main() {
     runMaterialInstanceTests();
     runTransformTests();
     runPhysicsTests();
-    runAnimationStateMachineTests();
     runSkeletonTests();
 
     return ailo::test::finish();

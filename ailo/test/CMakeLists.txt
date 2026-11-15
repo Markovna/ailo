@@ -10,7 +10,6 @@ add_executable(ailo_tests
         material_instance_tests.cpp
         transform_tests.cpp
         physics_tests.cpp
-        animation_state_machine_tests.cpp
         skeleton_tests.cpp
 )
 # ailo_texture and ailo_model are private to ailo, so their include dirs come from linking them here.
