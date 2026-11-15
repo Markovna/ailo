@@ -39,19 +39,19 @@ void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimGraph>& graphs) {
 
     const auto& clips = animator->clips;
     const auto count = static_cast<uint16_t>(clips.size());
-    AnimGraph::Builder builder;
+    AnimGraph::MachineBuilder machine;
     for (const auto& clip : clips) {
-        builder.state(clip->name, count == 1);
+        machine.state(clip->name, count == 1);
     }
     if (count > 1) {
         for (uint16_t i = 0; i < count; ++i) {
-            builder.transition(i, static_cast<uint16_t>((i + 1) % count), {
+            machine.transition(i, static_cast<uint16_t>((i + 1) % count), {
                 .fadeDuration = kCrossFade,
                 .exitTime = clips[i]->duration - kCrossFade,
             });
         }
     }
-    animator->setGraph(graphs.emplace(noname_t {}, builder.build()));
+    animator->setGraph(graphs.emplace(noname_t {}, AnimGraph::Builder {}.root(std::move(machine)).build()));
 }
 
 void setupScene(Scene& scene, AssetServer& server, AssetStorage<Mesh>& meshes,

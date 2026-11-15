@@ -17,19 +17,24 @@ constexpr uint16_t kNone = AnimGraph::kNone;
 
 }
 
-AnimGraph::Builder& AnimGraph::Builder::state(std::string clip, bool looping, float rate) {
+AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::state(std::string clip, bool looping, float rate) {
     m_states.push_back({ .clip = { .clip = std::move(clip), .rate = rate, .looping = looping } });
     return *this;
 }
 
-AnimGraph::Builder& AnimGraph::Builder::state(Builder machine) {
+AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::state(MachineBuilder machine) {
     m_states.push_back({ .machine = static_cast<uint16_t>(m_machines.size()) });
     m_machines.push_back(std::move(machine));
     return *this;
 }
 
-AnimGraph::Builder& AnimGraph::Builder::transition(uint16_t from, uint16_t to, TransitionDesc desc) {
+AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::transition(uint16_t from, uint16_t to, TransitionDesc desc) {
     m_transitions.push_back({ .from = from, .to = to, .desc = std::move(desc) });
+    return *this;
+}
+
+AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::entryState(uint16_t state) {
+    m_entryState = state;
     return *this;
 }
 
@@ -38,15 +43,16 @@ AnimGraph::Builder& AnimGraph::Builder::parameter(std::string name, float defaul
     return *this;
 }
 
-AnimGraph::Builder& AnimGraph::Builder::entryState(uint16_t state) {
-    m_entryState = state;
+AnimGraph::Builder& AnimGraph::Builder::root(MachineBuilder machine) {
+    m_root = std::move(machine);
     return *this;
 }
 
 AnimGraph AnimGraph::Builder::build() const {
     AnimGraph graph;
-    // Collected up front: a condition may read a parameter declared by a machine that is built after it.
-    collectParameters(graph);
+    for (const auto& parameter : m_parameters) {
+        graph.addParameter(parameter.name, parameter.defaultValue);
+    }
 
     std::vector<std::string_view> parameters;
     parameters.reserve(graph.m_parameters.size());
@@ -54,22 +60,14 @@ AnimGraph AnimGraph::Builder::build() const {
         parameters.push_back(parameter.name);
     }
 
-    build(graph, graph.addNode(StateMachineNode {}), parameters);
+    m_root.build(graph, graph.addNode(StateMachineNode {}), parameters);
     return graph;
-}
-
-void AnimGraph::Builder::collectParameters(AnimGraph& graph) const {
-    for (const auto& parameter : m_parameters) {
-        graph.addParameter(parameter.name, parameter.defaultValue);
-    }
-    for (const auto& machine : m_machines) {
-        machine.collectParameters(graph);
-    }
 }
 
 // Each machine's node is added before its states are, and a nested machine's subtree is finished before the next
 // state is added, so the nodes end up in the preorder AnimGraph promises (AnimGraphRunner relies on it).
-void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const {
+void AnimGraph::MachineBuilder::build(AnimGraph& graph, NodeIndex self,
+                                      std::span<const std::string_view> parameters) const {
     if (m_states.empty()) {
         throw std::invalid_argument(std::format("animation graph: machine {} has no states", self.value));
     }
@@ -165,18 +163,12 @@ std::optional<uint16_t> AnimGraph::findTrigger(const std::string& name) const {
 }
 
 void AnimGraph::addParameter(const std::string& name, float defaultValue) {
-    if (auto it = m_parameterIndices.find(name); it != m_parameterIndices.end()) {
-        const float existing = m_parameters[it->second].defaultValue;
-        if (existing != defaultValue) {
-            throw std::invalid_argument(std::format(
-                "animation graph: parameter '{}' is declared with defaults {} and {}", name, existing, defaultValue));
-        }
-        return;
-    }
     if (m_parameters.size() > expr::kMaxData) {
         throw std::invalid_argument("animation graph: too many parameters");
     }
-    m_parameterIndices.emplace(name, static_cast<uint16_t>(m_parameters.size()));
+    if (!m_parameterIndices.try_emplace(name, static_cast<uint16_t>(m_parameters.size())).second) {
+        throw std::invalid_argument(std::format("animation graph: parameter '{}' is declared twice", name));
+    }
     m_parameters.push_back({ .name = name, .defaultValue = defaultValue });
 }
 

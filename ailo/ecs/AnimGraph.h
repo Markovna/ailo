@@ -89,21 +89,20 @@ public:
     using State = AnimState;
     using Transition = AnimTransition;
 
-    class Builder {
+    class Builder;
+
+    class MachineBuilder {
     public:
         using TransitionDesc = AnimTransitionDesc;
 
-        Builder& state(std::string clip, bool looping = true, float rate = 1.0f);
-        Builder& state(Builder machine);
-        Builder& transition(uint16_t from, uint16_t to, TransitionDesc desc = {});
-        Builder& entryState(uint16_t state);
-        Builder& parameter(std::string name, float defaultValue = 0.0f);
-
-        // Throws std::invalid_argument if a machine has no states, a transition or entry state is out of range, a
-        // condition doesn't compile, or a parameter is declared twice with different defaults.
-        AnimGraph build() const;
+        MachineBuilder& state(std::string clip, bool looping = true, float rate = 1.0f);
+        MachineBuilder& state(MachineBuilder machine);
+        MachineBuilder& transition(uint16_t from, uint16_t to, TransitionDesc desc = {});
+        MachineBuilder& entryState(uint16_t state);
 
     private:
+        friend class Builder;
+
         struct StateDesc {
             ClipNode clip;
             uint16_t machine = kAnimNone; // into m_machines when the state is a nested machine
@@ -115,19 +114,31 @@ public:
             TransitionDesc desc;
         };
 
+        void build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const;
+
+        std::vector<StateDesc> m_states;
+        std::vector<MachineBuilder> m_machines;
+        std::vector<TransitionEntry> m_transitions;
+        uint16_t m_entryState = 0;
+    };
+
+    class Builder {
+    public:
+        Builder& parameter(std::string name, float defaultValue = 0.0f);
+        Builder& root(MachineBuilder machine);
+
+        // Throws std::invalid_argument if a machine has no states, a transition or entry state is out of range, a
+        // condition doesn't compile, or a parameter is declared twice.
+        AnimGraph build() const;
+
+    private:
         struct ParameterDesc {
             std::string name;
             float defaultValue;
         };
 
-        void collectParameters(AnimGraph& graph) const;
-        void build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const;
-
-        std::vector<StateDesc> m_states;
-        std::vector<Builder> m_machines;
-        std::vector<TransitionEntry> m_transitions;
         std::vector<ParameterDesc> m_parameters;
-        uint16_t m_entryState = 0;
+        MachineBuilder m_root;
     };
 
     AnimGraph(AnimGraph&&) noexcept = default;

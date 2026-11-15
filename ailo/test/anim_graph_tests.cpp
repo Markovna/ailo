@@ -8,6 +8,8 @@ using namespace ailo;
 
 namespace {
 
+using MachineBuilder = AnimGraph::MachineBuilder;
+
 struct Fixture {
     AssetStorage<AnimationClip> clipStorage;
     AssetStorage<AnimGraph> graphStorage;
@@ -24,37 +26,32 @@ struct Fixture {
     }
 };
 
+MachineBuilder twoStates(AnimGraph::MachineBuilder::TransitionDesc desc) {
+    MachineBuilder machine;
+    machine.state("a").state("b").transition(0, 1, std::move(desc));
+    return machine;
+}
+
 void testBuildErrors() {
-    {
-        AnimGraph::Builder builder;
-        builder.state("a").state("b").transition(0, 1, { .condition = "missing > 0" });
-        CHECK_THROWS(builder.build());
-    }
-    {
-        AnimGraph::Builder builder;
-        builder.parameter("speed").state("a").state("b").transition(0, 1, { .condition = "speed >" });
-        CHECK_THROWS(builder.build());
-    }
-    {
-        AnimGraph::Builder nested;
-        nested.parameter("speed", 2.0f).state("b");
-        AnimGraph::Builder builder;
-        builder.parameter("speed", 1.0f).state("a").state(std::move(nested));
-        CHECK_THROWS(builder.build());
-    }
+    CHECK_THROWS(AnimGraph::Builder {}.build());
+    CHECK_THROWS(AnimGraph::Builder {}.root(twoStates({ .condition = "missing > 0" })).build());
+    CHECK_THROWS(AnimGraph::Builder {}.parameter("speed").root(twoStates({ .condition = "speed >" })).build());
+    CHECK_THROWS(AnimGraph::Builder {}.parameter("speed").parameter("speed").root(twoStates({})).build());
 }
 
 void testParameters() {
-    AnimGraph::Builder nested;
-    nested.parameter("speed", 1.5f).state("b");
-    AnimGraph::Builder builder;
-    builder.parameter("speed", 1.5f)
-        .parameter("grounded", 1.0f)
-        .state("a")
+    MachineBuilder nested;
+    nested.state("b");
+    MachineBuilder machine;
+    machine.state("a")
         .state(std::move(nested))
         .transition(0, 1, { .condition = "1 < 2" })
         .transition(1, 0, { .condition = "1 > 2" });
-    const AnimGraph graph = builder.build();
+    const AnimGraph graph = AnimGraph::Builder {}
+        .parameter("speed", 1.5f)
+        .parameter("grounded", 1.0f)
+        .root(std::move(machine))
+        .build();
 
     REQUIRE_EQ(graph.parameterCount(), 2u);
     REQUIRE(graph.findParameter("speed").has_value());
@@ -71,9 +68,8 @@ void testParameters() {
 
 void testConditionGatesTransition() {
     Fixture fixture { "a", "b" };
-    AnimGraph::Builder builder;
-    builder.parameter("speed").state("a").state("b").transition(0, 1, { .condition = "speed > 1" });
-    AnimGraphRunner runner = fixture.run(builder);
+    AnimGraphRunner runner = fixture.run(
+        AnimGraph::Builder {}.parameter("speed").root(twoStates({ .condition = "speed > 1" })));
 
     CHECK_EQ(runner.getFloat("speed"), 0.0f);
     runner.update(0.1f);
@@ -87,9 +83,8 @@ void testConditionGatesTransition() {
 
 void testTriggerKeptWhenConditionFails() {
     Fixture fixture { "a", "b" };
-    AnimGraph::Builder builder;
-    builder.parameter("ready").state("a").state("b").transition(0, 1, { .trigger = "go", .condition = "ready" });
-    AnimGraphRunner runner = fixture.run(builder);
+    AnimGraphRunner runner = fixture.run(
+        AnimGraph::Builder {}.parameter("ready").root(twoStates({ .trigger = "go", .condition = "ready" })));
 
     runner.setTrigger("go");
     runner.update(0.1f);
@@ -100,24 +95,26 @@ void testTriggerKeptWhenConditionFails() {
     CHECK_EQ(runner.currentState(), 1);
 }
 
-void testNestedMachineReadsRootParameter() {
+void testNestedMachineReadsParameters() {
     Fixture fixture { "a", "b" };
-    AnimGraph::Builder nested;
-    nested.state("a").state("b").transition(0, 1, { .condition = "x > 0 && y" });
-    AnimGraph::Builder builder;
-    builder.parameter("x").parameter("y", 1.0f).state(std::move(nested));
-    const AssetPtr<AnimGraph> graph = fixture.graphStorage.emplace(noname_t {}, builder.build());
+    MachineBuilder machine;
+    machine.state(twoStates({ .condition = "x > 0 && y" }));
+    const AssetPtr<AnimGraph> graph = fixture.graphStorage.emplace(noname_t {}, AnimGraph::Builder {}
+        .parameter("x")
+        .parameter("y", 1.0f)
+        .root(std::move(machine))
+        .build());
     AnimGraphRunner runner(graph, fixture.clips);
 
-    const NodeIndex machine { 1 };
+    const NodeIndex nested { 1 };
     runner.update(0.1f);
-    CHECK_EQ(runner.currentState(machine), 0);
+    CHECK_EQ(runner.currentState(nested), 0);
 
     const auto x = graph->findParameter("x");
     REQUIRE(x.has_value());
     runner.setFloat(*x, 3.0f);
     runner.update(0.1f);
-    CHECK_EQ(runner.currentState(machine), 1);
+    CHECK_EQ(runner.currentState(nested), 1);
 }
 
 }
@@ -127,5 +124,5 @@ void runAnimGraphTests() {
     ailo::test::run("anim_graph/testParameters", testParameters);
     ailo::test::run("anim_graph/testConditionGatesTransition", testConditionGatesTransition);
     ailo::test::run("anim_graph/testTriggerKeptWhenConditionFails", testTriggerKeptWhenConditionFails);
-    ailo::test::run("anim_graph/testNestedMachineReadsRootParameter", testNestedMachineReadsRootParameter);
+    ailo::test::run("anim_graph/testNestedMachineReadsParameters", testNestedMachineReadsParameters);
 }
