@@ -241,6 +241,7 @@ public:
 private:
     void resetNode(NodeIndex index);
 
+    void updateNode(NodeIndex index, float dt);
     static void updateClip(Clip& clip, float dt);
     void updateMachine(NodeIndex index, float dt);
     void evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);

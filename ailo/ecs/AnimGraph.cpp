@@ -65,7 +65,7 @@ AnimGraph AnimGraph::Builder::build() const {
 }
 
 // Each machine's node is added before its states are, and a nested machine's subtree is finished before the next
-// state is added, so the nodes end up in the preorder AnimGraph promises (AnimGraphRunner relies on it).
+// state is added, so the nodes end up in the preorder AnimGraph promises.
 void AnimGraph::MachineBuilder::build(AnimGraph& graph, NodeIndex self,
                                       std::span<const std::string_view> parameters) const {
     if (m_states.empty()) {
@@ -254,24 +254,24 @@ void AnimGraphRunner::update(float dt) {
         node.wasActive = std::exchange(node.active, false);
     }
 
-    m_tree[AnimGraph::kRoot.value].active = true;
+    updateNode(AnimGraph::kRoot, dt);
+}
 
-    // Preorder: a machine marks its active children before the loop reaches them.
-    for (uint16_t i = 0; i < m_tree.size(); ++i) {
-        auto& node = m_tree[i];
-        if (!node.active) {
-            continue;
-        }
-
-        if (!node.wasActive) {
-            resetNode(NodeIndex { i });
-        }
-
-        std::visit(Overloaded {
-            [&](Clip& clip) { updateClip(clip, dt); },
-            [&](StateMachine&) { updateMachine(NodeIndex { i }, dt); },
-        }, node.data);
+void AnimGraphRunner::updateNode(NodeIndex index, float dt) {
+    auto& node = m_tree[index.value];
+    if (node.active) {
+        return;
     }
+    node.active = true;
+
+    if (!node.wasActive) {
+        resetNode(index);
+    }
+
+    std::visit(Overloaded {
+        [&](Clip& clip) { updateClip(clip, dt); },
+        [&](StateMachine&) { updateMachine(index, dt); },
+    }, node.data);
 }
 
 uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
@@ -380,13 +380,13 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt) {
     stack.erase(std::ranges::find_if(stack, [](const Transition& t) { return t.alpha() >= 1.0f; }), stack.end());
 
     if (stack.empty()) {
-        m_tree[sm.currentNode.value].active = true;
+        updateNode(sm.currentNode, dt);
         return;
     }
 
-    m_tree[stack.back().fromNode.value].active = true;
-    for (const auto& transition : stack) {
-        m_tree[transition.toNode.value].active = true;
+    updateNode(stack.back().fromNode, dt);
+    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+        updateNode(it->toNode, dt);
     }
 }
 
