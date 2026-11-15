@@ -11,6 +11,8 @@ add_executable(ailo_tests
         transform_tests.cpp
         physics_tests.cpp
         skeleton_tests.cpp
+        expr_vm_tests.cpp
+        anim_graph_tests.cpp
 )
 # ailo_texture and ailo_model are private to ailo, so their include dirs come from linking them here.
 target_link_libraries(ailo_tests PRIVATE ailo ailo_texture ailo_model stb_image ailo_testing)

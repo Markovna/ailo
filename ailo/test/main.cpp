@@ -10,6 +10,8 @@ void runMaterialInstanceTests();
 void runTransformTests();
 void runPhysicsTests();
 void runSkeletonTests();
+void runExprVMTests();
+void runAnimGraphTests();
 
 int main() {
     runAppTests();
@@ -22,6 +24,8 @@ int main() {
     runTransformTests();
     runPhysicsTests();
     runSkeletonTests();
+    runExprVMTests();
+    runAnimGraphTests();
 
     return ailo::test::finish();
 }

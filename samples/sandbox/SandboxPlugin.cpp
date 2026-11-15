@@ -45,8 +45,10 @@ void cycleClips(Scene& scene, Entity entity, AssetStorage<AnimGraph>& graphs) {
     }
     if (count > 1) {
         for (uint16_t i = 0; i < count; ++i) {
-            builder.transition(i, static_cast<uint16_t>((i + 1) % count), {}, kCrossFade,
-                               clips[i]->duration - kCrossFade);
+            builder.transition(i, static_cast<uint16_t>((i + 1) % count), {
+                .fadeDuration = kCrossFade,
+                .exitTime = clips[i]->duration - kCrossFade,
+            });
         }
     }
     animator->setGraph(graphs.emplace(noname_t {}, builder.build()));

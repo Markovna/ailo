@@ -6,15 +6,22 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
+#include "animation/ExprVM.h"
 #include "assets/AssetServer.h"
 #include "render/Animation.h"
 #include "render/Skeleton.h"
 
 namespace ailo {
+
+template<class... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
 
 struct ClipNode {
     std::string clip;        // AnimationClip::name
@@ -47,6 +54,14 @@ struct AnimTransition {
     // Seconds the from-state must have been active before the transition can fire.
     float    exitTime     = 0.0f;
     float    fadeDuration = 0.0f;
+    std::optional<expr::Bytecode> condition;
+};
+
+struct AnimTransitionDesc {
+    std::string trigger;
+    std::string condition;
+    float fadeDuration = 0.0f;
+    float exitTime = 0.0f;
 };
 
 // State and transition indices are local to their machine.
@@ -76,13 +91,16 @@ public:
 
     class Builder {
     public:
+        using TransitionDesc = AnimTransitionDesc;
+
         Builder& state(std::string clip, bool looping = true, float rate = 1.0f);
         Builder& state(Builder machine);
-        Builder& transition(uint16_t from, uint16_t to, std::string trigger = {}, float fadeDuration = 0.0f,
-                            float exitTime = 0.0f);
+        Builder& transition(uint16_t from, uint16_t to, TransitionDesc desc = {});
         Builder& entryState(uint16_t state);
+        Builder& parameter(std::string name, float defaultValue = 0.0f);
 
-        // Throws std::invalid_argument if a machine has no states or a transition or entry state is out of range.
+        // Throws std::invalid_argument if a machine has no states, a transition or entry state is out of range, a
+        // condition doesn't compile, or a parameter is declared twice with different defaults.
         AnimGraph build() const;
 
     private:
@@ -91,19 +109,24 @@ public:
             uint16_t machine = kAnimNone; // into m_machines when the state is a nested machine
         };
 
-        struct TransitionDesc {
+        struct TransitionEntry {
             uint16_t from;
             uint16_t to;
-            std::string trigger;
-            float fadeDuration;
-            float exitTime;
+            TransitionDesc desc;
         };
 
-        void build(AnimGraph& graph, NodeIndex self) const;
+        struct ParameterDesc {
+            std::string name;
+            float defaultValue;
+        };
+
+        void collectParameters(AnimGraph& graph) const;
+        void build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const;
 
         std::vector<StateDesc> m_states;
         std::vector<Builder> m_machines;
-        std::vector<TransitionDesc> m_transitions;
+        std::vector<TransitionEntry> m_transitions;
+        std::vector<ParameterDesc> m_parameters;
         uint16_t m_entryState = 0;
     };
 
@@ -116,14 +139,27 @@ public:
     uint32_t triggerCount() const { return static_cast<uint32_t>(m_triggerNames.size()); }
     std::optional<uint16_t> findTrigger(const std::string& name) const;
 
+    uint32_t parameterCount() const { return static_cast<uint32_t>(m_parameters.size()); }
+    std::optional<uint16_t> findParameter(const std::string& name) const;
+    const std::string& parameterName(uint16_t parameter) const { return m_parameters[parameter].name; }
+    float parameterDefault(uint16_t parameter) const { return m_parameters[parameter].defaultValue; }
+
 private:
+    struct Parameter {
+        std::string name;
+        float defaultValue;
+    };
+
     AnimGraph() = default;
 
     NodeIndex addNode(AnimNode node);
     uint16_t addTrigger(const std::string& name);
+    void addParameter(const std::string& name, float defaultValue);
 
     std::vector<AnimNode> m_nodes;
     std::unordered_map<std::string, uint16_t> m_triggerNames;
+    std::vector<Parameter> m_parameters;
+    std::unordered_map<std::string, uint16_t> m_parameterIndices;
 };
 
 struct PosePool {
@@ -180,6 +216,11 @@ public:
     void setTrigger(const std::string& name);
     void resetTrigger(const std::string& name);
 
+    void setFloat(const std::string& name, float value);
+    void setFloat(uint16_t parameter, float value) { m_parameters[parameter] = value; }
+    float getFloat(const std::string& name) const;
+    float getFloat(uint16_t parameter) const { return m_parameters[parameter]; }
+
     void update(float dt);
     void evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
@@ -196,6 +237,7 @@ private:
     AssetPtr<AnimGraph> m_definition;
     std::vector<Node> m_tree;
     std::vector<uint8_t> m_triggers;
+    std::vector<float> m_parameters;
 };
 
 } // namespace ailo

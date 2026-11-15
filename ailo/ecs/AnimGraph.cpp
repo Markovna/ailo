@@ -28,15 +28,13 @@ AnimGraph::Builder& AnimGraph::Builder::state(Builder machine) {
     return *this;
 }
 
-AnimGraph::Builder& AnimGraph::Builder::transition(uint16_t from, uint16_t to, std::string trigger,
-                                                   float fadeDuration, float exitTime) {
-    m_transitions.push_back({
-        .from = from,
-        .to = to,
-        .trigger = std::move(trigger),
-        .fadeDuration = fadeDuration,
-        .exitTime = exitTime,
-    });
+AnimGraph::Builder& AnimGraph::Builder::transition(uint16_t from, uint16_t to, TransitionDesc desc) {
+    m_transitions.push_back({ .from = from, .to = to, .desc = std::move(desc) });
+    return *this;
+}
+
+AnimGraph::Builder& AnimGraph::Builder::parameter(std::string name, float defaultValue) {
+    m_parameters.push_back({ .name = std::move(name), .defaultValue = defaultValue });
     return *this;
 }
 
@@ -47,13 +45,31 @@ AnimGraph::Builder& AnimGraph::Builder::entryState(uint16_t state) {
 
 AnimGraph AnimGraph::Builder::build() const {
     AnimGraph graph;
-    build(graph, graph.addNode(StateMachineNode {}));
+    // Collected up front: a condition may read a parameter declared by a machine that is built after it.
+    collectParameters(graph);
+
+    std::vector<std::string_view> parameters;
+    parameters.reserve(graph.m_parameters.size());
+    for (const auto& parameter : graph.m_parameters) {
+        parameters.push_back(parameter.name);
+    }
+
+    build(graph, graph.addNode(StateMachineNode {}), parameters);
     return graph;
+}
+
+void AnimGraph::Builder::collectParameters(AnimGraph& graph) const {
+    for (const auto& parameter : m_parameters) {
+        graph.addParameter(parameter.name, parameter.defaultValue);
+    }
+    for (const auto& machine : m_machines) {
+        machine.collectParameters(graph);
+    }
 }
 
 // Each machine's node is added before its states are, and a nested machine's subtree is finished before the next
 // state is added, so the nodes end up in the preorder AnimGraph promises (AnimGraphRunner relies on it).
-void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
+void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const {
     if (m_states.empty()) {
         throw std::invalid_argument(std::format("animation graph: machine {} has no states", self.value));
     }
@@ -73,12 +89,12 @@ void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
             machine.states[i].node = graph.addNode(desc.clip);
         } else {
             const NodeIndex child = graph.addNode(StateMachineNode {});
-            m_machines[desc.machine].build(graph, child);
+            m_machines[desc.machine].build(graph, child, parameters);
             machine.states[i].node = child;
         }
     }
 
-    std::vector<const TransitionDesc*> sorted;
+    std::vector<const TransitionEntry*> sorted;
     sorted.reserve(m_transitions.size());
     for (const auto& transition : m_transitions) {
         if (transition.from >= m_states.size() || transition.to >= m_states.size()) {
@@ -87,10 +103,26 @@ void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
         }
         sorted.push_back(&transition);
     }
-    std::ranges::stable_sort(sorted, {}, &TransitionDesc::from);
+    std::ranges::stable_sort(sorted, {}, &TransitionEntry::from);
 
     machine.transitions.reserve(sorted.size());
-    for (const TransitionDesc* transition : sorted) {
+    for (const TransitionEntry* transition : sorted) {
+        const TransitionDesc& desc = transition->desc;
+
+        std::optional<expr::Bytecode> condition;
+        if (!desc.condition.empty()) {
+            condition = expr::compile(desc.condition, parameters);
+            if (!condition->ok()) {
+                throw std::invalid_argument(
+                    std::format("animation graph: condition `{}` of transition {} -> {} of machine {}: {}",
+                                desc.condition, transition->from, transition->to, self.value, condition->error()));
+            }
+            float value = 0.0f;
+            if (expr::isConstant(condition->data(), &value) && value != 0.0f) {
+                condition.reset();
+            }
+        }
+
         auto& from = machine.states[transition->from];
         if (from.transitionCount == 0) {
             from.firstTransition = static_cast<uint16_t>(machine.transitions.size());
@@ -98,9 +130,10 @@ void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
         from.transitionCount++;
         machine.transitions.push_back({
             .to = transition->to,
-            .trigger = graph.addTrigger(transition->trigger),
-            .exitTime = transition->exitTime,
-            .fadeDuration = transition->fadeDuration,
+            .trigger = graph.addTrigger(desc.trigger),
+            .exitTime = desc.exitTime,
+            .fadeDuration = desc.fadeDuration,
+            .condition = std::move(condition),
         });
     }
 
@@ -131,16 +164,39 @@ std::optional<uint16_t> AnimGraph::findTrigger(const std::string& name) const {
     return it->second;
 }
 
-template<class... Ts>
-struct Overloaded : Ts... {
-    using Ts::operator()...;
-};
+void AnimGraph::addParameter(const std::string& name, float defaultValue) {
+    if (auto it = m_parameterIndices.find(name); it != m_parameterIndices.end()) {
+        const float existing = m_parameters[it->second].defaultValue;
+        if (existing != defaultValue) {
+            throw std::invalid_argument(std::format(
+                "animation graph: parameter '{}' is declared with defaults {} and {}", name, existing, defaultValue));
+        }
+        return;
+    }
+    if (m_parameters.size() > expr::kMaxData) {
+        throw std::invalid_argument("animation graph: too many parameters");
+    }
+    m_parameterIndices.emplace(name, static_cast<uint16_t>(m_parameters.size()));
+    m_parameters.push_back({ .name = name, .defaultValue = defaultValue });
+}
+
+std::optional<uint16_t> AnimGraph::findParameter(const std::string& name) const {
+    auto it = m_parameterIndices.find(name);
+    if (it == m_parameterIndices.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
 
 AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const AssetPtr<AnimationClip>> clips)
     : m_definition(std::move(definition)) {
     assert(m_definition);
     const AnimGraph& graph = *m_definition;
     m_triggers.assign(graph.triggerCount(), 0);
+    m_parameters.resize(graph.parameterCount());
+    for (uint16_t i = 0; i < graph.parameterCount(); ++i) {
+        m_parameters[i] = graph.parameterDefault(i);
+    }
     m_tree.reserve(graph.nodeCount());
 
     for (uint16_t i = 0; i < graph.nodeCount(); ++i) {
@@ -185,6 +241,20 @@ void AnimGraphRunner::resetTrigger(const std::string& name) {
     if (trigger) {
         m_triggers[*trigger] = 0;
     }
+}
+
+void AnimGraphRunner::setFloat(const std::string& name, float value) {
+    const auto parameter = m_definition->findParameter(name);
+    assert(parameter.has_value());
+    if (parameter) {
+        m_parameters[*parameter] = value;
+    }
+}
+
+float AnimGraphRunner::getFloat(const std::string& name) const {
+    const auto parameter = m_definition->findParameter(name);
+    assert(parameter.has_value());
+    return parameter ? m_parameters[*parameter] : 0.0f;
 }
 
 void AnimGraphRunner::update(float dt) {
@@ -290,6 +360,7 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt) {
 
         const uint16_t trigger = transition.trigger;
         if (trigger != kNone && !m_triggers[trigger]) continue;
+        if (transition.condition && transition.condition->run(m_parameters) == 0.0f) continue;
         if (trigger != kNone) {
             m_triggers[trigger] = 0;
         }
