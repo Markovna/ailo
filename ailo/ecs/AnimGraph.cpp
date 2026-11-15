@@ -51,7 +51,8 @@ AnimGraph AnimGraph::Builder::build() const {
     return graph;
 }
 
-// Each machine's node is added before its states are, so the nodes end up in preorder.
+// Each machine's node is added before its states are, and a nested machine's subtree is finished before the next
+// state is added, so the nodes end up in the preorder AnimGraph promises (AnimGraphRunner relies on it).
 void AnimGraph::Builder::build(AnimGraph& graph, NodeIndex self) const {
     if (m_states.empty()) {
         throw std::invalid_argument(std::format("animation graph: machine {} has no states", self.value));
@@ -140,22 +141,9 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
     assert(m_definition);
     const AnimGraph& graph = *m_definition;
     m_triggers.assign(graph.triggerCount(), 0);
-    m_nodesMap.assign(graph.nodeCount(), kNoTreeNode);
     m_tree.reserve(graph.nodeCount());
 
-    // Depth-first, so m_tree is in preorder: every node comes after its parent.
-    auto build = [&](this auto& self, NodeIndex graphNode) -> void {
-        if (graphNode.value >= graph.nodeCount()) {
-            throw std::invalid_argument(
-                std::format("animation graph: state refers to missing node {}", graphNode.value));
-        }
-        if (m_nodesMap[graphNode.value] != kNoTreeNode) {
-            throw std::invalid_argument(
-                std::format("animation graph: node {} is reached more than once", graphNode.value));
-        }
-        const auto index = static_cast<uint16_t>(m_tree.size());
-        m_nodesMap[graphNode.value] = index;
-
+    for (uint16_t i = 0; i < graph.nodeCount(); ++i) {
         std::visit(Overloaded {
             [&](const ClipNode& clipNode) {
                 auto it = std::ranges::find_if(clips, [&](const auto& clip) { return clip && clip->name == clipNode.clip; });
@@ -172,24 +160,15 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
                 m_tree.push_back({ .data = std::move(clip) });
             },
             [&](const StateMachineNode& machine) {
-                if (machine.states.empty()) {
-                    throw std::invalid_argument(std::format("animation graph: machine {} has no states", graphNode.value));
-                }
                 m_tree.push_back({
-                    .data = StateMachine { .machine = graphNode }
+                    .data = StateMachine {
+                        .currentState = machine.entryState,
+                        .currentNode = machine.states[machine.entryState].node,
+                    },
                 });
-                for (const auto& state : machine.states) {
-                    assert(depth < std::numeric_limits<uint8_t>::max());
-                    self(state.node);
-                }
-
-                auto& sm = std::get<StateMachine>(m_tree[index].data);
-                sm.currentState = machine.entryState;
-                sm.currentNode = m_nodesMap[machine.states[machine.entryState].node.value];
             },
-        }, graph.node(graphNode));
-    };
-    build(AnimGraph::kRoot);
+        }, graph.node(NodeIndex { i }));
+    }
 }
 
 void AnimGraphRunner::setTrigger(const std::string& name) {
@@ -213,48 +192,50 @@ void AnimGraphRunner::update(float dt) {
         node.wasActive = std::exchange(node.active, false);
     }
 
-    m_tree[0].active = true;
+    m_tree[AnimGraph::kRoot.value].active = true;
 
-    for (auto& node : m_tree) {
+    // Preorder: a machine marks its active children before the loop reaches them.
+    for (uint16_t i = 0; i < m_tree.size(); ++i) {
+        auto& node = m_tree[i];
         if (!node.active) {
             continue;
         }
 
         if (!node.wasActive) {
-            resetNode(node);
+            resetNode(NodeIndex { i });
         }
 
         std::visit(Overloaded {
             [&](Clip& clip) { updateClip(clip, dt); },
-            [&](StateMachine& sm) { updateMachine(sm, dt); },
+            [&](StateMachine&) { updateMachine(NodeIndex { i }, dt); },
         }, node.data);
     }
 }
 
 uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
-    return std::get<StateMachine>(m_tree[m_nodesMap[machine.value]].data).currentState;
+    return std::get<StateMachine>(m_tree[machine.value].data).currentState;
 }
 
-void AnimGraphRunner::resetNode(Node& node) {
+void AnimGraphRunner::resetNode(NodeIndex index) {
     std::visit(Overloaded {
         [&](Clip& clip) {
             clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
         },
         [&](StateMachine& sm) {
-            const auto& machine = std::get<StateMachineNode>(m_definition->node(sm.machine));
+            const auto& machine = std::get<StateMachineNode>(m_definition->node(index));
             sm.currentState = machine.entryState;
-            sm.currentNode = m_nodesMap[machine.states[sm.currentState].node.value];
+            sm.currentNode = machine.states[sm.currentState].node;
             sm.stateTime = 0.0f;
             sm.m_transitionStack.clear();
         },
-    }, node.data);
+    }, m_tree[index.value].data);
 }
 
 void AnimGraphRunner::evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out) {
-    evaluateNode(0, skeleton, posePool, out);
+    evaluateNode(AnimGraph::kRoot, skeleton, posePool, out);
 }
 
-void AnimGraphRunner::evaluateNode(uint16_t index, const Skeleton& skeleton, PosePool& posePool,
+void AnimGraphRunner::evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool,
                                    std::vector<NodeTransform>& out) {
     std::visit(Overloaded {
         [&](const Clip& clip) {
@@ -283,7 +264,7 @@ void AnimGraphRunner::evaluateNode(uint16_t index, const Skeleton& skeleton, Pos
             }
             posePool.release(std::move(pose));
         },
-    }, m_tree[index].data);
+    }, m_tree[index.value].data);
 }
 
 void AnimGraphRunner::updateClip(Clip& clip, float dt) {
@@ -297,10 +278,11 @@ void AnimGraphRunner::updateClip(Clip& clip, float dt) {
     }
 }
 
-void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
+void AnimGraphRunner::updateMachine(NodeIndex index, float dt) {
+    auto& sm = std::get<StateMachine>(m_tree[index.value].data);
     sm.stateTime += dt;
 
-    auto& machine = std::get<StateMachineNode>(m_definition->node(sm.machine));
+    auto& machine = std::get<StateMachineNode>(m_definition->node(index));
     auto transitions = machine.transitionsFrom(sm.currentState);
 
     for (auto& transition : transitions) {
@@ -313,7 +295,7 @@ void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
         }
 
         auto& states = machine.states;
-        const uint16_t to = m_nodesMap[states[transition.to].node.value];
+        const NodeIndex to = states[transition.to].node;
 
         // newest first
         sm.m_transitionStack.insert(sm.m_transitionStack.begin(), Transition {
@@ -335,13 +317,13 @@ void AnimGraphRunner::updateMachine(StateMachine& sm, float dt) {
     stack.erase(std::ranges::find_if(stack, [](const Transition& t) { return t.alpha() >= 1.0f; }), stack.end());
 
     if (stack.empty()) {
-        m_tree[sm.currentNode].active = true;
+        m_tree[sm.currentNode.value].active = true;
         return;
     }
 
-    m_tree[stack.back().fromNode].active = true;
+    m_tree[stack.back().fromNode.value].active = true;
     for (const auto& transition : stack) {
-        m_tree[transition.toNode].active = true;
+        m_tree[transition.toNode.value].active = true;
     }
 }
 

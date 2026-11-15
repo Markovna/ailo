@@ -65,6 +65,8 @@ struct AnimNode : std::variant<ClipNode, StateMachineNode> {
     using std::variant<ClipNode, StateMachineNode>::variant;
 };
 
+// Nodes are stored depth-first in preorder: the root machine is node 0, and every machine is followed by the
+// subtrees of its states, in state order. Each node is reached from exactly one state.
 class AnimGraph {
 public:
     static constexpr uint16_t kNone = kAnimNone;
@@ -139,11 +141,9 @@ struct PosePool {
     void release(std::vector<NodeTransform>&& pose) { free.push_back(std::move(pose)); }
 };
 
+// m_tree mirrors the graph's nodes one to one, so tree and graph share NodeIndex.
 class AnimGraphRunner {
 private:
-    // The tree has at most one node per graph node, so its indexes fit below NodeId::kInvalid.
-    static constexpr uint16_t kNoTreeNode = NodeIndex::kInvalid;
-
     struct Clip {
         AssetPtr<AnimationClip> clip;
         float rate = 1.0f;
@@ -153,8 +153,8 @@ private:
     };
 
     struct Transition {
-        uint16_t fromNode;
-        uint16_t toNode;
+        NodeIndex fromNode;
+        NodeIndex toNode;
         float time = 0.0f;
         float duration = 0.0f;
 
@@ -162,9 +162,8 @@ private:
     };
 
     struct StateMachine {
-        NodeIndex machine;
         uint16_t currentState = 0;
-        uint16_t currentNode = 0;
+        NodeIndex currentNode;
         float stateTime = 0.0f; // since currentState was entered
         std::vector<Transition> m_transitionStack;
     };
@@ -188,16 +187,15 @@ public:
     uint16_t currentState(NodeIndex machine = AnimGraph::kRoot) const;
 
 private:
-    void resetNode(Node& node);
+    void resetNode(NodeIndex index);
 
     static void updateClip(Clip& clip, float dt);
-    void updateMachine(StateMachine& sm, float dt);
-    void evaluateNode(uint16_t index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
+    void updateMachine(NodeIndex index, float dt);
+    void evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
     AssetPtr<AnimGraph> m_definition;
     std::vector<Node> m_tree;
     std::vector<uint8_t> m_triggers;
-    std::vector<uint16_t> m_nodesMap; // tree index by NodeId::value, kNoTreeNode if unreachable
 };
 
 } // namespace ailo
