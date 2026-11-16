@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "animation/ExprVM.h"
+#include "animation/SyncTrack.h"
 #include "assets/AssetServer.h"
 #include "render/Animation.h"
 #include "render/Skeleton.h"
@@ -188,15 +189,14 @@ struct PosePool {
     void release(std::vector<NodeTransform>&& pose) { free.push_back(std::move(pose)); }
 };
 
-// m_tree mirrors the graph's nodes one to one, so tree and graph share NodeIndex.
 class AnimGraphRunner {
 private:
     struct Clip {
         AssetPtr<AnimationClip> clip;
         float rate = 1.0f;
         bool looping = true;
-        float time = 0.0f;
-        float duration = 0.0f;
+
+        const SyncTrack& syncTrack() const;
     };
 
     struct Transition {
@@ -217,6 +217,8 @@ private:
 
     struct Node {
         std::variant<Clip, StateMachine> data;
+        float duration = 0.0f;          // seconds per loop
+        float percent = 0.0f;
         bool active = false;
         bool wasActive = false;
     };
@@ -241,9 +243,10 @@ public:
 private:
     void resetNode(NodeIndex index);
 
-    void updateNode(NodeIndex index, float dt);
-    static void updateClip(Clip& clip, float dt);
-    void updateMachine(NodeIndex index, float dt);
+    void updateNode(NodeIndex index, float dt, const SyncTimeRange* range);
+    static void updateClip(Node& node, const Clip& clip, float dt);
+    static void updateClipSynchronized(Node& node, const Clip& clip, const SyncTimeRange& range);
+    void updateMachine(NodeIndex index, float dt, const SyncTimeRange* range);
     void evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
     AssetPtr<AnimGraph> m_definition;

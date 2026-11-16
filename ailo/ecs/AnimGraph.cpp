@@ -15,6 +15,13 @@ namespace {
 
 constexpr uint16_t kNone = AnimGraph::kNone;
 
+const SyncTrack kDefaultSyncTrack;
+
+}
+
+const SyncTrack& AnimGraphRunner::Clip::syncTrack() const {
+    const AnimationClip* asset = clip.get();
+    return asset ? asset->syncTrack : kDefaultSyncTrack;
 }
 
 AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::state(std::string clip, bool looping, float rate) {
@@ -198,14 +205,11 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
                 if (it == clips.end()) {
                     throw std::invalid_argument(std::format("animation graph: no clip named '{}'", clipNode.clip));
                 }
-                Clip clip {
-                    .clip = *it,
-                    .rate = clipNode.rate,
-                    .looping = clipNode.looping,
+                m_tree.push_back({
+                    .data = Clip { .clip = *it, .rate = clipNode.rate, .looping = clipNode.looping },
                     .duration = (*it)->duration,
-                };
-                clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
-                m_tree.push_back({ .data = std::move(clip) });
+                    .percent = clipNode.rate < 0.0f ? 1.0f : 0.0f,
+                });
             },
             [&](const StateMachineNode& machine) {
                 m_tree.push_back({
@@ -254,10 +258,10 @@ void AnimGraphRunner::update(float dt) {
         node.wasActive = std::exchange(node.active, false);
     }
 
-    updateNode(AnimGraph::kRoot, dt);
+    updateNode(AnimGraph::kRoot, dt, nullptr);
 }
 
-void AnimGraphRunner::updateNode(NodeIndex index, float dt) {
+void AnimGraphRunner::updateNode(NodeIndex index, float dt, const SyncTimeRange* range) {
     auto& node = m_tree[index.value];
     if (node.active) {
         return;
@@ -269,8 +273,14 @@ void AnimGraphRunner::updateNode(NodeIndex index, float dt) {
     }
 
     std::visit(Overloaded {
-        [&](Clip& clip) { updateClip(clip, dt); },
-        [&](StateMachine&) { updateMachine(index, dt); },
+        [&](const Clip& clip) {
+            if (range) {
+                updateClipSynchronized(node, clip, *range);
+            } else {
+                updateClip(node, clip, dt);
+            }
+        },
+        [&](StateMachine&) { updateMachine(index, dt, range); },
     }, node.data);
 }
 
@@ -279,9 +289,12 @@ uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
 }
 
 void AnimGraphRunner::resetNode(NodeIndex index) {
+    auto& node = m_tree[index.value];
     std::visit(Overloaded {
-        [&](Clip& clip) {
-            clip.time = clip.rate < 0.0f ? clip.duration : 0.0f;
+        [&](const Clip& clip) {
+            const AnimationClip* asset = clip.clip.get();
+            node.duration = asset ? asset->duration : 0.0f;
+            node.percent = clip.rate < 0.0f ? 1.0f : 0.0f;
         },
         [&](StateMachine& sm) {
             const auto& machine = std::get<StateMachineNode>(m_definition->node(index));
@@ -289,8 +302,10 @@ void AnimGraphRunner::resetNode(NodeIndex index) {
             sm.currentNode = machine.states[sm.currentState].node;
             sm.stateTime = 0.0f;
             sm.m_transitionStack.clear();
+            node.duration = 0.0f;
+            node.percent = 0.0f;
         },
-    }, m_tree[index.value].data);
+    }, node.data);
 }
 
 void AnimGraphRunner::evaluate(Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out) {
@@ -299,10 +314,11 @@ void AnimGraphRunner::evaluate(Skeleton& skeleton, PosePool& posePool, std::vect
 
 void AnimGraphRunner::evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool,
                                    std::vector<NodeTransform>& out) {
+    const Node& node = m_tree[index.value];
     std::visit(Overloaded {
         [&](const Clip& clip) {
             if (const AnimationClip* asset = clip.clip.get()) {
-                samplePose(clip.time, skeleton, *asset, out);
+                samplePose(node.percent * node.duration, skeleton, *asset, out);
             } else {
                 out = skeleton.restPose;
             }
@@ -326,21 +342,42 @@ void AnimGraphRunner::evaluateNode(NodeIndex index, const Skeleton& skeleton, Po
             }
             posePool.release(std::move(pose));
         },
-    }, m_tree[index.value].data);
+    }, node.data);
 }
 
-void AnimGraphRunner::updateClip(Clip& clip, float dt) {
-    clip.time += dt * clip.rate;
-    if (clip.duration <= 0.0f) return;
+void AnimGraphRunner::updateClip(Node& node, const Clip& clip, float dt) {
+    const AnimationClip* asset = clip.clip.get();
+    node.duration = asset ? asset->duration : 0.0f;
+    if (node.duration <= 0.0f) return;
+
+    float percent = node.percent + dt * clip.rate / node.duration;
     if (clip.looping) {
-        clip.time = std::fmod(clip.time, clip.duration);
-        if (clip.time < 0.0f) clip.time += clip.duration;
+        percent -= std::floor(percent);
     } else {
-        clip.time = std::clamp(clip.time, 0.0f, clip.duration);
+        percent = std::clamp(percent, 0.0f, 1.0f);
+    }
+    node.percent = percent;
+}
+
+// The parent sets the pace, so the clip's rate is ignored, as is its duration.
+void AnimGraphRunner::updateClipSynchronized(Node& node, const Clip& clip, const SyncTimeRange& range) {
+    const AnimationClip* asset = clip.clip.get();
+    node.duration = asset ? asset->duration : 0.0f;
+
+    const SyncTrack& track = clip.syncTrack();
+    const float start = track.percent(range.start);
+    const float end = track.percent(range.end);
+    const bool wrapped = end < start;
+    const bool finished = clip.rate >= 0.0f && node.percent >= 1.0f;
+
+    if (clip.looping) {
+        node.percent = end;
+    } else {
+        node.percent = wrapped || finished ? 1.0f : end;
     }
 }
 
-void AnimGraphRunner::updateMachine(NodeIndex index, float dt) {
+void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRange* range) {
     auto& sm = std::get<StateMachine>(m_tree[index.value].data);
     sm.stateTime += dt;
 
@@ -380,14 +417,19 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt) {
     stack.erase(std::ranges::find_if(stack, [](const Transition& t) { return t.alpha() >= 1.0f; }), stack.end());
 
     if (stack.empty()) {
-        updateNode(sm.currentNode, dt);
-        return;
+        updateNode(sm.currentNode, dt, range);
+    } else {
+        updateNode(stack.back().fromNode, dt, range);
+        for (const auto &it : std::views::reverse(stack)) {
+            updateNode(it.toNode, dt, range);
+        }
     }
 
-    updateNode(stack.back().fromNode, dt);
-    for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-        updateNode(it->toNode, dt);
-    }
+    // Until fades blend sync tracks, a fading machine shows the state it is fading into.
+    auto& node = m_tree[index.value];
+    const Node& current = m_tree[sm.currentNode.value];
+    node.duration = current.duration;
+    node.percent = current.percent;
 }
 
 } // namespace ailo

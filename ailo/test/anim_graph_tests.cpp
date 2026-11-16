@@ -1,4 +1,5 @@
 #include "ecs/AnimGraph.h"
+#include "render/Skeleton.h"
 #include "Testing.h"
 
 #include <string>
@@ -10,19 +11,45 @@ namespace {
 
 using MachineBuilder = AnimGraph::MachineBuilder;
 
+// Each clip moves a bone of its own along x by one unit per second of its time, so the evaluated pose shows where
+// every clip is.
 struct Fixture {
     AssetStorage<AnimationClip> clipStorage;
     AssetStorage<AnimGraph> graphStorage;
     std::vector<AssetPtr<AnimationClip>> clips;
+    Skeleton skeleton;
+    PosePool posePool;
 
     explicit Fixture(std::initializer_list<const char*> names) {
         for (const char* name : names) {
-            clips.push_back(clipStorage.emplace(noname_t {}, AnimationClip { .name = name, .duration = 1.0f }));
+            AnimationClip clip { .name = name };
+            BoneChannel& channel = clip.channels.emplace_back();
+            channel.boneName = name;
+            channel.rotationKeys = { { 0.0f, glm::quat(1.0f, 0.0f, 0.0f, 0.0f) } };
+            channel.scaleKeys = { { 0.0f, glm::vec3(1.0f) } };
+            clip.nameToIndex[name] = 0;
+            clips.push_back(clipStorage.emplace(noname_t {}, std::move(clip)));
+            setDuration(clips.size() - 1, 1.0f);
+
+            skeleton.nodes.push_back({ .name = name, .parentIndex = -1 });
+            skeleton.restPose.emplace_back();
         }
+    }
+
+    void setDuration(size_t clip, float duration) {
+        clips[clip]->duration = duration;
+        clips[clip]->channels[0].positionKeys = { { 0.0f, glm::vec3(0.0f) }, { duration, glm::vec3(duration, 0, 0) } };
     }
 
     AnimGraphRunner run(const AnimGraph::Builder& builder) {
         return AnimGraphRunner(graphStorage.emplace(noname_t {}, builder.build()), clips);
+    }
+
+    // The evaluated x of the clip's bone: its time in seconds, scaled by its weight while fading.
+    float pose(AnimGraphRunner& runner, size_t clip) {
+        std::vector<NodeTransform> out;
+        runner.evaluate(skeleton, posePool, out);
+        return out[clip].position.x;
     }
 };
 
@@ -117,6 +144,35 @@ void testNestedMachineReadsParameters() {
     CHECK_EQ(runner.currentState(nested), 1);
 }
 
+constexpr float kEps = 1e-5f;
+
+AnimGraph::Builder oneState(bool looping = true, float rate = 1.0f) {
+    MachineBuilder machine;
+    machine.state("a", looping, rate);
+    return std::move(AnimGraph::Builder {}.root(std::move(machine)));
+}
+
+void testClipTime() {
+    Fixture fixture { "a" };
+    fixture.setDuration(0, 2.0f);
+
+    AnimGraphRunner looping = fixture.run(oneState());
+    looping.update(0.5f);
+    CHECK_NEAR(fixture.pose(looping, 0), 0.5f, kEps);
+    looping.update(2.0f);
+    CHECK_NEAR(fixture.pose(looping, 0), 0.5f, kEps);
+
+    AnimGraphRunner once = fixture.run(oneState(false));
+    once.update(3.0f);
+    CHECK_NEAR(fixture.pose(once, 0), 2.0f, kEps);
+
+    AnimGraphRunner reversed = fixture.run(oneState(true, -1.0f));
+    reversed.update(0.5f);
+    CHECK_NEAR(fixture.pose(reversed, 0), 1.5f, kEps);
+    reversed.update(1.75f);
+    CHECK_NEAR(fixture.pose(reversed, 0), 1.75f, kEps);
+}
+
 }
 
 void runAnimGraphTests() {
@@ -125,4 +181,5 @@ void runAnimGraphTests() {
     ailo::test::run("anim_graph/testConditionGatesTransition", testConditionGatesTransition);
     ailo::test::run("anim_graph/testTriggerKeptWhenConditionFails", testTriggerKeptWhenConditionFails);
     ailo::test::run("anim_graph/testNestedMachineReadsParameters", testNestedMachineReadsParameters);
+    ailo::test::run("anim_graph/testClipTime", testClipTime);
 }
