@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 MANIFEST = "build_assets.ninja"
+BUILDDIR = "asset_build"
 IGNORE_FILE = ".assetignore"
 ARGS_PREFIX = "# Arguments: "
 EXE_SUFFIX = ".exe" if os.name == "nt" else ""
@@ -159,7 +160,7 @@ def generate(source, build_dir, config, tools_dir):
         # run.py regenerates the manifest when they change.
         ARGS_PREFIX + json.dumps(args),
         "ninja_required_version = 1.10",
-        "builddir = asset_build",
+        f"builddir = {BUILDDIR}",
         # The assets folder, for tools that resolve "/x/y" paths against it: "--root", "$root" in the config.
         f"root = {escape_value(quote(posix(source)))}",
         "",

@@ -66,6 +66,47 @@ def read_graph(ninja, manifest):
     return {out: list(dict.fromkeys(deps)) for out, deps in graph.items()}
 
 
+def drop_case_aliases(ninja, manifest, log_path):
+    """Removes build log entries that name a current output in different letter case.
+
+    Ninja matches paths case-sensitively, so such an entry (left by Cockpit.matinst -> cockpit.matinst) is dead to it,
+    but on a case-insensitive file system -t cleandead then deletes the live output, and ninja never drops the entry.
+    """
+    try:
+        with open(log_path, encoding="utf-8", newline="\n") as f:
+            lines = f.readlines()
+    except OSError:
+        return
+    targets = {line.rpartition(": ")[0] for line in ninja_tool(ninja, manifest, "targets", "all")}
+    by_case = {}
+    for target in targets:
+        by_case.setdefault(target.casefold(), []).append(target)
+
+    def is_alias(line):
+        # "start\tend\tmtime\tpath\thash"
+        fields = line.split("\t")
+        if line.startswith("#") or len(fields) < 5:
+            return False
+        path = fields[3]
+        if path in targets:
+            return False
+        for target in by_case.get(path.casefold(), ()):
+            try:
+                if os.path.samefile(path, target):
+                    return True
+            except OSError:
+                pass
+        return False
+
+    kept = [line for line in lines if not is_alias(line)]
+    if len(kept) == len(lines):
+        return
+    tmp = log_path.with_name(log_path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        f.writelines(kept)
+    os.replace(tmp, log_path)
+
+
 def signature(path):
     try:
         st = os.stat(path)
@@ -116,7 +157,7 @@ def main():
     parser.add_argument("--ninja", help="ninja executable (default: ninja from PATH)")
     parser.add_argument("--manifest", default=gen.MANIFEST,
                         help="manifest, relative to the build folder (the working directory)")
-    parser.add_argument("--state", default="asset_build/inputs.json",
+    parser.add_argument("--state", default=f"{gen.BUILDDIR}/inputs.json",
                         help="where the inputs' signatures are kept between builds")
     parser.add_argument("--source", help="assets folder: generates the manifest with gen.py when needed")
     parser.add_argument("--config", help="extension -> tool config (JSON), for gen.py")
@@ -146,6 +187,7 @@ def main():
 
     build = subprocess.run([args.ninja, "-f", args.manifest])
     if build.returncode == 0:
+        drop_case_aliases(args.ninja, args.manifest, Path(gen.BUILDDIR) / ".ninja_log")
         subprocess.run([args.ninja, "-f", args.manifest, "-t", "cleandead"], check=True)
     # Saved after a failed build too: the deleted outputs stay missing, so they are rebuilt next time anyway. If ninja
     # can't even read the manifest, the old state is kept.
