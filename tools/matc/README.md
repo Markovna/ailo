@@ -148,8 +148,7 @@ fragment {
 - `vertex` (optional) defines `void postProcessVertex(inout PostProcessVertexInputs postProcess)`. It can change
   `position` (clip space) and `normalizedUV`, and writes the custom `variables`.
 - Getters: `getUV()` (fragment, (0, 0) at the top-left), `getExposure()`. The per-view uniforms are bound; the
-  per-object ones are not. Input textures are sampler parameters, set by the engine (`MaterialInstance::setParameter`
-  takes a `TextureHandle` for render targets).
+  per-object ones are not. Input textures are sampler parameters, set by the engine.
 - Templates are in `shaders/post_process/`.
 
 ## Variants

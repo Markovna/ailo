@@ -8,6 +8,7 @@
 #include "Renderer.h"
 #include "material/MaterialInstancePackage.h"
 #include "utils/Log.h"
+#include "utils/Utils.h"
 
 namespace ailo {
 
@@ -69,18 +70,16 @@ void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> tex
         return;
     }
     slot->texture = std::move(texture);
-    slot->handle = {};
     slot->params = sampler;
     slot->dirty = true;
 }
 
-void MaterialInstance::setParameter(std::string_view name, TextureHandle texture, const SamplerParams& sampler) {
+void MaterialInstance::setParameter(std::string_view name, Shared<gpu::Texture> texture, const SamplerParams& sampler) {
     Sampler* slot = findSampler(name);
     if (!slot || !texture) {
         return;
     }
-    slot->texture = {};
-    slot->handle = texture;
+    slot->texture = std::move(texture);
     slot->params = sampler;
     slot->dirty = true;
 }
@@ -136,7 +135,6 @@ void MaterialInstance::copyParametersFrom(const MaterialInstance& other) {
         auto from = std::ranges::find(other.m_samplers, source->binding, &Sampler::binding);
         auto to = std::ranges::find(m_samplers, p.binding, &Sampler::binding);
         to->texture = from->texture;
-        to->handle = from->handle;
         to->params = from->params;
         to->dirty = true;
     }
@@ -150,7 +148,10 @@ void MaterialInstance::commit(RenderAPI& renderApi) {
 
     for (auto& slot : m_samplers) {
         if (slot.dirty) {
-            const TextureHandle texture = slot.texture ? slot.texture->getHandle() : slot.handle;
+            const TextureHandle texture = std::visit(utils::overloaded {
+                [](const AssetPtr<Texture>& t) { return t->getHandle(); },
+                [](const Shared<gpu::Texture>& t) { return t.getHandle(); },
+            }, slot.texture);
             renderApi.updateDescriptorSetTexture(m_descriptorSet, texture, slot.binding, slot.params);
             slot.dirty = false;
         }

@@ -268,7 +268,7 @@ void Renderer::updateHdrTarget() {
   colors[0] = m_hdrColor;
   m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.x, extent.y, samples);
 
-  m_tonemapMaterial->setParameter("color", TextureHandle(m_hdrColor), kClampToEdgeSampler);
+  m_tonemapMaterial->setParameter("color", m_hdrColor, kClampToEdgeSampler);
 }
 
 void Renderer::drawSkybox() {

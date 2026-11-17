@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "PoseOps.h"
+#include "utils/Utils.h"
 
 namespace ailo {
 
@@ -199,7 +200,7 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
     m_tree.reserve(graph.nodeCount());
 
     for (uint16_t i = 0; i < graph.nodeCount(); ++i) {
-        std::visit(Overloaded {
+        std::visit(utils::overloaded {
             [&](const ClipNode& clipNode) {
                 auto it = std::ranges::find_if(clips, [&](const auto& clip) { return clip && clip->name == clipNode.clip; });
                 if (it == clips.end()) {
@@ -272,7 +273,7 @@ void AnimGraphRunner::updateNode(NodeIndex index, float dt, const SyncTimeRange*
         resetNode(index);
     }
 
-    std::visit(Overloaded {
+    std::visit(utils::overloaded {
         [&](const Clip& clip) {
             if (range) {
                 updateClipSynchronized(node, clip, *range);
@@ -290,7 +291,7 @@ uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
 
 void AnimGraphRunner::resetNode(NodeIndex index) {
     auto& node = m_tree[index.value];
-    std::visit(Overloaded {
+    std::visit(utils::overloaded {
         [&](const Clip& clip) {
             const AnimationClip* asset = clip.clip.get();
             node.duration = asset ? asset->duration : 0.0f;
@@ -315,7 +316,7 @@ void AnimGraphRunner::evaluate(Skeleton& skeleton, PosePool& posePool, std::vect
 void AnimGraphRunner::evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool,
                                    std::vector<NodeTransform>& out) {
     const Node& node = m_tree[index.value];
-    std::visit(Overloaded {
+    std::visit(utils::overloaded {
         [&](const Clip& clip) {
             if (const AnimationClip* asset = clip.clip.get()) {
                 samplePose(node.percent * node.duration, skeleton, *asset, out);

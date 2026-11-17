@@ -258,7 +258,7 @@ private:
   Unique<gpu::Texture> m_shadowMapTexture;
   Unique<gpu::RenderTarget> m_shadowMapRenderTarget;
 
-  Unique<gpu::Texture> m_hdrColor;
+  Shared<gpu::Texture> m_hdrColor;
   Unique<gpu::Texture> m_hdrDepth;
   Unique<gpu::RenderTarget> m_hdrRenderTarget;
   glm::ivec2 m_hdrExtent;

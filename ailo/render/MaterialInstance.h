@@ -3,6 +3,7 @@
 #include <array>
 #include <bit>
 #include <span>
+#include <variant>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -40,8 +41,8 @@ public:
     const Material& getMaterial() const { return *m_material; }
 
     void setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler = {});
-    // For textures that aren't assets, e.g. render targets. The caller keeps the texture alive.
-    void setParameter(std::string_view name, TextureHandle texture, const SamplerParams& sampler = {});
+    // For textures that aren't assets, e.g. render targets.
+    void setParameter(std::string_view name, Shared<gpu::Texture> texture, const SamplerParams& sampler = {});
 
     template<UniformValue T>
     void setParameter(std::string_view name, const T& value) {
@@ -75,8 +76,7 @@ public:
 private:
     struct Sampler {
         uint32_t binding;
-        AssetPtr<Texture> texture;
-        TextureHandle handle;   // used when texture is null
+        std::variant<AssetPtr<Texture>, Shared<gpu::Texture>> texture;
         SamplerParams params;
         bool dirty = true;
     };

@@ -19,11 +19,6 @@
 
 namespace ailo {
 
-template<class... Ts>
-struct Overloaded : Ts... {
-    using Ts::operator()...;
-};
-
 struct ClipNode {
     std::string clip;        // AnimationClip::name
     float       rate    = 1.0f;
