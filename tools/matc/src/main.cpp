@@ -116,6 +116,7 @@ int dump(const fs::path& path) {
     }
 
     std::cout << "name:          " << pkg->name << "\n"
+              << "domain:        " << toString(pkg->domain) << "\n"
               << "shadingModel:  " << toString(pkg->shadingModel) << "\n"
               << "blending:      " << toString(pkg->blending) << "\n"
               << "vertexDomain:  " << toString(pkg->vertexDomain) << "\n"

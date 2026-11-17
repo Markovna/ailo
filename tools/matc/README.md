@@ -53,6 +53,7 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 | Property | Values | Default |
 |---|---|---|
 | `name` | string | file name |
+| `domain` | `surface`, `postprocess` (see [Postprocess materials](#postprocess-materials)) | `surface` |
 | `shadingModel` | `lit`, `unlit` | `lit` |
 | `parameters` | array, see below | none |
 | `requires` | `color`, `uv0`, `tangents`, `normal` (position is always available; `lit` and `tangents` imply `normal`) | none |
@@ -117,6 +118,39 @@ on top.
 - `ShadingData`: `diffuseColor`, `f0`, `perceptualRoughness`, `roughness`
 - `LightData`: `colorIntensity` (rgb, intensity in w), `l` (towards the light), `NdotL`, `worldPosition`,
   `attenuation`, `visibility` (shadowing)
+
+### Postprocess materials
+
+`"domain": "postprocess"` (default `"surface"`) makes a material that draws a full-screen triangle, e.g. tonemapping
+(`assets/materials/tonemap.mat`). Only `name`, `parameters` and `variables` are allowed: culling and the depth test
+are off, nothing writes depth, and there is a single variant.
+
+```
+material {
+    "name": "Tonemap",
+    "domain": "postprocess",
+    "parameters": [ { "type": "sampler2d", "name": "color" } ]
+}
+
+vertex {        // optional
+    void postProcessVertex(inout PostProcessVertexInputs postProcess) { }
+}
+
+fragment {
+    void postProcess(inout PostProcessInputs postProcess) {
+        postProcess.color = texture(materialParams_color, getUV()) * getExposure();
+    }
+}
+```
+
+- `fragment` (required) defines `void postProcess(inout PostProcessInputs postProcess)` and writes
+  `postProcess.color`.
+- `vertex` (optional) defines `void postProcessVertex(inout PostProcessVertexInputs postProcess)`. It can change
+  `position` (clip space) and `normalizedUV`, and writes the custom `variables`.
+- Getters: `getUV()` (fragment, (0, 0) at the top-left), `getExposure()`. The per-view uniforms are bound; the
+  per-object ones are not. Input textures are sampler parameters, set by the engine (`MaterialInstance::setParameter`
+  takes a `TextureHandle` for render targets).
+- Templates are in `shaders/post_process/`.
 
 ## Variants
 

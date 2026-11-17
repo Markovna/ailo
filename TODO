@@ -6,6 +6,4 @@ TODO:
 
 *  Instancing
 
-*  Support post-process materials - re-write tonemapping as post-process material
-
 *  Replace OpenMP with std::thread in lightc

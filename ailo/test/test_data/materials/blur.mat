@@ -1,0 +1,25 @@
+material {
+    "name": "Blur",
+    "domain": "postprocess",
+    "parameters": [
+        { "type": "sampler2d", "name": "source" },
+        { "type": "float2", "name": "direction", "default": [1, 0] }
+    ],
+    "variables": ["offsets"]
+}
+
+vertex {
+    void postProcessVertex(inout PostProcessVertexInputs postProcess) {
+        postProcess.offsets = vec4(materialParams.direction, -materialParams.direction);
+    }
+}
+
+fragment {
+    void postProcess(inout PostProcessInputs postProcess) {
+        vec2 texel = 1.0 / vec2(textureSize(materialParams_source, 0));
+        vec2 uv = getUV();
+        postProcess.color = (texture(materialParams_source, uv + variable_offsets.xy * texel)
+                           + texture(materialParams_source, uv)
+                           + texture(materialParams_source, uv + variable_offsets.zw * texel)) / 3.0;
+    }
+}

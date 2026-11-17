@@ -24,7 +24,7 @@ struct PerViewUniforms {
   float iblSpecularMaxLod;
   uint32_t lightCount;
   float iblIntensity;
-  float __padding1;
+  float exposure;
   glm::vec4 iblSH[lighting::kIrradianceSHCount];
 };
 
@@ -230,6 +230,8 @@ private:
   using PerObjectUniformBufferData = std::vector<PerObjectUniforms>;
 
   void drawSkybox();
+  // Full-screen triangle with a postprocess material, inside the current render pass.
+  void drawPostProcess(const MaterialInstance& material);
   void updateHdrTarget();
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
@@ -260,10 +262,7 @@ private:
   Unique<gpu::Texture> m_hdrDepth;
   Unique<gpu::RenderTarget> m_hdrRenderTarget;
   glm::ivec2 m_hdrExtent;
-  Unique<gpu::DescriptorSetLayout> m_tonemapDescriptorSetLayout;
-  Unique<gpu::DescriptorSet> m_tonemapDescriptorSet;
-  Unique<gpu::Buffer> m_tonemapUniformBuffer;
-  Unique<gpu::Program> m_tonemapProgram;
+  AssetPtr<MaterialInstance> m_tonemapMaterial;
 
   AssetPtr<MaterialInstance> m_skyboxMaterial;
   AssetPtr<Mesh> m_skyboxMesh;

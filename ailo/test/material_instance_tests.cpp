@@ -1,4 +1,5 @@
 #include "render/material/MaterialInstancePackage.h"
+#include "render/material/MaterialPackage.h"
 #include "Testing.h"
 
 #include <bit>
@@ -86,10 +87,33 @@ void testCompiledInstance() {
     CHECK_EQ(pkg->textures[0].texture, "builtin://textures/black");
 }
 
+void testCompiledPostProcessMaterial() {
+    std::string error;
+    auto pkg = MaterialPackage::deserialize(embedded::test_assets::kMaterialsBlur, error);
+    REQUIRE(pkg);
+    CHECK_EQ(pkg->domain, MaterialDomain::PostProcess);
+    CHECK_EQ(pkg->raster.culling, CullingMode::None);
+    CHECK(!pkg->raster.depthWrite);
+    CHECK(!pkg->raster.depthCulling);
+
+    REQUIRE_EQ(pkg->shaders.size(), 2u);
+    for (const auto& s : pkg->shaders) CHECK(s.variant == Variant {});
+    CHECK(!pkg->getShader(ShaderStage::Vertex, Variant {}).empty());
+    CHECK(!pkg->getShader(ShaderStage::Fragment, Variant {}).empty());
+
+    REQUIRE(pkg->findParameter("source"));
+    CHECK_EQ(pkg->findParameter("source")->type, ParameterType::Sampler2D);
+
+    auto loaded = MaterialPackage::deserialize(pkg->serialize(), error);
+    REQUIRE(loaded);
+    CHECK_EQ(loaded->domain, MaterialDomain::PostProcess);
+}
+
 }
 
 void runMaterialInstanceTests() {
     ailo::test::run("material_instance/testRoundTrip", testRoundTrip);
     ailo::test::run("material_instance/testDeserializeRejectsBadPackages", testDeserializeRejectsBadPackages);
     ailo::test::run("material_instance/testCompiledInstance", testCompiledInstance);
+    ailo::test::run("material_instance/testCompiledPostProcessMaterial", testCompiledPostProcessMaterial);
 }

@@ -7,6 +7,11 @@
 
 namespace ailo::material {
 
+enum class MaterialDomain : uint8_t {
+    Surface,
+    PostProcess,
+};
+
 enum class ShadingModel : uint8_t {
     Lit,
     Unlit,
@@ -65,6 +70,7 @@ constexpr uint32_t componentCount(ParameterType type) {
     }
 }
 
+std::string_view toString(MaterialDomain);
 std::string_view toString(ShadingModel);
 std::string_view toString(BlendingMode);
 std::string_view toString(VertexDomain);

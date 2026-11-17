@@ -10,6 +10,7 @@ void AssetPlugin::build(App& app) {
     server.registerReader("engine", std::make_unique<MemoryAssetReader>(MemoryAssetReader {
         { "materials/lit.mat", embedded::materials::kMaterialsLit },
         { "materials/skybox.mat", embedded::materials::kMaterialsSkybox },
+        { "materials/tonemap.mat", embedded::materials::kMaterialsTonemap },
     }));
 }
 

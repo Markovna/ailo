@@ -247,14 +247,13 @@ embed_resources(ailo PACKAGE textures FILES ${DFG_LUT_OUTPUT})
 # Built-in shaders, embedded into the engine
 add_shader(BUILTIN_SHADERS shaders/imgui.vert)
 add_shader(BUILTIN_SHADERS shaders/imgui.frag)
-add_shader(BUILTIN_SHADERS shaders/tonemap.vert)
-add_shader(BUILTIN_SHADERS shaders/tonemap.frag)
 embed_resources(ailo PACKAGE shaders FILES ${BUILTIN_SHADERS})
 
 # Built-in assets, read by the "engine" source that AssetPlugin registers ("engine:/materials/lit.mat").
 embed_assets(ailo PACKAGE materials ROOT ${CMAKE_SOURCE_DIR}/assets FILES
         materials/lit.mat
         materials/skybox.mat
+        materials/tonemap.mat
 )
 
 add_subdirectory(test)

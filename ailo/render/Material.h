@@ -12,6 +12,7 @@ namespace ailo {
 namespace materials {
 constexpr auto kLit = "engine:/materials/lit.mat";
 constexpr auto kSkybox = "engine:/materials/skybox.mat";
+constexpr auto kTonemap = "engine:/materials/tonemap.mat";
 }
 
 class Material {

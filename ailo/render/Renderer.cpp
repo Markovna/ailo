@@ -28,11 +28,6 @@ static constexpr SamplerParams kClampToEdgeSampler {
   .wrapR = SamplerWrapMode::CLAMP_TO_EDGE,
 };
 
-struct TonemapUniforms {
-  float exposure;
-  float padding[3];
-};
-
 // Hardware depth comparison; linear filtering blends the four nearest comparison results (2x2 PCF).
 static constexpr SamplerParams kShadowSampler {
   .wrapS = SamplerWrapMode::CLAMP_TO_EDGE,
@@ -98,24 +93,7 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
 
   m_dummyBonesBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(BonesUniform));
 
-  const std::vector<DescriptorSetLayoutBinding> tonemapLayout {
-    { .binding = 0, .descriptorType = vk::DescriptorType::eCombinedImageSampler, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-    { .binding = 1, .descriptorType = vk::DescriptorType::eUniformBuffer, .stageFlags = vk::ShaderStageFlagBits::eFragment },
-  };
-  m_tonemapDescriptorSetLayout = backend->createDescriptorSetLayout(tonemapLayout);
-  m_tonemapDescriptorSet = backend->createDescriptorSet(m_tonemapDescriptorSetLayout);
-  m_tonemapUniformBuffer = backend->createBuffer(BufferBinding::UNIFORM, sizeof(TonemapUniforms));
-  backend->updateDescriptorSetBuffer(m_tonemapDescriptorSet, m_tonemapUniformBuffer, 1);
-  m_tonemapProgram = backend->createProgram(ShaderDescription {
-    .vertexShader = ShaderDescription::code(embedded::shaders::kTonemapVert),
-    .fragmentShader = ShaderDescription::code(embedded::shaders::kTonemapFrag),
-    .raster = RasterDescription {
-      .cullingMode = CullingMode::None,
-      .depthWriteEnable = false,
-      .depthCompareOp = CompareOp::Always,
-    },
-    .layout = { tonemapLayout },
-  });
+  m_tonemapMaterial = MaterialInstance::create(materialInstances, server, *m_renderAPI, server.load<Material>(materials::kTonemap));
 }
 
 Renderer::~Renderer() = default;
@@ -248,16 +226,27 @@ void Renderer::colorPass() {
 void Renderer::tonemapPass() {
   RenderAPI* backend = m_renderAPI;
 
+  m_tonemapMaterial->commit(*backend);
+
   // Every pixel is written, so the swapchain image isn't cleared.
   RenderPassDescription renderPass {};
   renderPass.color[0] = { .load = vk::AttachmentLoadOp::eDontCare, .store = vk::AttachmentStoreOp::eStore };
   backend->beginRenderPass(renderPass);
-
-  backend->bindPipeline(PipelineState { .program = m_tonemapProgram });
-  backend->bindDescriptorSet(m_tonemapDescriptorSet, 0);
-  backend->draw(3);
-
+  drawPostProcess(*m_tonemapMaterial);
   backend->endRenderPass();
+}
+
+void Renderer::drawPostProcess(const MaterialInstance& material) {
+  auto program = material.getMaterial().getProgram(material::Variant {});
+  if (!program) {
+    return;
+  }
+
+  RenderAPI* backend = m_renderAPI;
+  backend->bindPipeline(PipelineState { .program = program });
+  backend->bindDescriptorSet(m_viewDescriptorSet, std::to_underlying(DescriptorSetBindingPoints::PER_VIEW));
+  material.bind(*backend);
+  backend->draw(3);
 }
 
 void Renderer::updateHdrTarget() {
@@ -279,7 +268,7 @@ void Renderer::updateHdrTarget() {
   colors[0] = m_hdrColor;
   m_hdrRenderTarget = backend->createRenderTarget(colors, m_hdrDepth, extent.x, extent.y, samples);
 
-  backend->updateDescriptorSetTexture(m_tonemapDescriptorSet, m_hdrColor, 0, kClampToEdgeSampler);
+  m_tonemapMaterial->setParameter("color", TextureHandle(m_hdrColor), kClampToEdgeSampler);
 }
 
 void Renderer::drawSkybox() {
@@ -327,6 +316,7 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
   m_perViewUniformBufferData.viewInverse = inverse(camera.view);
   m_perViewUniformBufferData.lightColorIntensity = glm::vec4(1.0f, 1.0f, 1.0f, sceneLighting->sunIntensity);
   m_perViewUniformBufferData.iblIntensity = sceneLighting->iblIntensity;
+  m_perViewUniformBufferData.exposure = camera.exposure;
   m_perViewUniformBufferData.lightDirection = -lightDir;
   const IndirectLight* indirectLight = sceneLighting->indirectLight ? &*sceneLighting->indirectLight : nullptr;
   const Texture& iblSpecular = indirectLight ? *indirectLight->reflections : *m_defaultIblSpecular;
@@ -499,8 +489,6 @@ void Renderer::prepare(Scene& scene, Query<Renderable>& renderables, const ViewI
     backend.updateBuffer(m_shadowViewUniformBufferHandles[i], &m_shadowViewUniformBufferData[i], sizeof(PerViewUniforms));
   }
   backend.updateBuffer(m_viewUniformBufferHandle, &m_perViewUniformBufferData, sizeof(m_perViewUniformBufferData));
-  const TonemapUniforms tonemapUniforms { .exposure = camera.exposure };
-  backend.updateBuffer(m_tonemapUniformBuffer, &tonemapUniforms, sizeof(tonemapUniforms));
   backend.updateBuffer(m_shadowsUniformBufferHandle, &m_shadowsUniformsBufferData, sizeof(m_shadowsUniformsBufferData));
   backend.updateBuffer(m_lightsUniformBufferHandle, m_lightUniformsBufferData.data(), sizeof(m_lightUniformsBufferData));
   if (objectIndex > 0) {

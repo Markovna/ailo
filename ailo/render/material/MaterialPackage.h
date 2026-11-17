@@ -12,7 +12,7 @@
 namespace ailo::material {
 
 // Bump whenever the binary layout or the meaning of any field changes; packages with another version are rejected.
-static constexpr uint32_t kMaterialPackageVersion = 2;
+static constexpr uint32_t kMaterialPackageVersion = 3;
 
 // Descriptor set 2 (PER_MATERIAL) layout: binding 0 is the MaterialParams uniform block (if the material
 // has uniform parameters), samplers follow from binding 1 in declaration order.
@@ -51,6 +51,7 @@ struct ShaderEntry {
 
 struct MaterialPackage {
     std::string name;
+    MaterialDomain domain = MaterialDomain::Surface;
     ShadingModel shadingModel = ShadingModel::Lit;
     BlendingMode blending = BlendingMode::Opaque;
     VertexDomain vertexDomain = VertexDomain::Object;

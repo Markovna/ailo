@@ -8,6 +8,7 @@ struct ViewUniform {
    float iblSpecularMaxLod;
    uint lightCount; // number of used slots in lights[]
    float iblIntensity;
+   float exposure;
    vec4 iblSH[9]; // irradiance SH, see LightingPackage.h
 };
 

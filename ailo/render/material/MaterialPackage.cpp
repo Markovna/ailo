@@ -45,6 +45,7 @@ std::vector<uint8_t> MaterialPackage::serialize() const {
 
     w.beginChunk(kChunkInfo);
     w.string(name);
+    w.u8(uint8_t(domain));
     w.u8(uint8_t(shadingModel));
     w.u8(uint8_t(blending));
     w.u8(uint8_t(vertexDomain));
@@ -124,6 +125,7 @@ std::optional<MaterialPackage> MaterialPackage::deserialize(std::span<const uint
         switch (tag) {
             case kChunkInfo:
                 pkg.name = c.string();
+                pkg.domain = c.enumeration(MaterialDomain::PostProcess);
                 pkg.shadingModel = c.enumeration(ShadingModel::Unlit);
                 pkg.blending = c.enumeration(BlendingMode::Opaque);
                 pkg.vertexDomain = c.enumeration(VertexDomain::Object);

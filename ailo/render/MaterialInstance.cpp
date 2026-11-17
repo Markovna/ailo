@@ -53,23 +53,36 @@ MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetServer& server, As
     }
 }
 
-void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler) {
+MaterialInstance::Sampler* MaterialInstance::findSampler(std::string_view name) {
     const auto* p = m_material->findParameter(name);
     if (!p || !material::isSampler(p->type)) {
         log::error("Material '{}' has no sampler parameter '{}'", m_material->getName(), name);
-        return;
+        return nullptr;
     }
-    if (!texture) {
-        return;
-    }
+    auto it = std::ranges::find(m_samplers, p->binding, &Sampler::binding);
+    return it != m_samplers.end() ? &*it : nullptr;
+}
 
-    for (auto& slot : m_samplers) {
-        if (slot.binding == p->binding) {
-            slot.texture = std::move(texture);
-            slot.params = sampler;
-            slot.dirty = true;
-        }
+void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler) {
+    Sampler* slot = findSampler(name);
+    if (!slot || !texture) {
+        return;
     }
+    slot->texture = std::move(texture);
+    slot->handle = {};
+    slot->params = sampler;
+    slot->dirty = true;
+}
+
+void MaterialInstance::setParameter(std::string_view name, TextureHandle texture, const SamplerParams& sampler) {
+    Sampler* slot = findSampler(name);
+    if (!slot || !texture) {
+        return;
+    }
+    slot->texture = {};
+    slot->handle = texture;
+    slot->params = sampler;
+    slot->dirty = true;
 }
 
 void MaterialInstance::setUniform(std::string_view name, material::ParameterType type, std::span<const uint32_t> words, uint32_t firstElement) {
@@ -123,6 +136,7 @@ void MaterialInstance::copyParametersFrom(const MaterialInstance& other) {
         auto from = std::ranges::find(other.m_samplers, source->binding, &Sampler::binding);
         auto to = std::ranges::find(m_samplers, p.binding, &Sampler::binding);
         to->texture = from->texture;
+        to->handle = from->handle;
         to->params = from->params;
         to->dirty = true;
     }
@@ -136,7 +150,8 @@ void MaterialInstance::commit(RenderAPI& renderApi) {
 
     for (auto& slot : m_samplers) {
         if (slot.dirty) {
-            renderApi.updateDescriptorSetTexture(m_descriptorSet, slot.texture->getHandle(), slot.binding, slot.params);
+            const TextureHandle texture = slot.texture ? slot.texture->getHandle() : slot.handle;
+            renderApi.updateDescriptorSetTexture(m_descriptorSet, texture, slot.binding, slot.params);
             slot.dirty = false;
         }
     }

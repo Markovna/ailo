@@ -2,6 +2,14 @@
 
 namespace ailo::material {
 
+std::string_view toString(MaterialDomain v) {
+    switch (v) {
+        case MaterialDomain::Surface:     return "surface";
+        case MaterialDomain::PostProcess: return "postprocess";
+    }
+    return "?";
+}
+
 std::string_view toString(ShadingModel v) {
     switch (v) {
         case ShadingModel::Lit:   return "lit";

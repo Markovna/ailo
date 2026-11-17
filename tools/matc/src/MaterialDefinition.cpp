@@ -303,6 +303,17 @@ void parseParameters(const json::Value& value, MaterialPackage& pkg) {
     pkg.uniformBlockSize = alignUp(uniformOffset, 16);
 }
 
+constexpr std::pair<std::string_view, MaterialDomain> kDomains[] = {
+    { "surface", MaterialDomain::Surface },
+    { "postprocess", MaterialDomain::PostProcess },
+};
+
+// Postprocess materials draw a full-screen triangle with fixed raster state and no surface variants.
+constexpr std::string_view kSurfaceOnlyProperties[] = {
+    "shadingModel", "requires", "blending", "vertexDomain", "culling", "colorWrite", "depthWrite",
+    "depthCulling", "depthFunc", "doubleSided", "customSurfaceShading", "variantFilter",
+};
+
 constexpr std::pair<std::string_view, ShadingModel> kShadingModels[] = {
     { "lit", ShadingModel::Lit },
     { "unlit", ShadingModel::Unlit },
@@ -356,6 +367,15 @@ void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
     }
 
     for (const auto& [key, v] : root.asObject()) {
+        if (key == "domain") pkg.domain = getEnum(v, "domain", kDomains);
+    }
+    const bool postProcess = pkg.domain == MaterialDomain::PostProcess;
+
+    for (const auto& [key, v] : root.asObject()) {
+        if (postProcess && std::ranges::contains(kSurfaceOnlyProperties, key)) {
+            fail(v.line, "\"" + key + "\" is not supported by postprocess materials");
+        }
+        if (key == "domain") continue;
         if (key == "name") pkg.name = getString(v, "name");
         else if (key == "shadingModel") pkg.shadingModel = getEnum(v, "shadingModel", kShadingModels);
         else if (key == "parameters") parseParameters(v, pkg);
@@ -398,6 +418,18 @@ void parseMaterialBlock(const Block& block, MaterialDefinition& def) {
 
     for (const auto& var : pkg.variables) {
         if (pkg.findParameter(var)) fail(block.bodyLine, "\"" + var + "\" is both a parameter and a variable");
+    }
+
+    if (postProcess) {
+        pkg.shadingModel = ShadingModel::Unlit;
+        pkg.raster = RasterState {
+            .culling = CullingMode::None,
+            .depthWrite = false,
+            .depthCulling = false,
+            .depthFunc = CompareOp::Always,
+        };
+        pkg.variantFilter = Variant::SKINNING | Variant::SHADOWS | Variant::DEPTH_ONLY;
+        return;
     }
 
     // Lighting variants make no sense for unlit materials.
@@ -470,6 +502,18 @@ MaterialDefinition parseMaterialDefinition(std::string_view source) {
 
     if (!hasMaterial) fail(1, "missing material block");
     if (!def.fragment.present) fail(1, "missing fragment block");
+
+    if (def.package.domain == MaterialDomain::PostProcess) {
+        static const std::regex postProcessFunction(R"(void\s+postProcess\s*\()");
+        static const std::regex postProcessVertexFunction(R"(void\s+postProcessVertex\s*\()");
+        if (!std::regex_search(def.fragment.code, postProcessFunction)) {
+            fail(def.fragment.line, "fragment block must define void postProcess(inout PostProcessInputs postProcess)");
+        }
+        if (def.vertex.present && !std::regex_search(def.vertex.code, postProcessVertexFunction)) {
+            fail(def.vertex.line, "vertex block must define void postProcessVertex(inout PostProcessVertexInputs postProcess)");
+        }
+        return def;
+    }
 
     static const std::regex materialFunction(R"(void\s+material\s*\()");
     static const std::regex prepareCall(R"(prepareMaterial\s*\()");

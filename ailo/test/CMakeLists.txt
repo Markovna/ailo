@@ -28,4 +28,5 @@ embed_assets(ailo_tests PACKAGE test_assets ROOT test_data FILES
         materials/unlit.mat
         materials/tinted.mat
         materials/red.matinst
+        materials/blur.mat
 )
