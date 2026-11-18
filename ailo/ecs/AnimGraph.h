@@ -50,6 +50,7 @@ struct AnimTransition {
     // Seconds the from-state must have been active before the transition can fire.
     float    exitTime     = 0.0f;
     float    fadeDuration = 0.0f;
+    bool     synchronized = false;
     std::optional<expr::Bytecode> condition;
 };
 
@@ -58,6 +59,7 @@ struct AnimTransitionDesc {
     std::string condition;
     float fadeDuration = 0.0f;
     float exitTime = 0.0f;
+    bool synchronized = false;
 };
 
 // State and transition indices are local to their machine.
@@ -194,13 +196,29 @@ private:
         const SyncTrack& syncTrack() const;
     };
 
+    // Where a node or a fade is on its sync track.
+    struct SyncState {
+        const SyncTrack* track;
+        float duration;
+        float percent;
+
+        SyncTime time() const { return track->time(percent); }
+    };
+
+    // A fade's source is the fade below it on the stack, or fromNode for the oldest one. Its sync track blends its
+    // source's and toNode's at alpha.
     struct Transition {
         NodeIndex fromNode;
         NodeIndex toNode;
         float time = 0.0f;
         float duration = 0.0f;
+        bool synchronized = false;
+        SyncTrack syncTrack;
+        float syncDuration = 0.0f;
+        float syncPercent = 0.0f;
 
         float alpha() const { return duration <= 0.0f ? 1.0f : std::min(time / duration, 1.0f); }
+        SyncState syncState() const { return { &syncTrack, syncDuration, syncPercent }; }
     };
 
     struct StateMachine {
@@ -210,12 +228,12 @@ private:
         std::vector<Transition> m_transitionStack;
     };
 
+    // A machine's duration and percent are those of the fade it is in, or of its state, copied up as it updates.
     struct Node {
         std::variant<Clip, StateMachine> data;
         float duration = 0.0f;          // seconds per loop
         float percent = 0.0f;
-        bool active = false;
-        bool wasActive = false;
+        bool updated = false;           // this frame
     };
 
 public:
@@ -236,12 +254,17 @@ public:
     uint16_t currentState(NodeIndex machine = AnimGraph::kRoot) const;
 
 private:
-    void resetNode(NodeIndex index);
+    void startNode(NodeIndex index, const SyncTime* start = nullptr);
+
+    const SyncTrack& syncTrack(NodeIndex index) const;
+    SyncState syncState(NodeIndex index) const;
 
     void updateNode(NodeIndex index, float dt, const SyncTimeRange* range);
     static void updateClip(Node& node, const Clip& clip, float dt);
     static void updateClipSynchronized(Node& node, const Clip& clip, const SyncTimeRange& range);
     void updateMachine(NodeIndex index, float dt, const SyncTimeRange* range);
+    // Updates the fade at index on the machine's stack, and the fades below it.
+    void updateFade(StateMachine& sm, size_t index, float dt, const SyncTimeRange* range);
     void evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
     AssetPtr<AnimGraph> m_definition;

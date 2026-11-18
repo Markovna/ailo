@@ -173,6 +173,191 @@ void testClipTime() {
     CHECK_NEAR(fixture.pose(reversed, 0), 1.75f, kEps);
 }
 
+SyncTrack syncTrack(std::initializer_list<float> starts) {
+    std::vector<SyncTrack::Marker> markers;
+    uint32_t id = 1;
+    for (float start : starts) {
+        markers.push_back({ id++, start });
+    }
+    return SyncTrack { markers };
+}
+
+AnimGraph::Builder fadeGraph(bool synchronized) {
+    return std::move(AnimGraph::Builder {}.parameter("go").root(
+        twoStates({ .condition = "go", .fadeDuration = 1.0f, .synchronized = synchronized })));
+}
+
+// a (1 s) and b (2 s) both step at their start and halfway. Fading 0.3 s into a, b starts at a's sync time, and both
+// then move at the pace of their blended duration.
+void testSynchronizedFade() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 2.0f);
+    for (auto& clip : fixture.clips) {
+        clip->syncTrack = syncTrack({ 0.0f, 0.5f });
+    }
+    AnimGraphRunner runner = fixture.run(fadeGraph(true));
+
+    runner.update(0.3f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(), 1);
+
+    // b weighs 0.1. Each step moves at the blended duration the fade built the step before: 1 s at weight 0 when it
+    // started, then 1.1 s at weight 0.1.
+    float percent = 0.3f + 0.1f / 1.0f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.9f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.1f * percent * 2.0f, kEps);
+
+    runner.update(0.5f);
+    percent += 0.5f / 1.1f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.4f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.6f * percent * 2.0f, kEps);
+}
+
+void testUnsynchronizedFade() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 2.0f);
+    AnimGraphRunner runner = fixture.run(fadeGraph(false));
+
+    runner.update(0.3f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.9f * 0.4f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.1f * 0.1f, kEps);
+}
+
+// a has two steps a second, b three in 1.5 s: their blended track has six events, and both clips are at the same event
+// and the same percent through it, though their tracks differ.
+void testSynchronizedEventCounts() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 1.5f);
+    fixture.clips[0]->syncTrack = syncTrack({ 0.0f, 0.5f });
+    fixture.clips[1]->syncTrack = syncTrack({ 0.0f, 1.0f / 3.0f, 2.0f / 3.0f });
+    AnimGraphRunner runner = fixture.run(fadeGraph(true));
+
+    runner.update(0.3f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    runner.update(0.4f);
+
+    const SyncTime a = fixture.clips[0]->syncTrack.time(fixture.pose(runner, 0) / 0.5f / 1.0f);
+    const SyncTime b = fixture.clips[1]->syncTrack.time(fixture.pose(runner, 1) / 0.5f / 1.5f);
+    CHECK_EQ(a.event, 1);
+    CHECK_EQ(b.event, 1);
+    CHECK_NEAR(a.percent, 0.6f, 1e-4f);
+    CHECK_NEAR(b.percent, 0.6f, 1e-4f);
+}
+
+// The range reaches b through the machine it is in.
+void testSynchronizedNestedMachine() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 2.0f);
+    for (auto& clip : fixture.clips) {
+        clip->syncTrack = syncTrack({ 0.0f, 0.5f });
+    }
+    MachineBuilder nested;
+    nested.state("b");
+    MachineBuilder machine;
+    machine.state("a")
+        .state(std::move(nested))
+        .transition(0, 1, { .condition = "go", .fadeDuration = 1.0f, .synchronized = true });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("go").root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    const float percent = 0.3f + 0.1f / 1.0f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.9f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.1f * percent * 2.0f, kEps);
+}
+
+// A fade into c interrupts the fade from a into b: the newer synchronized fade drives all three clips.
+void testInterruptedSynchronizedFade() {
+    Fixture fixture { "a", "b", "c" };
+    for (auto& clip : fixture.clips) {
+        clip->syncTrack = syncTrack({ 0.0f, 0.5f });
+    }
+    MachineBuilder machine;
+    machine.state("a").state("b").state("c")
+        .transition(0, 1, { .condition = "x == 1", .fadeDuration = 1.0f, .synchronized = true })
+        .transition(1, 2, { .condition = "x == 2", .fadeDuration = 1.0f, .synchronized = true });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("x").root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setFloat("x", 1.0f);
+    runner.update(0.1f);
+    runner.setFloat("x", 2.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(), 2);
+
+    // b weighs 0.2 over a, and c 0.1 over both.
+    CHECK_NEAR(fixture.pose(runner, 0), 0.8f * 0.9f * 0.5f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.2f * 0.9f * 0.5f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.1f * 0.5f, kEps);
+}
+
+// Joining a's loop 0.9 s in, a non-looping b plays to its end with a and then stays there as a wraps around.
+void testSynchronizedNonLooping() {
+    Fixture fixture { "a", "b" };
+    for (auto& clip : fixture.clips) {
+        clip->syncTrack = syncTrack({ 0.0f, 0.5f });
+    }
+    MachineBuilder machine;
+    machine.state("a").state("b", false)
+        .transition(0, 1, { .condition = "go", .fadeDuration = 1.0f, .synchronized = true });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("go").root(std::move(machine)));
+
+    runner.update(0.9f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.05f);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.05f * 0.95f, kEps);
+    runner.update(0.15f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.8f * 0.1f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.2f * 1.0f, kEps);
+}
+
+// Fading back into a before its fade out has finished: a keeps its time instead of starting over, which would make it
+// jump where it is fading out as well.
+void testReenteredStateContinues() {
+    Fixture fixture { "a", "b" };
+    MachineBuilder machine;
+    machine.state("a").state("b")
+        .transition(0, 1, { .condition = "x == 1", .fadeDuration = 1.0f })
+        .transition(1, 0, { .condition = "x == 0", .fadeDuration = 1.0f });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("x").root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setFloat("x", 1.0f);
+    runner.update(0.1f);
+    runner.setFloat("x", 0.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(), 0);
+
+    // b weighs 0.2 over a, then a 0.1 over both, with a at 0.5 s and b at 0.2 s.
+    CHECK_NEAR(fixture.pose(runner, 0), (0.9f * 0.8f + 0.1f) * 0.5f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.9f * 0.2f * 0.2f, kEps);
+}
+
+void testSelfTransitionContinues() {
+    Fixture fixture { "a" };
+    MachineBuilder machine;
+    machine.state("a").transition(0, 0, { .trigger = "again", .fadeDuration = 1.0f });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setTrigger("again");
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.4f, kEps);
+}
+
+// The root is started when the runner is made, so a reversed clip is at its end before the first update.
+void testStartedBeforeUpdate() {
+    Fixture fixture { "a" };
+    fixture.setDuration(0, 2.0f);
+    AnimGraphRunner runner = fixture.run(oneState(true, -1.0f));
+    CHECK_NEAR(fixture.pose(runner, 0), 2.0f, kEps);
+}
+
 }
 
 void runAnimGraphTests() {
@@ -182,4 +367,13 @@ void runAnimGraphTests() {
     ailo::test::run("anim_graph/testTriggerKeptWhenConditionFails", testTriggerKeptWhenConditionFails);
     ailo::test::run("anim_graph/testNestedMachineReadsParameters", testNestedMachineReadsParameters);
     ailo::test::run("anim_graph/testClipTime", testClipTime);
+    ailo::test::run("anim_graph/testSynchronizedFade", testSynchronizedFade);
+    ailo::test::run("anim_graph/testUnsynchronizedFade", testUnsynchronizedFade);
+    ailo::test::run("anim_graph/testSynchronizedEventCounts", testSynchronizedEventCounts);
+    ailo::test::run("anim_graph/testSynchronizedNestedMachine", testSynchronizedNestedMachine);
+    ailo::test::run("anim_graph/testInterruptedSynchronizedFade", testInterruptedSynchronizedFade);
+    ailo::test::run("anim_graph/testSynchronizedNonLooping", testSynchronizedNonLooping);
+    ailo::test::run("anim_graph/testReenteredStateContinues", testReenteredStateContinues);
+    ailo::test::run("anim_graph/testSelfTransitionContinues", testSelfTransitionContinues);
+    ailo::test::run("anim_graph/testStartedBeforeUpdate", testStartedBeforeUpdate);
 }

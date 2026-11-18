@@ -139,6 +139,7 @@ void AnimGraph::MachineBuilder::build(AnimGraph& graph, NodeIndex self,
             .trigger = graph.addTrigger(desc.trigger),
             .exitTime = desc.exitTime,
             .fadeDuration = desc.fadeDuration,
+            .synchronized = desc.synchronized,
             .condition = std::move(condition),
         });
     }
@@ -208,8 +209,6 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
                 }
                 m_tree.push_back({
                     .data = Clip { .clip = *it, .rate = clipNode.rate, .looping = clipNode.looping },
-                    .duration = (*it)->duration,
-                    .percent = clipNode.rate < 0.0f ? 1.0f : 0.0f,
                 });
             },
             [&](const StateMachineNode& machine) {
@@ -222,6 +221,8 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
             },
         }, graph.node(NodeIndex { i }));
     }
+
+    startNode(AnimGraph::kRoot);
 }
 
 void AnimGraphRunner::setTrigger(const std::string& name) {
@@ -256,7 +257,7 @@ float AnimGraphRunner::getFloat(const std::string& name) const {
 
 void AnimGraphRunner::update(float dt) {
     for (auto& node : m_tree) {
-        node.wasActive = std::exchange(node.active, false);
+        node.updated = false;
     }
 
     updateNode(AnimGraph::kRoot, dt, nullptr);
@@ -264,14 +265,10 @@ void AnimGraphRunner::update(float dt) {
 
 void AnimGraphRunner::updateNode(NodeIndex index, float dt, const SyncTimeRange* range) {
     auto& node = m_tree[index.value];
-    if (node.active) {
+    if (node.updated) {
         return;
     }
-    node.active = true;
-
-    if (!node.wasActive) {
-        resetNode(index);
-    }
+    node.updated = true;
 
     std::visit(utils::overloaded {
         [&](const Clip& clip) {
@@ -289,13 +286,32 @@ uint16_t AnimGraphRunner::currentState(NodeIndex machine) const {
     return std::get<StateMachine>(m_tree[machine.value].data).currentState;
 }
 
-void AnimGraphRunner::resetNode(NodeIndex index) {
-    auto& node = m_tree[index.value];
+const SyncTrack& AnimGraphRunner::syncTrack(NodeIndex index) const {
+    return std::visit(utils::overloaded {
+        [&](const Clip& clip) -> const SyncTrack& { return clip.syncTrack(); },
+        [&](const StateMachine& sm) -> const SyncTrack& {
+            const auto& stack = sm.m_transitionStack;
+            return stack.empty() ? syncTrack(sm.currentNode) : stack.front().syncTrack;
+        },
+    }, m_tree[index.value].data);
+}
+
+AnimGraphRunner::SyncState AnimGraphRunner::syncState(NodeIndex index) const {
+    const Node& node = m_tree[index.value];
+    return { &syncTrack(index), node.duration, node.percent };
+}
+
+void AnimGraphRunner::startNode(NodeIndex index, const SyncTime* start) {
+    Node& node = m_tree[index.value];
     std::visit(utils::overloaded {
         [&](const Clip& clip) {
             const AnimationClip* asset = clip.clip.get();
             node.duration = asset ? asset->duration : 0.0f;
-            node.percent = clip.rate < 0.0f ? 1.0f : 0.0f;
+            if (start) {
+                node.percent = clip.syncTrack().percent(*start);
+            } else {
+                node.percent = clip.rate < 0.0f ? 1.0f : 0.0f;
+            }
         },
         [&](StateMachine& sm) {
             const auto& machine = std::get<StateMachineNode>(m_definition->node(index));
@@ -303,8 +319,11 @@ void AnimGraphRunner::resetNode(NodeIndex index) {
             sm.currentNode = machine.states[sm.currentState].node;
             sm.stateTime = 0.0f;
             sm.m_transitionStack.clear();
-            node.duration = 0.0f;
-            node.percent = 0.0f;
+
+            startNode(sm.currentNode, start);
+            const Node& entry = m_tree[sm.currentNode.value];
+            node.duration = entry.duration;
+            node.percent = entry.percent;
         },
     }, node.data);
 }
@@ -397,13 +416,30 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRan
 
         auto& states = machine.states;
         const NodeIndex to = states[transition.to].node;
+        auto& stack = sm.m_transitionStack;
 
-        // newest first
-        sm.m_transitionStack.insert(sm.m_transitionStack.begin(), Transition {
+        const SyncState source = stack.empty() ? syncState(sm.currentNode) : stack.front().syncState();
+        const SyncTime sourceTime = source.time();
+        const bool running = to == sm.currentNode || std::ranges::any_of(stack, [&](const Transition& t) {
+            return t.fromNode == to || t.toNode == to;
+        });
+        if (!running) {
+            startNode(to, transition.synchronized ? &sourceTime : nullptr);
+        }
+        Transition fade {
             .fromNode = sm.currentNode,
             .toNode = to,
-            .duration = transition.fadeDuration
-        });
+            .duration = transition.fadeDuration,
+            .synchronized = transition.synchronized,
+            .syncTrack = SyncTrack(*source.track, *syncState(to).track, 0.0f),
+        };
+        const SyncState target = syncState(to);
+        fade.syncDuration = SyncTrack::blendedDuration(source.duration, source.track->eventCount(), target.duration,
+                                                       target.track->eventCount(), fade.syncTrack.eventCount(), 0.0f);
+        fade.syncPercent = fade.syncTrack.percent(sourceTime);
+
+        // newest first
+        stack.insert(stack.begin(), std::move(fade));
         sm.currentState = transition.to;
         sm.currentNode = to;
         sm.stateTime = 0.0f;
@@ -417,20 +453,60 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRan
 
     stack.erase(std::ranges::find_if(stack, [](const Transition& t) { return t.alpha() >= 1.0f; }), stack.end());
 
+    auto& node = m_tree[index.value];
     if (stack.empty()) {
         updateNode(sm.currentNode, dt, range);
+        const Node& current = m_tree[sm.currentNode.value];
+        node.duration = current.duration;
+        node.percent = current.percent;
     } else {
-        updateNode(stack.back().fromNode, dt, range);
-        for (const auto &it : std::views::reverse(stack)) {
-            updateNode(it.toNode, dt, range);
-        }
+        updateFade(sm, 0, dt, range);
+        node.duration = stack.front().syncDuration;
+        node.percent = stack.front().syncPercent;
     }
+}
 
-    // Until fades blend sync tracks, a fading machine shows the state it is fading into.
-    auto& node = m_tree[index.value];
-    const Node& current = m_tree[sm.currentNode.value];
-    node.duration = current.duration;
-    node.percent = current.percent;
+void AnimGraphRunner::updateFade(StateMachine& sm, size_t index, float dt, const SyncTimeRange* range) {
+    auto& stack = sm.m_transitionStack;
+    Transition& fade = stack[index];
+    const Transition* below = index + 1 < stack.size() ? &stack[index + 1] : nullptr;
+
+    const auto sourceState = [&] { return below ? below->syncState() : syncState(fade.fromNode); };
+    const auto updateSides = [&](const SyncTimeRange* sideRange) {
+        if (below) {
+            updateFade(sm, index + 1, dt, sideRange);
+        } else {
+            updateNode(fade.fromNode, dt, sideRange);
+        }
+        updateNode(fade.toNode, dt, sideRange);
+    };
+    const auto blend = [&] {
+        const SyncState from = sourceState();
+        const SyncState to = syncState(fade.toNode);
+        fade.syncTrack = SyncTrack(*from.track, *to.track, fade.alpha());
+        fade.syncDuration = SyncTrack::blendedDuration(from.duration, from.track->eventCount(), to.duration,
+                                                       to.track->eventCount(), fade.syncTrack.eventCount(),
+                                                       fade.alpha());
+    };
+
+    if (range) {
+        updateSides(range);
+        blend();
+        fade.syncPercent = fade.syncTrack.percent(range->end);
+    } else if (fade.synchronized) {
+        float end = fade.syncPercent + (fade.syncDuration > 0.0f ? dt / fade.syncDuration : 0.0f);
+        end -= std::floor(end);
+        const SyncTimeRange fadeRange { fade.syncTrack.time(fade.syncPercent), fade.syncTrack.time(end) };
+        updateSides(&fadeRange);
+        blend();
+        fade.syncPercent = fade.syncTrack.percent(fadeRange.end);
+    } else {
+        updateSides(nullptr);
+        blend();
+        // Each side keeps its own time, so the fade is wherever the side that weighs more is.
+        const SyncState heavier = fade.alpha() < 0.5f ? sourceState() : syncState(fade.toNode);
+        fade.syncPercent = fade.syncTrack.percent(heavier.time());
+    }
 }
 
 } // namespace ailo
