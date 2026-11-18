@@ -205,8 +205,8 @@ private:
         SyncTime time() const { return track->time(percent); }
     };
 
-    // A fade's source is the fade below it on the stack, or fromNode for the oldest one. Its sync track blends its
-    // source's and toNode's at alpha.
+    // A fade's source is the fade below it on the stack, or fromNode for the oldest one. A synchronized fade's sync track
+    // blends its source's and toNode's at alpha; any other fade's is toNode's.
     struct Transition {
         NodeIndex fromNode;
         NodeIndex toNode;

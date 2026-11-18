@@ -296,6 +296,41 @@ void testInterruptedSynchronizedFade() {
     CHECK_NEAR(fixture.pose(runner, 2), 0.1f * 0.5f, kEps);
 }
 
+// A synchronized fade from b into c starts while a plain fade from a markerless 4 s a into b is still running, like
+// walk into jog while idle into walk is. It keeps b's and c's pace, and a keeps its own time.
+void testSynchronizedOverUnsynchronizedFade() {
+    Fixture fixture { "a", "b", "c" };
+    fixture.setDuration(0, 4.0f);
+    fixture.setDuration(2, 2.0f);
+    fixture.clips[1]->syncTrack = syncTrack({ 0.0f, 0.5f });
+    fixture.clips[2]->syncTrack = syncTrack({ 0.0f, 0.5f });
+    MachineBuilder machine;
+    machine.state("a").state("b").state("c")
+        .transition(0, 1, { .condition = "x == 1", .fadeDuration = 1.0f })
+        .transition(1, 2, { .condition = "x == 2", .fadeDuration = 1.0f, .synchronized = true });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("x").root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setFloat("x", 1.0f);
+    runner.update(0.1f);
+    runner.setFloat("x", 2.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(), 2);
+
+    // c starts 0.1 into its loop, where b is, and both move at b's 1 s. b weighs 0.2 over a, and c 0.1 over both.
+    float percent = 0.1f + 0.1f / 1.0f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.8f * 0.9f * 0.5f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.2f * 0.9f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.1f * percent * 2.0f, kEps);
+
+    // The pace is now 1.1 s, b's and c's durations blended at 0.1.
+    runner.update(0.5f);
+    percent += 0.5f / 1.1f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.3f * 0.4f * 1.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.7f * 0.4f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.6f * percent * 2.0f, kEps);
+}
+
 // Joining a's loop 0.9 s in, a non-looping b plays to its end with a and then stays there as a wraps around.
 void testSynchronizedNonLooping() {
     Fixture fixture { "a", "b" };
@@ -372,6 +407,7 @@ void runAnimGraphTests() {
     ailo::test::run("anim_graph/testSynchronizedEventCounts", testSynchronizedEventCounts);
     ailo::test::run("anim_graph/testSynchronizedNestedMachine", testSynchronizedNestedMachine);
     ailo::test::run("anim_graph/testInterruptedSynchronizedFade", testInterruptedSynchronizedFade);
+    ailo::test::run("anim_graph/testSynchronizedOverUnsynchronizedFade", testSynchronizedOverUnsynchronizedFade);
     ailo::test::run("anim_graph/testSynchronizedNonLooping", testSynchronizedNonLooping);
     ailo::test::run("anim_graph/testReenteredStateContinues", testReenteredStateContinues);
     ailo::test::run("anim_graph/testSelfTransitionContinues", testSelfTransitionContinues);

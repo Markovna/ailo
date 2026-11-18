@@ -472,12 +472,15 @@ void AnimGraphRunner::updateFade(StateMachine& sm, size_t index, float dt, const
     const Transition* below = index + 1 < stack.size() ? &stack[index + 1] : nullptr;
 
     const auto sourceState = [&] { return below ? below->syncState() : syncState(fade.fromNode); };
-    const auto updateSides = [&](const SyncTimeRange* sideRange) {
+    const auto updateSource = [&](const SyncTimeRange* sideRange) {
         if (below) {
             updateFade(sm, index + 1, dt, sideRange);
         } else {
             updateNode(fade.fromNode, dt, sideRange);
         }
+    };
+    const auto updateSides = [&](const SyncTimeRange* sideRange) {
+        updateSource(sideRange);
         updateNode(fade.toNode, dt, sideRange);
     };
     const auto blend = [&] {
@@ -489,23 +492,24 @@ void AnimGraphRunner::updateFade(StateMachine& sm, size_t index, float dt, const
                                                        fade.alpha());
     };
 
-    if (range) {
+    if (!fade.synchronized) {
+        updateNode(fade.toNode, dt, range);
+        updateSource(nullptr);
+        const SyncState target = syncState(fade.toNode);
+        fade.syncTrack = *target.track;
+        fade.syncDuration = target.duration;
+        fade.syncPercent = target.percent;
+    } else if (range) {
         updateSides(range);
         blend();
         fade.syncPercent = fade.syncTrack.percent(range->end);
-    } else if (fade.synchronized) {
+    } else {
         float end = fade.syncPercent + (fade.syncDuration > 0.0f ? dt / fade.syncDuration : 0.0f);
         end -= std::floor(end);
         const SyncTimeRange fadeRange { fade.syncTrack.time(fade.syncPercent), fade.syncTrack.time(end) };
         updateSides(&fadeRange);
         blend();
         fade.syncPercent = fade.syncTrack.percent(fadeRange.end);
-    } else {
-        updateSides(nullptr);
-        blend();
-        // Each side keeps its own time, so the fade is wherever the side that weighs more is.
-        const SyncState heavier = fade.alpha() < 0.5f ? sourceState() : syncState(fade.toNode);
-        fade.syncPercent = fade.syncTrack.percent(heavier.time());
     }
 }
 
