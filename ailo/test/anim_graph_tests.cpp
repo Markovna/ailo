@@ -2,6 +2,7 @@
 #include "render/Skeleton.h"
 #include "Testing.h"
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,91 @@ void testBuildErrors() {
     CHECK_THROWS(AnimGraph::Builder {}.root(twoStates({ .condition = "missing > 0" })).build());
     CHECK_THROWS(AnimGraph::Builder {}.parameter("speed").root(twoStates({ .condition = "speed >" })).build());
     CHECK_THROWS(AnimGraph::Builder {}.parameter("speed").parameter("speed").root(twoStates({})).build());
+
+    const auto blendSpace = [](AnimGraph::BlendSpace1DBuilder space) {
+        MachineBuilder machine;
+        machine.state(std::move(space));
+        return AnimGraph::Builder {}.parameter("speed").root(std::move(machine)).build();
+    };
+    CHECK_THROWS(blendSpace(AnimGraph::BlendSpace1DBuilder("speed")));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("missing").sample(0.0f, "a"))));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(1.0f, "a").sample(1.0f, "b"))));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(NAN, "a"))));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(INFINITY, "a"))));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(0.0f, MachineBuilder {}))));
+    CHECK_THROWS(blendSpace(
+        std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(0.0f, twoStates({ .condition = "missing" })))));
+    CHECK_THROWS(blendSpace(std::move(AnimGraph::BlendSpace1DBuilder("speed").sample(
+        0.0f, AnimGraph::BlendSpace1DBuilder("missing").sample(0.0f, "a")))));
+}
+
+// Samples can be machines and blend spaces, built depth-first in position order like clips, and a machine sample's
+// conditions read the graph's parameters.
+void testBlendSpaceNestedLayout() {
+    MachineBuilder nested;
+    nested.state("b").state("c").transition(0, 1, { .condition = "y > 1" });
+    MachineBuilder machine;
+    machine.state(std::move(AnimGraph::BlendSpace1DBuilder("x")
+                                .sample(2.0f, std::move(nested))
+                                .sample(0.0f, "a")
+                                .sample(1.0f, std::move(AnimGraph::BlendSpace1DBuilder("y")
+                                                            .sample(1.0f, "e")
+                                                            .sample(0.0f, "d")))));
+    const AnimGraph graph = AnimGraph::Builder {}.parameter("x").parameter("y").root(std::move(machine)).build();
+
+    REQUIRE_EQ(graph.nodeCount(), 9u);
+    const auto& space = std::get<BlendSpace1DNode>(graph.node(NodeIndex { 1 }));
+    REQUIRE_EQ(space.samples.size(), 3u);
+    CHECK_EQ(space.samples[0].node.value, 2);
+    CHECK_EQ(space.samples[1].node.value, 3);
+    CHECK_EQ(space.samples[2].node.value, 6);
+    CHECK_EQ(std::get<ClipNode>(graph.node(NodeIndex { 2 })).clip, std::string("a"));
+
+    const auto* inner = std::get_if<BlendSpace1DNode>(&graph.node(NodeIndex { 3 }));
+    REQUIRE(inner != nullptr);
+    CHECK_EQ(inner->parameter, *graph.findParameter("y"));
+    REQUIRE_EQ(inner->samples.size(), 2u);
+    CHECK_EQ(std::get<ClipNode>(graph.node(inner->samples[0].node)).clip, std::string("d"));
+    CHECK_EQ(std::get<ClipNode>(graph.node(inner->samples[1].node)).clip, std::string("e"));
+    CHECK_EQ(inner->samples[1].node.value, 5);
+
+    const auto* sampleMachine = std::get_if<StateMachineNode>(&graph.node(NodeIndex { 6 }));
+    REQUIRE(sampleMachine != nullptr);
+    CHECK_EQ(sampleMachine->states[0].node.value, 7);
+    CHECK_EQ(sampleMachine->states[1].node.value, 8);
+    CHECK(sampleMachine->transitionsFrom(0)[0].condition.has_value());
+}
+
+// The blend space is followed by its samples in position order, then by the next state.
+void testBlendSpaceLayout() {
+    MachineBuilder machine;
+    machine.state(std::move(AnimGraph::BlendSpace1DBuilder("speed", 2.0f)
+                                .sample(3.0f, "jog")
+                                .sample(0.0f, "idle", false)
+                                .sample(1.5f, "walk")))
+        .state("jump");
+    const AnimGraph graph = AnimGraph::Builder {}.parameter("x").parameter("speed").root(std::move(machine)).build();
+
+    REQUIRE_EQ(graph.nodeCount(), 6u);
+    const auto& root = std::get<StateMachineNode>(graph.node(AnimGraph::kRoot));
+    REQUIRE_EQ(root.states[0].node.value, 1);
+    CHECK_EQ(root.states[1].node.value, 5);
+
+    const auto* space = std::get_if<BlendSpace1DNode>(&graph.node(NodeIndex { 1 }));
+    REQUIRE(space != nullptr);
+    CHECK_EQ(space->parameter, *graph.findParameter("speed"));
+    CHECK_EQ(space->rate, 2.0f);
+    REQUIRE_EQ(space->samples.size(), 3u);
+
+    const char* names[] = { "idle", "walk", "jog" };
+    const float positions[] = { 0.0f, 1.5f, 3.0f };
+    for (size_t i = 0; i < 3; ++i) {
+        CHECK_EQ(space->samples[i].node.value, i + 2);
+        CHECK_EQ(space->samples[i].position, positions[i]);
+        const auto& clip = std::get<ClipNode>(graph.node(space->samples[i].node));
+        CHECK_EQ(clip.clip, std::string(names[i]));
+        CHECK_EQ(clip.looping, i != 0);
+    }
 }
 
 void testParameters() {
@@ -393,10 +479,210 @@ void testStartedBeforeUpdate() {
     CHECK_NEAR(fixture.pose(runner, 0), 2.0f, kEps);
 }
 
+AnimGraph::Builder blendSpaceGraph(float x, AnimGraph::BlendSpace1DBuilder blendSpace) {
+    MachineBuilder machine;
+    machine.state(std::move(blendSpace));
+    return std::move(AnimGraph::Builder {}.parameter("x", x).root(std::move(machine)));
+}
+
+AnimGraph::BlendSpace1DBuilder abBlendSpace(float rate = 1.0f) {
+    return std::move(AnimGraph::BlendSpace1DBuilder("x", rate).sample(0.0f, "a").sample(1.0f, "b"));
+}
+
+void setSyncTracks(Fixture& fixture, std::initializer_list<float> starts) {
+    for (auto& clip : fixture.clips) {
+        clip->syncTrack = syncTrack(starts);
+    }
+}
+
+// Outside the samples' range only the end sample plays. One that comes back into play starts at the blend's sync
+// time.
+void testBlendSpaceWeights() {
+    Fixture fixture { "a", "b" };
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.25f, abBlendSpace()));
+
+    runner.update(0.4f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.75f * 0.4f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.25f * 0.4f, kEps);
+
+    runner.setFloat("x", -1.0f);
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.0f, kEps);
+
+    runner.setFloat("x", 5.0f);
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.6f, kEps);
+}
+
+void testBlendSpaceRate() {
+    Fixture fixture { "a", "b" };
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.0f, abBlendSpace(2.0f)));
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.2f, kEps);
+}
+
+// a (1 s) and b (2 s) halfway blend into a 1.5 s loop, in which both are at the same sync time.
+void testBlendSpaceSynchronized() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 2.0f);
+    setSyncTracks(fixture, { 0.0f, 0.5f });
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.5f, abBlendSpace()));
+
+    runner.update(0.3f);
+    const float percent = 0.3f / 1.5f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.5f * percent * 2.0f, kEps);
+}
+
+// a has two steps a second and b three in 1.5 s, so the blend has six events of 1/6 each and lasts 3 s. 0.7 s in, it
+// is 0.4 through its second event, and so are both clips.
+void testBlendSpaceEventCounts() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 1.5f);
+    fixture.clips[0]->syncTrack = syncTrack({ 0.0f, 0.5f });
+    fixture.clips[1]->syncTrack = syncTrack({ 0.0f, 1.0f / 3.0f, 2.0f / 3.0f });
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.5f, abBlendSpace()));
+
+    runner.update(0.7f);
+    const SyncTime a = fixture.clips[0]->syncTrack.time(fixture.pose(runner, 0) / 0.5f / 1.0f);
+    const SyncTime b = fixture.clips[1]->syncTrack.time(fixture.pose(runner, 1) / 0.5f / 1.5f);
+    CHECK_EQ(a.event, 1);
+    CHECK_EQ(b.event, 1);
+    CHECK_NEAR(a.percent, 0.4f, 1e-4f);
+    CHECK_NEAR(b.percent, 0.4f, 1e-4f);
+}
+
+// Moving the parameter brings b in at a's sync time, and then both move at the pace of the new blend.
+void testBlendSpaceParameterChange() {
+    Fixture fixture { "a", "b" };
+    fixture.setDuration(1, 2.0f);
+    setSyncTracks(fixture, { 0.0f, 0.5f });
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.0f, abBlendSpace()));
+
+    runner.update(0.3f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.3f, kEps);
+
+    runner.setFloat("x", 0.5f);
+    runner.update(0.15f);
+    const float percent = 0.3f + 0.15f / 1.5f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.5f * percent * 2.0f, kEps);
+}
+
+// Past b, the blend moves from a and b to b and c: b keeps going, and c starts at its sync time.
+void testBlendSpaceCrossesSample() {
+    Fixture fixture { "a", "b", "c" };
+    fixture.setDuration(1, 2.0f);
+    fixture.setDuration(2, 4.0f);
+    setSyncTracks(fixture, { 0.0f, 0.5f });
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(0.5f, std::move(abBlendSpace().sample(2.0f, "c"))));
+
+    runner.update(0.3f);
+    float percent = 0.3f / 1.5f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.5f * percent * 2.0f, kEps);
+
+    runner.setFloat("x", 1.5f);
+    runner.update(0.3f);
+    percent += 0.3f / 3.0f;
+    CHECK_NEAR(fixture.pose(runner, 0), 0.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.5f * percent * 2.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.5f * percent * 4.0f, kEps);
+}
+
+// A non-looping sample stops at its end when the blend loops, while the looping one carries on.
+void testBlendSpaceNonLoopingSample() {
+    Fixture fixture { "a", "b" };
+    AnimGraphRunner runner = fixture.run(blendSpaceGraph(
+        0.5f, std::move(AnimGraph::BlendSpace1DBuilder("x").sample(0.0f, "a", false).sample(1.0f, "b"))));
+
+    runner.update(0.8f);
+    runner.update(0.4f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f * 1.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.5f * 0.2f, kEps);
+}
+
+// A synchronized fade from c into the blend space starts both samples at c's sync time, and the fade's range drives
+// them.
+void testSynchronizedFadeIntoBlendSpace() {
+    Fixture fixture { "a", "b", "c" };
+    fixture.setDuration(1, 2.0f);
+    setSyncTracks(fixture, { 0.0f, 0.5f });
+    MachineBuilder machine;
+    machine.state("c")
+        .state(abBlendSpace())
+        .transition(0, 1, { .condition = "go", .fadeDuration = 1.0f, .synchronized = true });
+    AnimGraphRunner runner =
+        fixture.run(AnimGraph::Builder {}.parameter("go").parameter("x", 0.5f).root(std::move(machine)));
+
+    runner.update(0.3f);
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(), 1);
+
+    const float percent = 0.3f + 0.1f / 1.0f;
+    CHECK_NEAR(fixture.pose(runner, 2), 0.9f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.1f * 0.5f * percent, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.1f * 0.5f * percent * 2.0f, kEps);
+}
+
+
+// A machine sample that leaves the pair and comes back keeps the state it was in, and the blend's range moves it into
+// step: c, entered while the machine was in play, is 0.3 s in, the blend's time.
+void testBlendSpaceMachineSampleRejoins() {
+    Fixture fixture { "a", "b", "c" };
+    MachineBuilder machine;
+    machine.state("b").state("c").transition(0, 1, { .condition = "go" });
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("go").parameter("x", 1.0f).root(
+        std::move(MachineBuilder {}.state(
+            std::move(AnimGraph::BlendSpace1DBuilder("x").sample(0.0f, "a").sample(1.0f, std::move(machine)))))));
+    const NodeIndex sample { 3 };
+
+    runner.setFloat("go", 1.0f);
+    runner.update(0.1f);
+    REQUIRE_EQ(runner.currentState(sample), 1);
+
+    runner.setFloat("go", 0.0f);
+    runner.setFloat("x", 0.0f);
+    runner.update(0.1f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.2f, kEps);
+
+    runner.setFloat("x", 1.0f);
+    runner.update(0.1f);
+    CHECK_EQ(runner.currentState(sample), 1);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.3f, kEps);
+}
+
+// b (2 s) and c (4 s) halfway blend into 3 s, and that with a (1 s) halfway into 2 s, so 0.4 s in, all three are 0.2
+// through their loops.
+void testNestedBlendSpaceSynchronized() {
+    Fixture fixture { "a", "b", "c" };
+    fixture.setDuration(1, 2.0f);
+    fixture.setDuration(2, 4.0f);
+    setSyncTracks(fixture, { 0.0f, 0.5f });
+    AnimGraph::BlendSpace1DBuilder inner("y");
+    inner.sample(0.0f, "b").sample(1.0f, "c");
+    AnimGraph::BlendSpace1DBuilder outer("x");
+    outer.sample(0.0f, "a").sample(1.0f, std::move(inner));
+    AnimGraphRunner runner = fixture.run(AnimGraph::Builder {}.parameter("x", 0.5f).parameter("y", 0.5f).root(
+        std::move(MachineBuilder {}.state(std::move(outer)))));
+
+    runner.update(0.4f);
+    CHECK_NEAR(fixture.pose(runner, 0), 0.5f * 0.2f * 1.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 1), 0.25f * 0.2f * 2.0f, kEps);
+    CHECK_NEAR(fixture.pose(runner, 2), 0.25f * 0.2f * 4.0f, kEps);
+}
+
 }
 
 void runAnimGraphTests() {
     ailo::test::run("anim_graph/testBuildErrors", testBuildErrors);
+    ailo::test::run("anim_graph/testBlendSpaceLayout", testBlendSpaceLayout);
+    ailo::test::run("anim_graph/testBlendSpaceNestedLayout", testBlendSpaceNestedLayout);
     ailo::test::run("anim_graph/testParameters", testParameters);
     ailo::test::run("anim_graph/testConditionGatesTransition", testConditionGatesTransition);
     ailo::test::run("anim_graph/testTriggerKeptWhenConditionFails", testTriggerKeptWhenConditionFails);
@@ -412,4 +698,14 @@ void runAnimGraphTests() {
     ailo::test::run("anim_graph/testReenteredStateContinues", testReenteredStateContinues);
     ailo::test::run("anim_graph/testSelfTransitionContinues", testSelfTransitionContinues);
     ailo::test::run("anim_graph/testStartedBeforeUpdate", testStartedBeforeUpdate);
+    ailo::test::run("anim_graph/testBlendSpaceWeights", testBlendSpaceWeights);
+    ailo::test::run("anim_graph/testBlendSpaceRate", testBlendSpaceRate);
+    ailo::test::run("anim_graph/testBlendSpaceSynchronized", testBlendSpaceSynchronized);
+    ailo::test::run("anim_graph/testBlendSpaceEventCounts", testBlendSpaceEventCounts);
+    ailo::test::run("anim_graph/testBlendSpaceParameterChange", testBlendSpaceParameterChange);
+    ailo::test::run("anim_graph/testBlendSpaceCrossesSample", testBlendSpaceCrossesSample);
+    ailo::test::run("anim_graph/testBlendSpaceNonLoopingSample", testBlendSpaceNonLoopingSample);
+    ailo::test::run("anim_graph/testSynchronizedFadeIntoBlendSpace", testSynchronizedFadeIntoBlendSpace);
+    ailo::test::run("anim_graph/testBlendSpaceMachineSampleRejoins", testBlendSpaceMachineSampleRejoins);
+    ailo::test::run("anim_graph/testNestedBlendSpaceSynchronized", testNestedBlendSpaceSynchronized);
 }

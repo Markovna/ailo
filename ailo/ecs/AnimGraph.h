@@ -74,12 +74,32 @@ struct StateMachineNode {
     }
 };
 
-struct AnimNode : std::variant<ClipNode, StateMachineNode> {
-    using std::variant<ClipNode, StateMachineNode>::variant;
+struct BlendSample1D {
+    NodeIndex node;
+    float position = 0.0f;
 };
 
-// Nodes are stored depth-first in preorder: the root machine is node 0, and every machine is followed by the
-// subtrees of its states, in state order. Each node is reached from exactly one state.
+struct BlendSpace1DNode {
+    // Samples lo and hi, by index into samples, with hi weighing weight over lo.
+    struct Segment {
+        uint16_t lo;
+        uint16_t hi;
+        float weight;
+    };
+
+    uint16_t parameter = kAnimNone;
+    float rate = 1.0f;
+    std::vector<BlendSample1D> samples; // sorted by position
+
+    // Below the first sample, at or above the last, or NaN, the value plays only the nearest end sample.
+    Segment segment(float value) const;
+};
+
+struct AnimNode : std::variant<ClipNode, StateMachineNode, BlendSpace1DNode> {
+    using std::variant<ClipNode, StateMachineNode, BlendSpace1DNode>::variant;
+};
+
+// The root machine is node 0. Each node is reached from exactly one state or sample.
 class AnimGraph {
 public:
     static constexpr uint16_t kNone = kAnimNone;
@@ -88,6 +108,42 @@ public:
     using Transition = AnimTransition;
 
     class Builder;
+    class MachineBuilder;
+
+private:
+    // A state or sample: a clip, or a nested machine or blend space, by index into its builder's.
+    struct ChildDesc {
+        ClipNode clip;
+        uint16_t machine = kAnimNone;
+        uint16_t blendSpace = kAnimNone;
+    };
+
+public:
+    class BlendSpace1DBuilder {
+    public:
+        explicit BlendSpace1DBuilder(std::string parameter, float rate = 1.0f);
+
+        // A sample plays at the blend space's pace, so a clip sample has no rate of its own.
+        BlendSpace1DBuilder& sample(float position, std::string clip, bool looping = true);
+        BlendSpace1DBuilder& sample(float position, MachineBuilder machine);
+        BlendSpace1DBuilder& sample(float position, BlendSpace1DBuilder blendSpace);
+
+    private:
+        friend class AnimGraph;
+
+        struct SampleDesc {
+            float position;
+            ChildDesc node;
+        };
+
+        void build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const;
+
+        std::string m_parameter;
+        float m_rate;
+        std::vector<SampleDesc> m_samples;
+        std::vector<MachineBuilder> m_machines;
+        std::vector<BlendSpace1DBuilder> m_blendSpaces;
+    };
 
     class MachineBuilder {
     public:
@@ -95,16 +151,13 @@ public:
 
         MachineBuilder& state(std::string clip, bool looping = true, float rate = 1.0f);
         MachineBuilder& state(MachineBuilder machine);
+        MachineBuilder& state(BlendSpace1DBuilder blendSpace);
         MachineBuilder& transition(uint16_t from, uint16_t to, TransitionDesc desc = {});
         MachineBuilder& entryState(uint16_t state);
 
     private:
+        friend class AnimGraph;
         friend class Builder;
-
-        struct StateDesc {
-            ClipNode clip;
-            uint16_t machine = kAnimNone; // into m_machines when the state is a nested machine
-        };
 
         struct TransitionEntry {
             uint16_t from;
@@ -114,8 +167,9 @@ public:
 
         void build(AnimGraph& graph, NodeIndex self, std::span<const std::string_view> parameters) const;
 
-        std::vector<StateDesc> m_states;
+        std::vector<ChildDesc> m_states;
         std::vector<MachineBuilder> m_machines;
+        std::vector<BlendSpace1DBuilder> m_blendSpaces;
         std::vector<TransitionEntry> m_transitions;
         uint16_t m_entryState = 0;
     };
@@ -125,8 +179,6 @@ public:
         Builder& parameter(std::string name, float defaultValue = 0.0f);
         Builder& root(MachineBuilder machine);
 
-        // Throws std::invalid_argument if a machine has no states, a transition or entry state is out of range, a
-        // condition doesn't compile, or a parameter is declared twice.
         AnimGraph build() const;
 
     private:
@@ -162,6 +214,9 @@ private:
     AnimGraph() = default;
 
     NodeIndex addNode(AnimNode node);
+    // Adds the child's node, then its subtree.
+    NodeIndex addChild(const ChildDesc& child, std::span<const MachineBuilder> machines,
+                       std::span<const BlendSpace1DBuilder> blendSpaces, std::span<const std::string_view> parameters);
     uint16_t addTrigger(const std::string& name);
     void addParameter(const std::string& name, float defaultValue);
 
@@ -205,6 +260,18 @@ private:
         SyncTime time() const { return track->time(percent); }
     };
 
+    struct SyncedBlend {
+        SyncTrack track;
+        float duration = 0.0f;
+        float percent = 0.0f;
+
+        SyncState state() const { return { &track, duration, percent }; }
+
+        SyncTimeRange advance(float dt, const SyncTimeRange* range) const;
+
+        void blend(const SyncState& a, const SyncState& b, float weight, SyncTime time);
+    };
+
     // A fade's source is the fade below it on the stack, or fromNode for the oldest one. A synchronized fade's sync track
     // blends its source's and toNode's at alpha; any other fade's is toNode's.
     struct Transition {
@@ -213,12 +280,9 @@ private:
         float time = 0.0f;
         float duration = 0.0f;
         bool synchronized = false;
-        SyncTrack syncTrack;
-        float syncDuration = 0.0f;
-        float syncPercent = 0.0f;
+        SyncedBlend sync;
 
         float alpha() const { return duration <= 0.0f ? 1.0f : std::min(time / duration, 1.0f); }
-        SyncState syncState() const { return { &syncTrack, syncDuration, syncPercent }; }
     };
 
     struct StateMachine {
@@ -228,9 +292,17 @@ private:
         std::vector<Transition> m_transitionStack;
     };
 
-    // A machine's duration and percent are those of the fade it is in, or of its state, copied up as it updates.
+    struct BlendSpace {
+        uint16_t lo = 0;
+        uint16_t hi = 0;
+        float weight = 0.0f;
+        SyncedBlend sync;
+    };
+
+    // A machine's duration and percent are those of the fade it is in, or of its state, and a blend space's those of
+    // its blend, copied up as they update.
     struct Node {
-        std::variant<Clip, StateMachine> data;
+        std::variant<Clip, StateMachine, BlendSpace> data;
         float duration = 0.0f;          // seconds per loop
         float percent = 0.0f;
         bool updated = false;           // this frame
@@ -265,6 +337,7 @@ private:
     void updateMachine(NodeIndex index, float dt, const SyncTimeRange* range);
     // Updates the fade at index on the machine's stack, and the fades below it.
     void updateFade(StateMachine& sm, size_t index, float dt, const SyncTimeRange* range);
+    void updateBlendSpace(NodeIndex index, float dt, const SyncTimeRange* range);
     void evaluateNode(NodeIndex index, const Skeleton& skeleton, PosePool& posePool, std::vector<NodeTransform>& out);
 
     AssetPtr<AnimGraph> m_definition;

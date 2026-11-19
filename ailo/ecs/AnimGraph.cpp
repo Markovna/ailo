@@ -20,6 +20,24 @@ const SyncTrack kDefaultSyncTrack;
 
 }
 
+BlendSpace1DNode::Segment BlendSpace1DNode::segment(float value) const {
+    if (!(value > samples.front().position)) {
+        return { 0, 0, 0.0f };
+    }
+    const auto last = static_cast<uint16_t>(samples.size() - 1);
+    if (value >= samples[last].position) {
+        return { last, last, 0.0f };
+    }
+
+    uint16_t hi = 1;
+    while (samples[hi].position <= value) {
+        ++hi;
+    }
+    const auto lo = static_cast<uint16_t>(hi - 1);
+    const float weight = (value - samples[lo].position) / (samples[hi].position - samples[lo].position);
+    return { lo, hi, weight };
+}
+
 const SyncTrack& AnimGraphRunner::Clip::syncTrack() const {
     const AnimationClip* asset = clip.get();
     return asset ? asset->syncTrack : kDefaultSyncTrack;
@@ -34,6 +52,93 @@ AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::state(MachineBuilder machi
     m_states.push_back({ .machine = static_cast<uint16_t>(m_machines.size()) });
     m_machines.push_back(std::move(machine));
     return *this;
+}
+
+AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::state(BlendSpace1DBuilder blendSpace) {
+    m_states.push_back({ .blendSpace = static_cast<uint16_t>(m_blendSpaces.size()) });
+    m_blendSpaces.push_back(std::move(blendSpace));
+    return *this;
+}
+
+AnimGraph::BlendSpace1DBuilder::BlendSpace1DBuilder(std::string parameter, float rate)
+    : m_parameter(std::move(parameter)), m_rate(rate) {}
+
+AnimGraph::BlendSpace1DBuilder& AnimGraph::BlendSpace1DBuilder::sample(float position, std::string clip,
+                                                                       bool looping) {
+    m_samples.push_back({ .position = position, .node = { .clip = { .clip = std::move(clip), .looping = looping } } });
+    return *this;
+}
+
+AnimGraph::BlendSpace1DBuilder& AnimGraph::BlendSpace1DBuilder::sample(float position, MachineBuilder machine) {
+    m_samples.push_back({ .position = position, .node = { .machine = static_cast<uint16_t>(m_machines.size()) } });
+    m_machines.push_back(std::move(machine));
+    return *this;
+}
+
+AnimGraph::BlendSpace1DBuilder& AnimGraph::BlendSpace1DBuilder::sample(float position,
+                                                                       BlendSpace1DBuilder blendSpace) {
+    m_samples.push_back(
+        { .position = position, .node = { .blendSpace = static_cast<uint16_t>(m_blendSpaces.size()) } });
+    m_blendSpaces.push_back(std::move(blendSpace));
+    return *this;
+}
+
+void AnimGraph::BlendSpace1DBuilder::build(AnimGraph& graph, NodeIndex self,
+                                           std::span<const std::string_view> parameters) const {
+    if (m_samples.empty()) {
+        throw std::invalid_argument(std::format("animation graph: blend space {} has no samples", self.value));
+    }
+    if (m_samples.size() >= kNone) {
+        throw std::invalid_argument(std::format("animation graph: blend space {} is too large", self.value));
+    }
+    const auto parameter = graph.findParameter(m_parameter);
+    if (!parameter) {
+        throw std::invalid_argument(std::format("animation graph: blend space {} reads undeclared parameter '{}'",
+                                                self.value, m_parameter));
+    }
+
+    std::vector<const SampleDesc*> sorted;
+    sorted.reserve(m_samples.size());
+    for (const auto& sample : m_samples) {
+        if (!std::isfinite(sample.position)) {
+            throw std::invalid_argument(
+                std::format("animation graph: blend space {} has a sample at a non-finite position", self.value));
+        }
+        sorted.push_back(&sample);
+    }
+    std::ranges::sort(sorted, {}, &SampleDesc::position);
+    for (size_t i = 1; i < sorted.size(); ++i) {
+        if (sorted[i]->position == sorted[i - 1]->position) {
+            throw std::invalid_argument(std::format("animation graph: two samples of blend space {} are at {}",
+                                                    self.value, sorted[i]->position));
+        }
+    }
+
+    BlendSpace1DNode blendSpace { .parameter = *parameter, .rate = m_rate };
+    blendSpace.samples.reserve(sorted.size());
+    for (const SampleDesc* sample : sorted) {
+        blendSpace.samples.push_back({
+            .node = graph.addChild(sample->node, m_machines, m_blendSpaces, parameters),
+            .position = sample->position,
+        });
+    }
+    graph.m_nodes[self.value] = std::move(blendSpace);
+}
+
+NodeIndex AnimGraph::addChild(const ChildDesc& child, std::span<const MachineBuilder> machines,
+                              std::span<const BlendSpace1DBuilder> blendSpaces,
+                              std::span<const std::string_view> parameters) {
+    if (child.machine != kNone) {
+        const NodeIndex node = addNode(StateMachineNode {});
+        machines[child.machine].build(*this, node, parameters);
+        return node;
+    }
+    if (child.blendSpace != kNone) {
+        const NodeIndex node = addNode(BlendSpace1DNode {});
+        blendSpaces[child.blendSpace].build(*this, node, parameters);
+        return node;
+    }
+    return addNode(child.clip);
 }
 
 AnimGraph::MachineBuilder& AnimGraph::MachineBuilder::transition(uint16_t from, uint16_t to, TransitionDesc desc) {
@@ -90,14 +195,7 @@ void AnimGraph::MachineBuilder::build(AnimGraph& graph, NodeIndex self,
     StateMachineNode machine { .entryState = m_entryState };
     machine.states.resize(m_states.size());
     for (size_t i = 0; i < m_states.size(); ++i) {
-        const auto& desc = m_states[i];
-        if (desc.machine == kNone) {
-            machine.states[i].node = graph.addNode(desc.clip);
-        } else {
-            const NodeIndex child = graph.addNode(StateMachineNode {});
-            m_machines[desc.machine].build(graph, child, parameters);
-            machine.states[i].node = child;
-        }
+        machine.states[i].node = graph.addChild(m_states[i], m_machines, m_blendSpaces, parameters);
     }
 
     std::vector<const TransitionEntry*> sorted;
@@ -219,6 +317,7 @@ AnimGraphRunner::AnimGraphRunner(AssetPtr<AnimGraph> definition, std::span<const
                     },
                 });
             },
+            [&](const BlendSpace1DNode&) { m_tree.push_back({ .data = BlendSpace {} }); },
         }, graph.node(NodeIndex { i }));
     }
 
@@ -279,6 +378,7 @@ void AnimGraphRunner::updateNode(NodeIndex index, float dt, const SyncTimeRange*
             }
         },
         [&](StateMachine&) { updateMachine(index, dt, range); },
+        [&](BlendSpace&) { updateBlendSpace(index, dt, range); },
     }, node.data);
 }
 
@@ -291,8 +391,9 @@ const SyncTrack& AnimGraphRunner::syncTrack(NodeIndex index) const {
         [&](const Clip& clip) -> const SyncTrack& { return clip.syncTrack(); },
         [&](const StateMachine& sm) -> const SyncTrack& {
             const auto& stack = sm.m_transitionStack;
-            return stack.empty() ? syncTrack(sm.currentNode) : stack.front().syncTrack;
+            return stack.empty() ? syncTrack(sm.currentNode) : stack.front().sync.track;
         },
+        [&](const BlendSpace& blendSpace) -> const SyncTrack& { return blendSpace.sync.track; },
     }, m_tree[index.value].data);
 }
 
@@ -324,6 +425,26 @@ void AnimGraphRunner::startNode(NodeIndex index, const SyncTime* start) {
             const Node& entry = m_tree[sm.currentNode.value];
             node.duration = entry.duration;
             node.percent = entry.percent;
+        },
+        [&](BlendSpace& blendSpace) {
+            const auto& definition = std::get<BlendSpace1DNode>(m_definition->node(index));
+            const auto segment = definition.segment(m_parameters[definition.parameter]);
+            blendSpace.lo = segment.lo;
+            blendSpace.hi = segment.hi;
+            blendSpace.weight = segment.weight;
+
+            const NodeIndex lo = definition.samples[segment.lo].node;
+            const NodeIndex hi = definition.samples[segment.hi].node;
+            startNode(lo, start);
+            const SyncTime time = start ? *start : syncState(lo).time();
+            for (const auto& sample : definition.samples) {
+                if (sample.node != lo) {
+                    startNode(sample.node, &time);
+                }
+            }
+            blendSpace.sync.blend(syncState(lo), syncState(hi), segment.weight, time);
+            node.duration = blendSpace.sync.duration;
+            node.percent = blendSpace.sync.percent;
         },
     }, node.data);
 }
@@ -360,6 +481,18 @@ void AnimGraphRunner::evaluateNode(NodeIndex index, const Skeleton& skeleton, Po
                 evaluateNode(it->toNode, skeleton, posePool, pose);
                 blendPose(out, pose, alpha);
             }
+            posePool.release(std::move(pose));
+        },
+        [&](const BlendSpace& blendSpace) {
+            const auto& samples = std::get<BlendSpace1DNode>(m_definition->node(index)).samples;
+            evaluateNode(samples[blendSpace.lo].node, skeleton, posePool, out);
+            if (blendSpace.hi == blendSpace.lo || blendSpace.weight <= 0.0f) {
+                return;
+            }
+
+            auto pose = posePool.acquire();
+            evaluateNode(samples[blendSpace.hi].node, skeleton, posePool, pose);
+            blendPose(out, pose, blendSpace.weight);
             posePool.release(std::move(pose));
         },
     }, node.data);
@@ -418,7 +551,7 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRan
         const NodeIndex to = states[transition.to].node;
         auto& stack = sm.m_transitionStack;
 
-        const SyncState source = stack.empty() ? syncState(sm.currentNode) : stack.front().syncState();
+        const SyncState source = stack.empty() ? syncState(sm.currentNode) : stack.front().sync.state();
         const SyncTime sourceTime = source.time();
         const bool running = to == sm.currentNode || std::ranges::any_of(stack, [&](const Transition& t) {
             return t.fromNode == to || t.toNode == to;
@@ -431,12 +564,8 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRan
             .toNode = to,
             .duration = transition.fadeDuration,
             .synchronized = transition.synchronized,
-            .syncTrack = SyncTrack(*source.track, *syncState(to).track, 0.0f),
         };
-        const SyncState target = syncState(to);
-        fade.syncDuration = SyncTrack::blendedDuration(source.duration, source.track->eventCount(), target.duration,
-                                                       target.track->eventCount(), fade.syncTrack.eventCount(), 0.0f);
-        fade.syncPercent = fade.syncTrack.percent(sourceTime);
+        fade.sync.blend(source, syncState(to), 0.0f, sourceTime);
 
         // newest first
         stack.insert(stack.begin(), std::move(fade));
@@ -461,8 +590,8 @@ void AnimGraphRunner::updateMachine(NodeIndex index, float dt, const SyncTimeRan
         node.percent = current.percent;
     } else {
         updateFade(sm, 0, dt, range);
-        node.duration = stack.front().syncDuration;
-        node.percent = stack.front().syncPercent;
+        node.duration = stack.front().sync.duration;
+        node.percent = stack.front().sync.percent;
     }
 }
 
@@ -471,7 +600,6 @@ void AnimGraphRunner::updateFade(StateMachine& sm, size_t index, float dt, const
     Transition& fade = stack[index];
     const Transition* below = index + 1 < stack.size() ? &stack[index + 1] : nullptr;
 
-    const auto sourceState = [&] { return below ? below->syncState() : syncState(fade.fromNode); };
     const auto updateSource = [&](const SyncTimeRange* sideRange) {
         if (below) {
             updateFade(sm, index + 1, dt, sideRange);
@@ -479,38 +607,63 @@ void AnimGraphRunner::updateFade(StateMachine& sm, size_t index, float dt, const
             updateNode(fade.fromNode, dt, sideRange);
         }
     };
-    const auto updateSides = [&](const SyncTimeRange* sideRange) {
-        updateSource(sideRange);
-        updateNode(fade.toNode, dt, sideRange);
-    };
-    const auto blend = [&] {
-        const SyncState from = sourceState();
-        const SyncState to = syncState(fade.toNode);
-        fade.syncTrack = SyncTrack(*from.track, *to.track, fade.alpha());
-        fade.syncDuration = SyncTrack::blendedDuration(from.duration, from.track->eventCount(), to.duration,
-                                                       to.track->eventCount(), fade.syncTrack.eventCount(),
-                                                       fade.alpha());
-    };
 
     if (!fade.synchronized) {
         updateNode(fade.toNode, dt, range);
         updateSource(nullptr);
         const SyncState target = syncState(fade.toNode);
-        fade.syncTrack = *target.track;
-        fade.syncDuration = target.duration;
-        fade.syncPercent = target.percent;
-    } else if (range) {
-        updateSides(range);
-        blend();
-        fade.syncPercent = fade.syncTrack.percent(range->end);
-    } else {
-        float end = fade.syncPercent + (fade.syncDuration > 0.0f ? dt / fade.syncDuration : 0.0f);
-        end -= std::floor(end);
-        const SyncTimeRange fadeRange { fade.syncTrack.time(fade.syncPercent), fade.syncTrack.time(end) };
-        updateSides(&fadeRange);
-        blend();
-        fade.syncPercent = fade.syncTrack.percent(fadeRange.end);
+        fade.sync = { .track = *target.track, .duration = target.duration, .percent = target.percent };
+        return;
     }
+
+    const SyncTimeRange sideRange = fade.sync.advance(dt, range);
+    updateSource(&sideRange);
+    updateNode(fade.toNode, dt, &sideRange);
+    const SyncState source = below ? below->sync.state() : syncState(fade.fromNode);
+    fade.sync.blend(source, syncState(fade.toNode), fade.alpha(), sideRange.end);
+}
+
+// The blend is rebuilt for the parameter's new value before it advances, at the sync time it had reached, so moving the
+// parameter changes the pace but never makes the samples jump.
+void AnimGraphRunner::updateBlendSpace(NodeIndex index, float dt, const SyncTimeRange* range) {
+    Node& node = m_tree[index.value];
+    auto& blendSpace = std::get<BlendSpace>(node.data);
+    const auto& definition = std::get<BlendSpace1DNode>(m_definition->node(index));
+    const auto& samples = definition.samples;
+
+    const auto segment = definition.segment(m_parameters[definition.parameter]);
+    const SyncTime time = blendSpace.sync.state().time();
+    blendSpace.lo = segment.lo;
+    blendSpace.hi = segment.hi;
+    blendSpace.weight = segment.weight;
+
+    const NodeIndex lo = samples[segment.lo].node;
+    const NodeIndex hi = samples[segment.hi].node;
+    blendSpace.sync.blend(syncState(lo), syncState(hi), segment.weight, time);
+
+    const SyncTimeRange sampleRange = blendSpace.sync.advance(dt * definition.rate, range);
+    updateNode(lo, dt, &sampleRange);
+    updateNode(hi, dt, &sampleRange);
+    blendSpace.sync.percent = blendSpace.sync.track.percent(sampleRange.end);
+
+    node.duration = blendSpace.sync.duration;
+    node.percent = blendSpace.sync.percent;
+}
+
+SyncTimeRange AnimGraphRunner::SyncedBlend::advance(float dt, const SyncTimeRange* range) const {
+    if (range) {
+        return *range;
+    }
+    float end = percent + (duration > 0.0f ? dt / duration : 0.0f);
+    end -= std::floor(end);
+    return { track.time(percent), track.time(end) };
+}
+
+void AnimGraphRunner::SyncedBlend::blend(const SyncState& a, const SyncState& b, float weight, SyncTime time) {
+    track = SyncTrack(*a.track, *b.track, weight);
+    duration = SyncTrack::blendedDuration(a.duration, a.track->eventCount(), b.duration, b.track->eventCount(),
+                                          track.eventCount(), weight);
+    percent = track.percent(time);
 }
 
 } // namespace ailo
