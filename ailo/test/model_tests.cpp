@@ -1,5 +1,8 @@
+#include "render/material/MaterialPackage.h"
 #include "render/model/ModelPackage.h"
 #include "Testing.h"
+
+#include "embedded/materials.h"
 
 #include <cstring>
 #include <iostream>
@@ -324,6 +327,22 @@ void testDeserializeRejectsBadPackages() {
     CHECK_EQ(out->meshes.size(), 2);
 }
 
+// modelc's default material is the engine's lit.mat, so it must declare every parameter modelc writes
+// (tools/modelc/README.md); the runtime skips the others with a warning.
+void testLitMaterialDeclaresModelParameters() {
+    std::string error;
+    auto lit = material::MaterialPackage::deserialize(embedded::materials::kMaterialsLit, error);
+    REQUIRE(lit && error.empty());
+    for (const char* name : { "baseColorMap", "normalMap", "metallicRoughnessMap", "occlusionMap", "emissiveMap",
+                              "baseColorFactor", "metallicFactor", "roughnessFactor", "occlusionStrength",
+                              "emissiveFactor" }) {
+        if (!lit->findParameter(name)) {
+            std::cerr << "  lit.mat has no parameter " << name << "\n";
+            CHECK(false);
+        }
+    }
+}
+
 }
 
 void runModelTests() {
@@ -332,4 +351,5 @@ void runModelTests() {
     ailo::test::run("model/testEmptyPackage", testEmptyPackage);
     ailo::test::run("model/testValidate", testValidate);
     ailo::test::run("model/testDeserializeRejectsBadPackages", testDeserializeRejectsBadPackages);
+    ailo::test::run("model/testLitMaterialDeclaresModelParameters", testLitMaterialDeclaresModelParameters);
 }

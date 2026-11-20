@@ -56,13 +56,17 @@ or not the material declares them:
 | `baseColorMap`         | The base color texture, or the diffuse texture. |
 | `normalMap`            | The normal texture. |
 | `metallicRoughnessMap` | The glTF metallic/roughness texture, or the key `builtin://textures/default_metallic_roughness` if the source has no metallic factor (non-PBR formats). |
+| `occlusionMap`         | The ambient occlusion texture, or the lightmap texture (where Assimp puts the glTF occlusion texture). |
+| `emissiveMap`          | The emissive texture. |
 | `baseColorFactor`      | The base color. |
 | `metallicFactor`, `roughnessFactor` | The glTF factors. |
+| `occlusionStrength`    | The glTF occlusion strength, only when it isn't 1. |
+| `emissiveFactor`       | The emissive color times the `KHR_materials_emissive_strength` strength, only when it isn't black. |
 
 ## Textures
 
 - **Unnamed** texture slots (some exporters write a slot with an empty file name) are skipped.
-- **Embedded** textures are packed into the model package, sRGB for base color and linear for the other maps.
+- **Embedded** textures are packed into the model package, sRGB for base color and emissive and linear for the other maps.
 - **Referenced by URI**, the package stores a reference: the URI (percent-decoded for glTF) relative to the source
   model, rewritten relative to the `.model` file, with its own extension. With `"source": "model.gltf"`, `white.png`
   is stored as `white.png`. modelc doesn't look at the texture and adds no build dependency on it. Absolute paths are

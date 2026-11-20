@@ -7,9 +7,14 @@ material {
         { "type": "sampler2d", "name": "baseColorMap", "default": "white" },
         { "type": "sampler2d", "name": "normalMap", "default": "normal" },
         { "type": "sampler2d", "name": "metallicRoughnessMap", "default": "white" },
+        // Occlusion is read from red, so a glTF occlusion/roughness/metallic texture can be bound here as well.
+        { "type": "sampler2d", "name": "occlusionMap", "default": "white" },
+        { "type": "sampler2d", "name": "emissiveMap", "default": "white" },
         { "type": "float4", "name": "baseColorFactor", "default": [1, 1, 1, 1] },
         { "type": "float", "name": "metallicFactor", "default": 1 },
-        { "type": "float", "name": "roughnessFactor", "default": 1 }
+        { "type": "float", "name": "roughnessFactor", "default": 1 },
+        { "type": "float", "name": "occlusionStrength", "default": 1 },
+        { "type": "float3", "name": "emissiveFactor", "default": [0, 0, 0] }
     ],
     "blending": "opaque",
     "culling": "back"
@@ -24,5 +29,8 @@ fragment {
         vec3 metallicRoughness = texture(materialParams_metallicRoughnessMap, getUV0()).rgb;
         material.metallic = metallicRoughness.b * materialParams.metallicFactor;
         material.roughness = metallicRoughness.g * materialParams.roughnessFactor;
+        float occlusion = texture(materialParams_occlusionMap, getUV0()).r;
+        material.ambientOcclusion = mix(1.0, occlusion, materialParams.occlusionStrength);
+        material.emissive = texture(materialParams_emissiveMap, getUV0()).rgb * materialParams.emissiveFactor;
     }
 }

@@ -45,6 +45,11 @@ vec3 irradianceSH(vec3 n) {
         0.0);
 }
 
+// Specular occlusion from ambient occlusion: Lagarde and de Rousiers 2014, "Moving Frostbite to PBR".
+float computeSpecularAO(float NoV, float visibility, float roughness) {
+    return clamp01(pow(NoV + visibility, exp2(-16.0 * roughness - 1.0)) - 1.0 + visibility);
+}
+
 void getPixel(const MaterialInputs material, out Pixel pixel) {
     vec4 baseColor = material.baseColor;
     float metallic = material.metallic;
@@ -321,7 +326,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 reflected = mix(shading_reflected, shading_normal, pixel.roughness * pixel.roughness);
     float radianceLod = view.iblSpecularMaxLod * pixel.perceptualRoughness * (2.0 - pixel.perceptualRoughness);
     vec3 prefilteredRadiance = textureLod(iblSpecular, reflected, radianceLod).rgb;
-    vec3 Fr = E * prefilteredRadiance;
+    vec3 Fr = E * prefilteredRadiance * computeSpecularAO(shading_NoV, material.ambientOcclusion, pixel.roughness);
 
     vec3 diffuseIrradiance = irradianceSH(shading_normal);
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;

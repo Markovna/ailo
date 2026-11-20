@@ -196,13 +196,42 @@ private:
             auto normal = texture(mat, aiTextureType_NORMALS, false, material.name);
             auto metallicRoughness = texture(mat, aiTextureType_GLTF_METALLIC_ROUGHNESS, false, material.name);
 
+            // Assimp's glTF importer puts the occlusion texture in the lightmap slot.
+            aiTextureType occlusionType = aiTextureType_AMBIENT_OCCLUSION;
+            auto occlusion = texture(mat, occlusionType, false, material.name);
+            if (!occlusion) {
+                occlusionType = aiTextureType_LIGHTMAP;
+                occlusion = texture(mat, occlusionType, false, material.name);
+            }
+            auto emissive = texture(mat, aiTextureType_EMISSIVE, true, material.name);
+
             if (baseColor) material.textures.push_back({ "baseColorMap", *baseColor });
             if (normal) material.textures.push_back({ "normalMap", *normal });
             if (metallicRoughness) material.textures.push_back({ "metallicRoughnessMap", *metallicRoughness });
+            if (occlusion) material.textures.push_back({ "occlusionMap", *occlusion });
+            if (emissive) material.textures.push_back({ "emissiveMap", *emissive });
 
             aiColor4D color;
             if (mat->Get(AI_MATKEY_BASE_COLOR, color) == AI_SUCCESS) {
                 material.floats.push_back({ "baseColorFactor", 4, { color.r, color.g, color.b, color.a } });
+            }
+
+            // The glTF importer writes the strength under "$tex.file.strength", not AI_MATKEY_GLTF_TEXTURE_STRENGTH.
+            float occlusionStrength = 1.0f;
+            if (occlusion &&
+                mat->Get(_AI_MATKEY_TEXTURE_BASE ".strength", occlusionType, 0, occlusionStrength) == AI_SUCCESS &&
+                occlusionStrength != 1.0f) {
+                material.floats.push_back({ "occlusionStrength", 1, { occlusionStrength } });
+            }
+
+            // Only non-black emission is written, so materials without an emissiveFactor parameter don't get warnings
+            // for the black emissive color most sources report.
+            aiColor3D emissiveColor;
+            if (mat->Get(AI_MATKEY_COLOR_EMISSIVE, emissiveColor) == AI_SUCCESS && !emissiveColor.IsBlack()) {
+                float intensity = 1.0f;
+                mat->Get(AI_MATKEY_EMISSIVE_INTENSITY, intensity);
+                material.floats.push_back({ "emissiveFactor", 3,
+                    { emissiveColor.r * intensity, emissiveColor.g * intensity, emissiveColor.b * intensity } });
             }
 
             // Assimp reports a metallic factor only for metallic/roughness materials (glTF). For other formats it may
