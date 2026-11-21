@@ -29,7 +29,7 @@ const std::string& getNonEmptyString(const json::Value& v, const std::string& wh
 std::string listParameters(const MaterialPackage& pkg, bool samplers) {
     std::string names;
     for (const auto& p : pkg.parameters) {
-        if (isSampler(p.type) != samplers) continue;
+        if (isSampler(p.type) != samplers || p.name == kSamplerMaskParameter) continue;
         names += (names.empty() ? "" : ", ") + p.name;
     }
     return names.empty() ? "none" : names;
@@ -66,7 +66,7 @@ MaterialInstanceDefinition parseMaterialInstanceDefinition(std::string_view sour
     if (parameters) {
         for (const auto& [name, v] : getObject(*parameters, "parameters")) {
             const MaterialParameter* p = materialPkg.findParameter(name);
-            if (!p || isSampler(p->type)) {
+            if (!p || isSampler(p->type) || name == kSamplerMaskParameter) {
                 fail(v.line, "material \"" + materialPkg.name + "\" has no parameter \"" + name + "\" (it has: " +
                              listParameters(materialPkg, false) + ")");
             }

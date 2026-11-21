@@ -78,6 +78,12 @@ The `material` block is strict JSON (quoted keys and strings); `//` and
 - Sampler types: `sampler2d`, `samplerCubemap`. Each gets its own binding in set 2 starting at 1, in
   declaration order, and is read as `materialParams_<name>`. `default` names the texture to bind when none is set,
   stored in the package: `white` (sampler2d default), `black` (cubemap default), `normal`.
+- `hasTexture(<sampler name>)` is true once a texture has been assigned to that sampler, from a material instance,
+  a model or code. It is false while the default texture is bound, so the shader can skip the sample:
+  `if (hasTexture(occlusionMap)) { ... }`. The value is the same for the whole draw. matc implements it with a
+  hidden `uint _samplerMask` appended to `MaterialParams` (one bit per sampler, so at most 32 samplers).
+  Material instances can't set it.
+- Names starting with `_` are reserved for matc.
 
 ### Shader code
 

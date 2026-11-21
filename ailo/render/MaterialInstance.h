@@ -2,6 +2,7 @@
 
 #include <array>
 #include <bit>
+#include <optional>
 #include <span>
 #include <variant>
 #include <vector>
@@ -41,7 +42,6 @@ public:
     const Material& getMaterial() const { return *m_material; }
 
     void setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler = {});
-    // For textures that aren't assets, e.g. render targets.
     void setParameter(std::string_view name, Shared<gpu::Texture> texture, const SamplerParams& sampler = {});
 
     template<UniformValue T>
@@ -82,6 +82,8 @@ private:
     };
 
     Sampler* findSampler(std::string_view name);
+    bool isTextureAssigned(uint32_t binding) const;
+    void setTextureAssigned(uint32_t binding, bool assigned);
 
     template<typename T>
     static void appendWords(const T& value, std::vector<uint32_t>& out) {
@@ -101,6 +103,7 @@ private:
     AssetPtr<Material> m_material;
     std::vector<uint8_t> m_uniforms;
     bool m_uniformsDirty = true;
+    std::optional<uint32_t> m_samplerMaskOffset;
     Unique<gpu::Buffer> m_uniformBuffer;
     std::vector<Sampler> m_samplers;
     Unique<gpu::DescriptorSet> m_descriptorSet;

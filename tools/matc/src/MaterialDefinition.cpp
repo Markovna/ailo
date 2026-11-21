@@ -260,6 +260,7 @@ void parseParameters(const json::Value& value, MaterialPackage& pkg) {
 
         if (p.name.empty()) fail(entry.line, "parameter is missing \"name\"");
         if (!isIdentifier(p.name)) fail(nameLine, "parameter name \"" + p.name + "\" is not a valid GLSL identifier");
+        if (p.name.starts_with('_')) fail(nameLine, "parameter names starting with '_' are reserved for matc");
         if (pkg.findParameter(p.name)) fail(nameLine, "duplicate parameter \"" + p.name + "\"");
         if (!type) fail(entry.line, "parameter \"" + p.name + "\" is missing \"type\"");
 
@@ -298,6 +299,21 @@ void parseParameters(const json::Value& value, MaterialPackage& pkg) {
         }
 
         pkg.parameters.push_back(std::move(p));
+    }
+
+    const uint32_t samplerCount = nextBinding - kFirstSamplerBinding;
+    if (samplerCount > kMaxSamplers) {
+        fail(value.line, "a material can have at most " + std::to_string(kMaxSamplers) + " samplers");
+    }
+    if (samplerCount > 0) {
+        MaterialParameter mask;
+        mask.name = kSamplerMaskParameter;
+        mask.type = ParameterType::UInt;
+        mask.offset = alignUp(uniformOffset, std140Alignment(mask.type));
+        mask.size = std140Size(mask.type);
+        mask.defaultValue.assign(mask.size, 0);
+        uniformOffset = mask.offset + mask.size;
+        pkg.parameters.push_back(std::move(mask));
     }
 
     pkg.uniformBlockSize = alignUp(uniformOffset, 16);

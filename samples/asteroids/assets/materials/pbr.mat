@@ -33,7 +33,12 @@ fragment {
         material.baseColor = texture(materialParams_baseColorMap, uv) * materialParams.baseColorFactor;
         material.metallic = texture(materialParams_metallicMap, uv).r * materialParams.metallicFactor;
         material.roughness = texture(materialParams_roughnessMap, uv).r * materialParams.roughnessFactor;
-        material.ambientOcclusion = texture(materialParams_occlusionMap, uv).r;
-        material.emissive = texture(materialParams_emissiveMap, uv).rgb * materialParams.emissiveFactor;
+        if (hasTexture(occlusionMap)) {
+            material.ambientOcclusion = texture(materialParams_occlusionMap, uv).r;
+        }
+        material.emissive = materialParams.emissiveFactor;
+        if (any(greaterThan(materialParams.emissiveFactor, vec3(0.0)))) {
+            material.emissive *= texture(materialParams_emissiveMap, uv).rgb;
+        }
     }
 }

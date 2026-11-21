@@ -109,6 +109,26 @@ void testCompiledPostProcessMaterial() {
     CHECK_EQ(loaded->domain, MaterialDomain::PostProcess);
 }
 
+void testSamplerMaskParameter() {
+    std::string error;
+    auto blur = MaterialPackage::deserialize(embedded::test_assets::kMaterialsBlur, error);
+    REQUIRE(blur);
+    const MaterialParameter* mask = blur->findParameter(kSamplerMaskParameter);
+    REQUIRE(mask);
+    CHECK_EQ(mask->type, ParameterType::UInt);
+    // After the float2 direction (offset 0, 8 bytes), in the same 16-byte block.
+    CHECK_EQ(mask->offset, 8u);
+    CHECK_EQ(blur->uniformBlockSize, 16u);
+    CHECK_EQ(mask->defaultValue, std::vector<uint8_t>(4, 0));
+    CHECK(&blur->parameters.back() == mask);
+
+    // No samplers, no mask.
+    auto unlit = MaterialPackage::deserialize(embedded::test_assets::kMaterialsUnlit, error);
+    REQUIRE(unlit);
+    CHECK(!unlit->findParameter(kSamplerMaskParameter));
+    CHECK_EQ(unlit->uniformBlockSize, 0u);
+}
+
 }
 
 void runMaterialInstanceTests() {
@@ -116,4 +136,5 @@ void runMaterialInstanceTests() {
     ailo::test::run("material_instance/testDeserializeRejectsBadPackages", testDeserializeRejectsBadPackages);
     ailo::test::run("material_instance/testCompiledInstance", testCompiledInstance);
     ailo::test::run("material_instance/testCompiledPostProcessMaterial", testCompiledPostProcessMaterial);
+    ailo::test::run("material_instance/testSamplerMaskParameter", testSamplerMaskParameter);
 }

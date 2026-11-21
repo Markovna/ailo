@@ -45,6 +45,9 @@ MaterialInstance::MaterialInstance(RenderAPI* renderApi, AssetServer& server, As
         }
         m_uniformBuffer = renderApi->createBuffer(BufferBinding::UNIFORM, package.uniformBlockSize);
         renderApi->updateDescriptorSetBuffer(m_descriptorSet, m_uniformBuffer, material::kMaterialParamsBinding);
+        if (const auto* mask = package.findParameter(material::kSamplerMaskParameter)) {
+            m_samplerMaskOffset = mask->offset;
+        }
     }
 
     for (const auto& p : package.parameters) {
@@ -64,6 +67,25 @@ MaterialInstance::Sampler* MaterialInstance::findSampler(std::string_view name) 
     return it != m_samplers.end() ? &*it : nullptr;
 }
 
+bool MaterialInstance::isTextureAssigned(uint32_t binding) const {
+    if (!m_samplerMaskOffset) return false;
+    uint32_t mask;
+    std::memcpy(&mask, m_uniforms.data() + *m_samplerMaskOffset, sizeof(mask));
+    return mask & (1u << (binding - material::kFirstSamplerBinding));
+}
+
+void MaterialInstance::setTextureAssigned(uint32_t binding, bool assigned) {
+    if (!m_samplerMaskOffset) return;
+    uint32_t mask;
+    std::memcpy(&mask, m_uniforms.data() + *m_samplerMaskOffset, sizeof(mask));
+    const uint32_t bit = 1u << (binding - material::kFirstSamplerBinding);
+    const uint32_t updated = assigned ? mask | bit : mask & ~bit;
+    if (updated != mask) {
+        std::memcpy(m_uniforms.data() + *m_samplerMaskOffset, &updated, sizeof(updated));
+        m_uniformsDirty = true;
+    }
+}
+
 void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> texture, const SamplerParams& sampler) {
     Sampler* slot = findSampler(name);
     if (!slot || !texture) {
@@ -72,6 +94,7 @@ void MaterialInstance::setParameter(std::string_view name, AssetPtr<Texture> tex
     slot->texture = std::move(texture);
     slot->params = sampler;
     slot->dirty = true;
+    setTextureAssigned(slot->binding, true);
 }
 
 void MaterialInstance::setParameter(std::string_view name, Shared<gpu::Texture> texture, const SamplerParams& sampler) {
@@ -82,6 +105,7 @@ void MaterialInstance::setParameter(std::string_view name, Shared<gpu::Texture> 
     slot->texture = std::move(texture);
     slot->params = sampler;
     slot->dirty = true;
+    setTextureAssigned(slot->binding, true);
 }
 
 void MaterialInstance::setUniform(std::string_view name, material::ParameterType type, std::span<const uint32_t> words, uint32_t firstElement) {
@@ -126,6 +150,11 @@ void MaterialInstance::copyParametersFrom(const MaterialInstance& other) {
             continue;
         }
 
+        // The mask's bits follow each material's sampler order, so they are copied with the samplers below.
+        if (p.name == material::kSamplerMaskParameter) {
+            continue;
+        }
+
         if (!material::isSampler(p.type)) {
             std::memcpy(m_uniforms.data() + p.offset, other.m_uniforms.data() + source->offset, p.size);
             m_uniformsDirty = true;
@@ -137,6 +166,7 @@ void MaterialInstance::copyParametersFrom(const MaterialInstance& other) {
         to->texture = from->texture;
         to->params = from->params;
         to->dirty = true;
+        setTextureAssigned(p.binding, other.isTextureAssigned(source->binding));
     }
 }
 

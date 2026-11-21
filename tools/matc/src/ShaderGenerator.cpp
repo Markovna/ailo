@@ -61,6 +61,15 @@ void generateParameters(std::ostringstream& out, const MaterialPackage& pkg) {
         out << "layout(set = 2, binding = " << p.binding << ") uniform " << glslType(p.type)
             << " materialParams_" << p.name << ";\n";
     }
+    if (pkg.findParameter(kSamplerMaskParameter)) {
+        for (const auto& p : pkg.parameters) {
+            if (!isSampler(p.type)) continue;
+            out << "#define SAMPLER_BIT_" << p.name << " (1u << " << (p.binding - kFirstSamplerBinding) << ")\n";
+        }
+        // Uniform for the whole draw, so a branch on it skips the sample without divergence.
+        out << "#define hasTexture(name) ((materialParams." << kSamplerMaskParameter
+            << " & SAMPLER_BIT_##name) != 0u)\n";
+    }
 }
 
 }

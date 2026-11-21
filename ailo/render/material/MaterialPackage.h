@@ -4,6 +4,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "MaterialEnums.h"
@@ -18,6 +19,11 @@ static constexpr uint32_t kMaterialPackageVersion = 3;
 // has uniform parameters), samplers follow from binding 1 in declaration order.
 static constexpr uint32_t kMaterialParamsBinding = 0;
 static constexpr uint32_t kFirstSamplerBinding = 1;
+
+// Uint parameter matc adds to every material with samplers. MaterialInstance sets bit (binding - kFirstSamplerBinding)
+// when a texture is assigned to that sampler, so shaders can skip sampling defaults with hasTexture(name).
+static constexpr std::string_view kSamplerMaskParameter = "_samplerMask";
+static constexpr uint32_t kMaxSamplers = 32;
 
 static constexpr uint32_t kMaxVariables = 4;
 
