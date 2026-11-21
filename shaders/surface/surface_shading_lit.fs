@@ -15,7 +15,7 @@ struct Pixel {
     vec4 baseColor;
     float metallic;
     float roughness;
-//    vec3 energyCompensation;
+    vec3 energyCompensation;
     vec3 dfg;
 };
 
@@ -68,7 +68,7 @@ void getPixel(const MaterialInputs material, out Pixel pixel) {
 
     pixel.f0 = mix(vec3(pixel.reflectance), baseColor.rgb, metallic);
     pixel.dfg = sampleDFG(shading_NoV, pixel.perceptualRoughness);
-    //pixel.energyCompensation = 1.0 + pixel.f0 * (1.0 / pixel.dfg.y - 1.0);
+    pixel.energyCompensation = 1.0 + pixel.f0 * (1.0 / pixel.dfg.y - 1.0);
 }
 
 vec3 specularLobe(vec3 f0, float roughness, vec3 h, float NoV, float NoL, float NoH, float LoH) {
@@ -90,7 +90,7 @@ vec3 surfaceShading(const Pixel pixel, const Light light, float occlusion) {
     vec3 Fr = specularLobe(pixel.f0, pixel.roughness, h, NoV, NoL, NoH, LoH);
     vec3 Fd = pixel.diffuseColor * diffuse(pixel.roughness, NoV, NoL, LoH);
 
-    vec3 color = Fd + Fr;// * pixel.energyCompensation;
+    vec3 color = Fd + Fr * pixel.energyCompensation;
     return (color * light.colorIntensity.rgb) *
                 (light.colorIntensity.w * light.attenuation * NoL * occlusion);
 }
@@ -326,7 +326,7 @@ vec4 evaluateMaterial(const MaterialInputs material) {
     vec3 reflected = mix(shading_reflected, shading_normal, pixel.roughness * pixel.roughness);
     float radianceLod = view.iblSpecularMaxLod * pixel.perceptualRoughness * (2.0 - pixel.perceptualRoughness);
     vec3 prefilteredRadiance = textureLod(iblSpecular, reflected, radianceLod).rgb;
-    vec3 Fr = E * prefilteredRadiance * computeSpecularAO(shading_NoV, material.ambientOcclusion, pixel.roughness);
+    vec3 Fr = E * prefilteredRadiance * pixel.energyCompensation * computeSpecularAO(shading_NoV, material.ambientOcclusion, pixel.roughness);
 
     vec3 diffuseIrradiance = irradianceSH(shading_normal);
     vec3 Fd = pixel.diffuseColor * diffuseIrradiance * (1.0 - E) * material.ambientOcclusion;
