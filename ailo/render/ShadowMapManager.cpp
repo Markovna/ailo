@@ -14,17 +14,17 @@ namespace ailo {
         const float shadowFar = std::clamp(settings.distance, cameraNear * 2.0f, cameraFar);
         const auto splits = computeSplits(static_cast<uint8_t>(m_cascadeCount), cameraNear, shadowFar, settings.splitLambda);
 
-        // A point on a frustum edge moves linearly with view depth, so slice corners are lerps between the near and far corners.
-        const glm::mat4 worldFromClip = glm::inverse(camera.projection * camera.view);
+        const glm::mat4 viewFromClip = glm::inverse(camera.projection);
         constexpr std::array<glm::vec2, 4> kNdcCorners { glm::vec2 { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } };
         std::array<glm::vec3, 4> nearCorners;
         std::array<glm::vec3, 4> farCorners;
         for (size_t c = 0; c < kNdcCorners.size(); c++) {
-            const glm::vec4 n = worldFromClip * glm::vec4(kNdcCorners[c], 0.0f, 1.0f);
-            const glm::vec4 f = worldFromClip * glm::vec4(kNdcCorners[c], 1.0f, 1.0f);
+            const glm::vec4 n = viewFromClip * glm::vec4(kNdcCorners[c], 0.0f, 1.0f);
+            const glm::vec4 f = viewFromClip * glm::vec4(kNdcCorners[c], 1.0f, 1.0f);
             nearCorners[c] = glm::vec3(n) / n.w;
             farCorners[c] = glm::vec3(f) / f.w;
         }
+        const glm::mat4 worldFromView = glm::inverse(camera.view);
 
         const glm::vec3 dir = glm::normalize(lightDirection);
         // lookAt degenerates when the light direction is parallel to up.
@@ -35,6 +35,8 @@ namespace ailo {
             ShadowCascade& cascade = m_cascades[i];
             cascade.splitFar = splits[i + 1];
 
+            // Frustum edges are straight lines in view depth (perspective or orthographic), so slice corners are lerps
+            // between the near and far corners.
             const float tNear = (splits[i] - cameraNear) / (cameraFar - cameraNear);
             const float tFar = (splits[i + 1] - cameraNear) / (cameraFar - cameraNear);
             std::array<glm::vec3, 8> corners;
@@ -43,17 +45,16 @@ namespace ailo {
                 corners[c + 4] = glm::mix(nearCorners[c], farCorners[c], tFar);
             }
 
-            // Bounding sphere of the slice: its size doesn't change as the camera rotates, so the shadow doesn't swim.
-            glm::vec3 center { 0.0f };
+            glm::vec3 viewCenter { 0.0f };
             for (const glm::vec3& corner : corners) {
-                center += corner;
+                viewCenter += corner;
             }
-            center /= static_cast<float>(corners.size());
+            viewCenter /= static_cast<float>(corners.size());
             float radius = 0.0f;
             for (const glm::vec3& corner : corners) {
-                radius = std::max(radius, glm::distance(center, corner));
+                radius = std::max(radius, glm::distance(viewCenter, corner));
             }
-            radius = std::ceil(radius * 16.0f) / 16.0f;
+            const glm::vec3 center = glm::vec3(worldFromView * glm::vec4(viewCenter, 1.0f));
 
             // Moving the light only by whole texels keeps static shadow edges from shimmering as the camera moves.
             glm::vec3 lightSpaceCenter = glm::vec3(lightRotation * glm::vec4(center, 1.0f));
