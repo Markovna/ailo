@@ -39,3 +39,24 @@ All other dependencies are included in the repository. Install the [Vulkan SDK](
    cmake --build cmake-build-release
    ```
    
+
+# Building on Linux
+
+## Prerequisites
+
+- CMake 3.22 or newer, Ninja, Python 3, and GCC 13 or newer
+- The X11 development packages GLFW needs. On Debian or Ubuntu:
+
+  ```bash
+  sudo apt install build-essential cmake ninja-build python3 pkg-config \
+      libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev
+  ```
+
+## Steps
+
+Clone with submodules as above, then configure and build from a normal shell:
+
+```bash
+cmake -B cmake-build-release -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-release
+```
