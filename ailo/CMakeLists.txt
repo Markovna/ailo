@@ -216,7 +216,7 @@ target_compile_definitions(ailo PUBLIC
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
-target_compile_definitions(ailo PUBLIC GLFW_INCLUDE_VULKAN)
+target_compile_definitions(ailo PUBLIC GLFW_INCLUDE_NONE GLFW_INCLUDE_VULKAN)
 
 target_compile_definitions(ailo PUBLIC VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
 
