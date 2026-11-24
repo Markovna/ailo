@@ -58,14 +58,17 @@ function(add_shader LIST_VAR SHADER)
 endfunction()
 
 # Add GLFW library from third_party
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+if(NOT ANDROID)
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-option(AILO_WAYLAND "Build GLFW with native Wayland support on Linux" OFF)
-set(GLFW_BUILD_WAYLAND ${AILO_WAYLAND} CACHE BOOL "" FORCE)
+    # Linux supports X11 windows only; Wayland desktops run them through XWayland.
+    set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(third_party/glfw)
+    add_subdirectory(third_party/glfw)
+endif()
+
 add_subdirectory(third_party/glm)
 add_subdirectory(third_party/stb_image)
 add_subdirectory(third_party/vkmemalloc)

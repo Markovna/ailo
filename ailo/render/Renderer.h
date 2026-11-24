@@ -85,6 +85,8 @@ struct Skybox;
 struct SceneLighting;
 
 struct ViewInfo {
+  // Rendering resolution. May differ from the swapchain's, to which the result is scaled.
+  glm::ivec2 extent = glm::ivec2(0);
   glm::mat4 projection = glm::mat4(1.0f);
   glm::mat4 view = glm::mat4(1.0f);
   float nearPlane = 0.1f;
@@ -209,12 +211,12 @@ public:
            const RendererSettings& settings = {});
   ~Renderer();
 
-  void render(Scene& scene, Query<Renderable> renderables, const ViewInfo& camera);
+  void render(const SwapChainHandle& swapChain, Scene& scene, Query<Renderable> renderables, const ViewInfo& camera);
 
   // Passes recorded after the scene passes, in registration order (e.g. UI). Each pass begins its own render pass.
   void addOverlayPass(OverlayPass pass);
 
-  bool beginFrame();
+  bool beginFrame(const SwapChainHandle& swapChain);
   void prepare(Scene& scene, Query<Renderable>& renderables, const ViewInfo& camera);
   void prepareShadows(const ViewInfo& camera, const glm::vec3& lightDirection);
   void shadowPass();
@@ -232,7 +234,7 @@ private:
   void drawSkybox();
   // Full-screen triangle with a postprocess material, inside the current render pass.
   void drawPostProcess(const MaterialInstance& material);
-  void updateHdrTarget();
+  void updateHdrTarget(glm::ivec2 extent);
 
   PerObjectUniformBufferData m_perObjectUniformBufferData {32};
   PerViewUniforms m_perViewUniformBufferData {};

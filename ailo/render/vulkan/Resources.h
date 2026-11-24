@@ -22,6 +22,7 @@ struct Buffer;
 class DescriptorSet;
 class Texture;
 struct DescriptorSetLayout;
+class SwapChain;
 
 }
 
@@ -32,6 +33,7 @@ using DescriptorSetHandle = Handle<gpu::DescriptorSet>;
 using TextureHandle = Handle<gpu::Texture>;
 using DescriptorSetLayoutHandle = Handle<gpu::DescriptorSetLayout>;
 using RenderTargetHandle = Handle<gpu::RenderTarget>;
+using SwapChainHandle = Handle<gpu::SwapChain>;
 
 class ColorAttachmentMask : public std::bitset<kMaxColorAttachments> {};
 

@@ -121,6 +121,8 @@ add_library(ailo STATIC
     render/Program.cpp
     render/Program.h
     render/vulkan/Resources.h
+    render/vulkan/platform/VulkanPlatform.h
+    render/vulkan/platform/VulkanPlatformUtils.h
     ecs/SceneLighting.cpp
     ecs/SceneLighting.h
     ecs/Lights.h
@@ -143,7 +145,7 @@ add_library(ailo STATIC
     ecs/PoseOps.h
     ecs/Spawn.cpp
     ecs/Spawn.h
-    platform/Platform.cpp
+    platform/NativeWindow.h
     platform/Platform.h
     app/App.cpp
     app/App.h
@@ -190,7 +192,6 @@ add_library(ailo STATIC
 target_link_libraries(ailo
     PUBLIC
         Vulkan::Headers
-        glfw
         glm::glm
         GPUOpen::VulkanMemoryAllocator
         EnTT::EnTT
@@ -205,6 +206,23 @@ target_link_libraries(ailo
         ailo_fileio
 )
 
+# Windowing backend and the OS-specific part of the Vulkan backend.
+if(ANDROID)
+    message(FATAL_ERROR "The Android backend is not implemented yet.")
+else()
+    target_sources(ailo PRIVATE platform/glfw/GlfwPlatform.cpp)
+    target_link_libraries(ailo PRIVATE glfw)
+    if(WIN32)
+        target_sources(ailo PRIVATE render/vulkan/platform/VulkanPlatformWindows.cpp)
+    elseif(APPLE)
+        enable_language(OBJCXX)
+        target_sources(ailo PRIVATE render/vulkan/platform/VulkanPlatformApple.mm)
+        target_link_libraries(ailo PRIVATE "-framework Cocoa" "-framework QuartzCore")
+    else()
+        target_sources(ailo PRIVATE render/vulkan/platform/VulkanPlatformLinux.cpp)
+    endif()
+endif()
+
 target_include_directories(ailo PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -215,8 +233,6 @@ target_compile_definitions(ailo PUBLIC
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
-
-target_compile_definitions(ailo PUBLIC GLFW_INCLUDE_NONE GLFW_INCLUDE_VULKAN)
 
 target_compile_definitions(ailo PUBLIC VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS)
 

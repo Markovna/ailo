@@ -1,18 +1,66 @@
 #include "SwapChain.h"
 
-#include <ostream>
+#include <algorithm>
+#include <stdexcept>
 
+#include "utils/Log.h"
+#include "vulkan/platform/VulkanPlatform.h"
 #include "vulkan/VulkanUtils.h"
 
-namespace ailo {
+namespace ailo::gpu {
 
-SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& textures, ResourceContainer<gpu::RenderTarget>& renderTargets) {
-    vk::SurfaceFormatKHR surfaceFormat = device.getSurfaceFormat();
-    vk::PresentModeKHR presentMode = device.getPresentMode();
-    vk::Extent2D extent = device.getSwapExtent();
-    vk::Format depthFormat = device.getDepthFormat();
+SwapChain::SwapChain(VulkanDevice& device, FrameBufferCache& framebufferCache, const NativeWindow& window,
+                     ResourceContainer<Texture>& textures, ResourceContainer<RenderTarget>& renderTargets)
+    : m_device(device), m_framebufferCache(framebufferCache), m_textures(textures), m_renderTargetContainer(renderTargets),
+      m_surface(vk_platform::createSurface(device.instance(), window), device.instance()) {
+    const auto physicalDevice = device.physicalDevice();
+    if (!physicalDevice.getSurfaceSupportKHR(device.graphicsQueueFamilyIndex(), *m_surface)) {
+        throw std::runtime_error("The GPU cannot present to this window");
+    }
+    if (physicalDevice.getSurfaceFormatsKHR(*m_surface).empty()) {
+        throw std::runtime_error("The GPU supports no surface format for this window");
+    }
+    recreate();
+}
 
-    auto capabilities = device.physicalDevice().getSurfaceCapabilitiesKHR(device.surface());
+SwapChain::~SwapChain() {
+    destroySwapchain();
+}
+
+bool SwapChain::needsRecreate() {
+    if (!m_swapchain) {
+        return true;
+    }
+
+    try {
+        return m_device.physicalDevice().getSurfaceCapabilitiesKHR(*m_surface).currentExtent != m_extent;
+    } catch (const vk::SurfaceLostKHRError&) {
+        return true;
+    }
+}
+
+bool SwapChain::recreate() {
+    try {
+        const auto capabilities = m_device.physicalDevice().getSurfaceCapabilitiesKHR(*m_surface);
+        const vk::Extent2D extent = capabilities.currentExtent;
+        if (extent.width == 0 || extent.height == 0) {
+            return false;
+        }
+        create(capabilities, extent);
+        return true;
+    } catch (const vk::SurfaceLostKHRError&) {
+        // A failed creation retires the old swapchain too, so it can't be used anymore.
+        if (m_swapchain) {
+            log::error("SwapChain: the window surface is lost");
+            destroySwapchain();
+        }
+        return false;
+    }
+}
+
+void SwapChain::create(const vk::SurfaceCapabilitiesKHR& capabilities, vk::Extent2D extent) {
+    const vk::SurfaceFormatKHR surfaceFormat = getSurfaceFormat();
+    const vk::Format depthFormat = m_device.getDepthFormat();
 
     uint32_t imageCount = capabilities.minImageCount + 1;
     if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
@@ -20,7 +68,7 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     }
 
     vk::SwapchainCreateInfoKHR createInfo{};
-    createInfo.surface = device.surface();
+    createInfo.surface = *m_surface;
     createInfo.minImageCount = imageCount;
     createInfo.imageFormat = surfaceFormat.format;
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -28,62 +76,66 @@ SwapChain::SwapChain(VulkanDevice& device, ResourceContainer<gpu::Texture>& text
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
 
-    uint32_t queueFamilyIndices[] = {device.graphicsQueueFamilyIndex(), device.presentQueueFamilyIndex()};
-
-    if (device.graphicsQueueFamilyIndex() != device.presentQueueFamilyIndex()) {
-        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
-        createInfo.queueFamilyIndexCount = 2;
-        createInfo.pQueueFamilyIndices = queueFamilyIndices;
-    } else {
-        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
-    }
-
+    createInfo.imageSharingMode = vk::SharingMode::eExclusive;
     createInfo.preTransform = capabilities.currentTransform;
     createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    createInfo.presentMode = presentMode;
+    createInfo.presentMode = getPresentMode();
     createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = nullptr;
-    m_swapchain = device->createSwapchainKHR(createInfo);
+    createInfo.oldSwapchain = m_swapchain;
+    const vk::SwapchainKHR swapchain = m_device->createSwapchainKHR(createInfo);
 
-    Shared<gpu::Texture> depth = textures.make(
-        *device, device.physicalDevice(), TextureType::Texture2D,
+    destroySwapchain();
+    m_swapchain = swapchain;
+    m_extent = extent;
+    m_currentImageIndex = 0;
+
+    Shared<gpu::Texture> depth = m_textures.make(
+        *m_device, m_device.physicalDevice(), TextureType::Texture2D,
         depthFormat, 1, extent.width, extent.height,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::ImageAspectFlagBits::eDepth);
 
-    auto swapchainImages = device->getSwapchainImagesKHR(m_swapchain);
+    auto swapchainImages = m_device->getSwapchainImagesKHR(m_swapchain);
     m_renderTargets.reserve(swapchainImages.size());
     for (auto& image : swapchainImages) {
-        auto& rt = m_renderTargets.emplace_back(renderTargets.make());
+        auto& rt = m_renderTargets.emplace_back(m_renderTargetContainer.make());
         rt->samples = vk::SampleCountFlagBits::e1;
         rt->width = extent.width;
         rt->height = extent.height;
 
-        rt->colors[0] = textures.make( *device, image,
+        rt->colors[0] = m_textures.make( *m_device, image,
             surfaceFormat.format, extent.width, extent.height, vk::ImageUsageFlagBits::eColorAttachment, vk::ImageAspectFlagBits::eColor);
 
         rt->depth = depth;
 
         vk::SemaphoreCreateInfo semaphoreInfo{};
-        m_renderFinishedSemaphores.push_back(device->createSemaphore(semaphoreInfo));
+        m_renderFinishedSemaphores.push_back(m_device->createSemaphore(semaphoreInfo));
     }
 }
 
-vk::Result SwapChain::acquireNextImage(vk::Device device, vk::Semaphore& semaphore, uint64_t timeout) {
-    auto result = device.acquireNextImageKHR(m_swapchain, timeout, semaphore);
-    if (result.result == vk::Result::eErrorOutOfDateKHR) {
+vk::Result SwapChain::acquireNextImage(vk::Semaphore semaphore, uint64_t timeout) {
+    if (needsRecreate() && !recreate()) {
         return vk::Result::eErrorOutOfDateKHR;
     }
 
-    m_currentImageIndex = result.value;
-    return result.result;
+    uint32_t imageIndex = 0;
+    const auto result = m_device->acquireNextImageKHR(m_swapchain, timeout, semaphore, nullptr, &imageIndex);
+    if (result == vk::Result::eSuccess || result == vk::Result::eSuboptimalKHR) {
+        m_currentImageIndex = imageIndex;
+    }
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eErrorSurfaceLostKHR) {
+        recreate();
+    }
+
+    return result;
 }
 
-vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQueue, vk::Queue presentQueue) {
+vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue queue) {
     auto& texture = m_renderTargets[m_currentImageIndex]->colors[0];
     texture->transitionLayout(commandBuffer.buffer(), vk::ImageLayout::ePresentSrcKHR);
 
-    commandBuffer.submit(graphicsQueue, m_renderFinishedSemaphores[m_currentImageIndex]);
+    commandBuffer.submit(queue, m_renderFinishedSemaphores[m_currentImageIndex]);
 
     vk::PresentInfoKHR presentInfo{};
     presentInfo.waitSemaphoreCount = 1;
@@ -91,18 +143,46 @@ vk::Result SwapChain::present(CommandBuffer& commandBuffer, vk::Queue graphicsQu
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = &m_swapchain;
     presentInfo.pImageIndices = &m_currentImageIndex;
-    auto result = presentQueue.presentKHR(presentInfo);
-    return result;
+
+    return queue.presentKHR(&presentInfo);
 }
 
-void SwapChain::destroy(vk::Device device) {
+void SwapChain::destroySwapchain() {
+    if (!m_swapchain) return;
+
+    // Called by the destructor, which must not throw
+    try {
+        m_device->waitIdle();
+    } catch (const vk::SystemError& e) {
+        log::error("SwapChain: waitIdle failed: {}", e.what());
+    }
+
+    m_framebufferCache.clear();
     m_renderTargets.clear();
 
     for (auto semaphore : m_renderFinishedSemaphores) {
-        device.destroySemaphore(semaphore);
+        m_device->destroySemaphore(semaphore);
     }
+    m_renderFinishedSemaphores.clear();
 
-    device.destroySwapchainKHR(m_swapchain);
+    m_device->destroySwapchainKHR(m_swapchain);
+    m_swapchain = nullptr;
+}
+
+vk::SurfaceFormatKHR SwapChain::getSurfaceFormat() const {
+    auto formats = m_device.physicalDevice().getSurfaceFormatsKHR(*m_surface);
+    auto findFormat = std::ranges::find_if(formats, [](const auto& format) {
+        return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
+    });
+    if (findFormat == formats.end()) { return formats[0]; }
+    return *findFormat;
+}
+
+vk::PresentModeKHR SwapChain::getPresentMode() const {
+    auto presentModes = m_device.physicalDevice().getSurfacePresentModesKHR(*m_surface);
+    auto findMode = std::ranges::find(presentModes, vk::PresentModeKHR::eFifo);
+    if (findMode != presentModes.end()) { return *findMode; }
+    return vk::PresentModeKHR::eMailbox;
 }
 
 }

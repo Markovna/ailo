@@ -98,12 +98,13 @@ Renderer::Renderer(RenderAPI* renderApi, AssetServer& server, AssetStorage<Mater
 
 Renderer::~Renderer() = default;
 
-void Renderer::render(Scene& scene, Query<Renderable> renderables, const ViewInfo& camera) {
-  if (!beginFrame()) {
+void Renderer::render(const SwapChainHandle& swapChain, Scene& scene, Query<Renderable> renderables, const ViewInfo& camera) {
+  if (!beginFrame(swapChain)) {
     return;
   }
 
   prepare(scene, renderables, camera);
+  updateHdrTarget(camera.extent);
   shadowPass();
   colorPass();
   tonemapPass();
@@ -119,8 +120,8 @@ void Renderer::addOverlayPass(OverlayPass pass) {
   m_overlayPasses.push_back(std::move(pass));
 }
 
-bool Renderer::beginFrame() {
-  return m_renderAPI->beginFrame();
+bool Renderer::beginFrame(const SwapChainHandle& swapChain) {
+  return m_renderAPI->beginFrame(swapChain);
 }
 
 void Renderer::shadowPass() {
@@ -183,8 +184,6 @@ void Renderer::shadowPass() {
 
 void Renderer::colorPass() {
   RenderAPI* backend = m_renderAPI;
-
-  updateHdrTarget();
 
   RenderPassDescription renderPass {};
   renderPass.color[0] = { .load = vk::AttachmentLoadOp::eClear, .store = vk::AttachmentStoreOp::eStore };
@@ -249,10 +248,9 @@ void Renderer::drawPostProcess(const MaterialInstance& material) {
   backend->draw(3);
 }
 
-void Renderer::updateHdrTarget() {
+void Renderer::updateHdrTarget(glm::ivec2 extent) {
   RenderAPI* backend = m_renderAPI;
 
-  const glm::ivec2 extent = backend->getSwapchainExtent();
   if (m_hdrRenderTarget && extent == m_hdrExtent) {
     return;
   }

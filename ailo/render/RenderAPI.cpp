@@ -1,7 +1,6 @@
 #define VMA_IMPLEMENTATION
 #include "RenderAPI.h"
 #include "vulkan/VulkanUtils.h"
-#include "SwapChain.h"
 #include "utils/Log.h"
 #include <algorithm>
 #include <bit>
@@ -17,9 +16,8 @@ namespace ailo {
 
 // Initialization and shutdown
 
-RenderAPI::RenderAPI(Platform::WindowHandle window)
-    : m_device(window),
-    m_commandPool(m_device->createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
+RenderAPI::RenderAPI()
+    : m_commandPool(m_device->createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlagBits::eResetCommandBuffer, m_device.graphicsQueueFamilyIndex()))),
     m_commands(*m_device, m_commandPool),
     m_deletionQueue(m_commands),
     m_descriptorPool(createDescriptorPoolS(*m_device)),
@@ -30,8 +28,6 @@ RenderAPI::RenderAPI(Platform::WindowHandle window)
     m_renderPassCache(*m_device, m_deletionQueue),
     m_pipelineCache(*m_device, m_graphicsPipelines),
     m_samplerCache(*m_device, m_device.physicalDevice()) {
-
-    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
 }
 
 RenderAPI::~RenderAPI() {
@@ -42,9 +38,7 @@ RenderAPI::~RenderAPI() {
         log::error("RenderAPI: waitIdle failed during destruction: {}", e.what());
     }
 
-    if (m_swapChain) {
-        m_swapChain->destroy(*m_device);
-    }
+    m_currentSwapChain.reset();
     m_currentRenderPassState = {};
 
     m_framebufferCache.clear();
@@ -62,6 +56,7 @@ RenderAPI::~RenderAPI() {
     collectGarbage();
 
     // Whatever is left still has an owner, which must not outlive the RenderAPI.
+    m_swapChains.clear();
     m_renderTargets.clear();
     m_graphicsPipelines.clear();
     m_descriptorSets.clear();
@@ -79,23 +74,23 @@ RenderAPI::~RenderAPI() {
 
 // Frame lifecycle
 
-bool RenderAPI::beginFrame() {
-    if (m_swapChainOutdated && !recreateSwapchain()) {
-        return false;
-    }
+bool RenderAPI::beginFrame(const SwapChainHandle& handle) {
+    assert(!m_currentSwapChain && "The previous frame wasn't ended");
+    auto swapChain = m_swapChains.share(handle);
 
     vk::UniqueSemaphore acquireSemaphore = m_device->createSemaphoreUnique(vk::SemaphoreCreateInfo{});
 
-    auto result = m_swapChain->acquireNextImage(*m_device, acquireSemaphore.get(), UINT64_MAX);
+    auto result = swapChain->acquireNextImage(acquireSemaphore.get(), UINT64_MAX);
 
-    if (result == vk::Result::eErrorOutOfDateKHR) {
-        m_swapChainOutdated = true;
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eErrorSurfaceLostKHR) {
         return false;
     }
 
     if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
+
+    m_currentSwapChain = std::move(swapChain);
 
     auto& commands = m_commands.get();
     commands.setSubmitSignal(std::move(acquireSemaphore));
@@ -107,14 +102,15 @@ void RenderAPI::endFrame() {
     auto& commands = m_commands.get();
     m_gpuTimer.endFrame(*commands);
 
-    auto result = m_swapChain->present(commands, m_device.graphicsQueue(), m_device.presentQueue());
+    assert(m_currentSwapChain && "Not inside a frame");
+    auto result = m_currentSwapChain->present(commands, m_device.graphicsQueue());
 
-    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR) {
-        recreateSwapchain();
-    } else if (result != vk::Result::eSuccess) {
+    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR &&
+        result != vk::Result::eErrorOutOfDateKHR && result != vk::Result::eErrorSurfaceLostKHR) {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
+    m_currentSwapChain.reset();
     m_commands.next();
     collectGarbage();
 }
@@ -125,6 +121,8 @@ void RenderAPI::waitIdle() {
 }
 
 void RenderAPI::collectGarbage() {
+    m_swapChains.collect();
+
     m_deletionQueue.collect();
     m_stagePool.collect();
 
@@ -460,7 +458,8 @@ Unique<gpu::Program> RenderAPI::createProgram(const ShaderDescription& descripti
 }
 
 void RenderAPI::beginRenderPass(const RenderPassDescription& description, const Color& clearColor) {
-    beginRenderPass(m_swapChain->getCurrentRenderTarget().getHandle(), description, clearColor);
+    assert(m_currentSwapChain && "Not inside a frame");
+    beginRenderPass(m_currentSwapChain->getCurrentRenderTarget().getHandle(), description, clearColor);
 }
 
 void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassDescription& description,
@@ -639,9 +638,9 @@ void RenderAPI::endGpuTimer() {
 
 // Swapchain management
 
-glm::ivec2 RenderAPI::getSwapchainExtent() const {
-    const auto& rt = m_swapChain->getCurrentRenderTarget();
-    return { rt->width, rt->height };
+Unique<gpu::SwapChain> RenderAPI::createSwapChain(const NativeWindow& window) {
+    assert(!m_currentSwapChain && "Not allowed inside a frame");
+    return m_swapChains.make(m_device, m_framebufferCache, window, m_textures, m_renderTargets);
 }
 
 vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
@@ -657,26 +656,6 @@ vk::DescriptorPool RenderAPI::createDescriptorPoolS(vk::Device device) {
     poolInfo.flags |= vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
 
     return device.createDescriptorPool(poolInfo);
-}
-
-bool RenderAPI::recreateSwapchain() {
-    m_swapChainOutdated = true;
-
-    const vk::Extent2D extent = m_device.getSwapExtent();
-    if (extent.width == 0 || extent.height == 0) {
-        return false;
-    }
-
-    m_device->waitIdle();
-
-    m_framebufferCache.clear();
-
-    m_swapChain->destroy(*m_device);
-    m_swapChain.reset();
-    m_swapChain = std::make_unique<SwapChain>(m_device, m_textures, m_renderTargets);
-
-    m_swapChainOutdated = false;
-    return true;
 }
 
 void RenderAPI::copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image,

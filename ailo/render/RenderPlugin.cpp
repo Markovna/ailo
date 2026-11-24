@@ -59,21 +59,30 @@ void updateSkinning(Scene& scene, RenderAPI& api, Query<Renderable, Exclude<Disa
 }
 
 void render(Renderer& renderer, World& world, Query<Renderable> renderables, Query<Camera, TransformComponent> cameras,
-            const Window& window) {
+            const Window& window, RenderAPI& api, WindowSwapChain& swapChain) {
+    if (!window.isRenderable()) {
+        return;
+    }
+
+    if (!swapChain.swapChain) {
+        swapChain.swapChain = api.createSwapChain(window.nativeWindow());
+    }
+
+    const auto [width, height] = window.framebufferSize();
+
     ViewInfo viewProjection;
+    viewProjection.extent = { width, height };
     for (auto&& [entity, camera, transform] : cameras.each()) {
         viewProjection.view = glm::inverse(transform.world().toMatrix());
         viewProjection.nearPlane = camera.nearPlane;
         viewProjection.farPlane = camera.farPlane;
         viewProjection.exposure = camera.exposure;
-        if (float aspect = window.aspect(); aspect > 0.0f) {
-            viewProjection.projection = camera.projection(aspect);
-        }
+        viewProjection.projection = camera.projection(static_cast<float>(width) / static_cast<float>(height));
         viewProjection.skybox = world.scene().tryGet<Skybox>(entity);
         viewProjection.lighting = world.scene().tryGet<SceneLighting>(entity);
         break;
     }
-    renderer.render(world.scene(), renderables, viewProjection);
+    renderer.render(swapChain.swapChain, world.scene(), renderables, viewProjection);
 }
 
 }
@@ -82,7 +91,13 @@ void RenderPlugin::build(App& app) {
     auto& window = app.resource<Window>();
     auto& server = app.resource<AssetServer>();
 
-    auto& api = app.insertResource<RenderAPI>(window.handle());
+    auto& api = app.insertResource<RenderAPI>();
+    auto& swapChain = app.insertResource<WindowSwapChain>();
+
+    window.onSurfaceLost([&api, &swapChain] {
+        swapChain.swapChain.reset();
+        api.waitIdle();
+    });
 
     // Inserted after the RenderAPI and in dependency order: storages are destroyed in reverse, dependents first.
     auto& textureStorage = addAssetType<Texture>(app);

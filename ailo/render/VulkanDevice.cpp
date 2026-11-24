@@ -2,22 +2,15 @@
 #include <algorithm>
 
 #include "utils/Log.h"
+#include "vulkan/platform/VulkanPlatform.h"
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace ailo {
 
-VulkanDevice::VulkanDevice(Platform::WindowHandle window)
-    : m_window(window) {
+VulkanDevice::VulkanDevice() {
     createInstance();
     setupDebugMessenger();
-
-    VkSurfaceKHR surface;
-    if (glfwCreateWindowSurface(m_instance, static_cast<GLFWwindow*>(window), nullptr, &surface) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create window surface!");
-    }
-
-    m_surface = surface;
 
     static const std::vector<std::string_view> requiredDeviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -26,22 +19,15 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     struct PhysicalDeviceSearchResult {
         vk::PhysicalDevice physicalDevice = nullptr;
         int32_t graphicsQueueFamilyIndex = -1;
-        int32_t presentQueueFamilyIndex = -1;
     };
 
-    auto findPhysicalDevice = [&surface](auto&& range) -> PhysicalDeviceSearchResult {
+    auto findPhysicalDevice = [this](auto&& range) -> PhysicalDeviceSearchResult {
         for(auto& device : range) {
             auto deviceExtensionProperties = device.enumerateDeviceExtensionProperties();
             bool supportRequiredExtensions = std::ranges::all_of(requiredDeviceExtensions, [&](const auto& extension) {
                 return std::ranges::any_of(deviceExtensionProperties, [&](const auto& prop) { return prop.extensionName == extension; });
             });
             if (!supportRequiredExtensions) { continue; }
-
-            auto formats = device.getSurfaceFormatsKHR(surface);
-            if (formats.empty()) { continue; }
-
-            auto presentModes = device.getSurfacePresentModesKHR(surface);
-            if (presentModes.empty()) { continue; }
 
             vk::PhysicalDeviceFeatures supportedFeatures;
             device.getFeatures(&supportedFeatures);
@@ -68,20 +54,17 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
             }
 
             int32_t graphicsQueueFamilyIndex = -1;
-            int32_t presentQueueFamilyIndex = -1;
             auto queueFamilyProperties = device.getQueueFamilyProperties();
-            for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
+            for (uint32_t i = 0; i < queueFamilyProperties.size(); i++) {
                 if (queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-                    graphicsQueueFamilyIndex = i;
-                }
-                if (device.getSurfaceSupportKHR(i, surface)) {
-                    presentQueueFamilyIndex = i;
+                    graphicsQueueFamilyIndex = static_cast<int32_t>(i);
+                    break;
                 }
             }
 
-            if (graphicsQueueFamilyIndex < 0 || presentQueueFamilyIndex < 0) { continue; }
+            if (graphicsQueueFamilyIndex < 0) { continue; }
 
-            return { device, graphicsQueueFamilyIndex, presentQueueFamilyIndex };
+            return { device, graphicsQueueFamilyIndex };
         }
         return {};
     };
@@ -104,22 +87,13 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
 
     m_physicalDevice = physicalDeviceSearchResult.physicalDevice;
     m_graphicsQueueFamilyIndex = physicalDeviceSearchResult.graphicsQueueFamilyIndex;
-    m_presentQueueFamilyIndex = physicalDeviceSearchResult.presentQueueFamilyIndex;
     m_msaaSamples = getMaxUsableSampleCount();
 
-    uint32_t queueCreateInfoCount = 1;
-    std::array<vk::DeviceQueueCreateInfo, 2> queueCreateInfos;
     constexpr float queuePriority = 1.0f;
-    queueCreateInfos[0].queueFamilyIndex = m_graphicsQueueFamilyIndex;
-    queueCreateInfos[0].queueCount = 1;
-    queueCreateInfos[0].pQueuePriorities = &queuePriority;
-
-    if (m_presentQueueFamilyIndex != m_graphicsQueueFamilyIndex) {
-        queueCreateInfos[1].queueFamilyIndex = m_presentQueueFamilyIndex;
-        queueCreateInfos[1].queueCount = 1;
-        queueCreateInfos[1].pQueuePriorities = &queuePriority;
-        queueCreateInfoCount = 2;
-    }
+    vk::DeviceQueueCreateInfo queueCreateInfo{};
+    queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamilyIndex;
+    queueCreateInfo.queueCount = 1;
+    queueCreateInfo.pQueuePriorities = &queuePriority;
 
     vk::PhysicalDeviceFeatures deviceFeatures{};
     deviceFeatures.samplerAnisotropy = true;
@@ -147,8 +121,8 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
 
     vk::DeviceCreateInfo createInfo{};
     createInfo.pNext = &deviceFeatures12;
-    createInfo.queueCreateInfoCount = queueCreateInfoCount;
-    createInfo.pQueueCreateInfos = queueCreateInfos.data();
+    createInfo.queueCreateInfoCount = 1;
+    createInfo.pQueueCreateInfos = &queueCreateInfo;
     createInfo.pEnabledFeatures = &deviceFeatures;
     createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
     createInfo.ppEnabledExtensionNames = enabledExtensions.data();
@@ -157,13 +131,10 @@ VulkanDevice::VulkanDevice(Platform::WindowHandle window)
     // Device-level pointers skip the loader's dispatch.
     VULKAN_HPP_DEFAULT_DISPATCHER.init(m_device);
     m_graphicsQueue = m_device.getQueue(m_graphicsQueueFamilyIndex, 0);
-    m_presentQueue = m_device.getQueue(m_presentQueueFamilyIndex, 0);
 }
 
 VulkanDevice::~VulkanDevice() {
     m_device.destroy();
-
-    m_instance.destroySurfaceKHR(m_surface);
 
     if (m_debugMessenger) {
         m_instance.destroyDebugUtilsMessengerEXT(m_debugMessenger);
@@ -200,9 +171,7 @@ void VulkanDevice::createInstance() {
     vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;
 
-    uint32_t extensionCount = 0;
-    auto requiredExtensions = glfwGetRequiredInstanceExtensions(&extensionCount);
-    std::vector<const char*> extensions(requiredExtensions, requiredExtensions + extensionCount);
+    auto extensions = vk_platform::instanceExtensions(vk::enumerateInstanceExtensionProperties());
 
     // TODO: this makes app crash in RenderDoc
     // createInfo.flags = vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR;
@@ -232,47 +201,6 @@ void VulkanDevice::createInstance() {
 
     m_instance = vk::createInstance(createInfo);
     VULKAN_HPP_DEFAULT_DISPATCHER.init(m_instance);
-}
-
-vk::SurfaceFormatKHR VulkanDevice::getSurfaceFormat() const {
-    auto formats = m_physicalDevice.getSurfaceFormatsKHR(m_surface);
-    auto findFormat = std::ranges::find_if(formats, [](const auto& format) {
-        return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-        // return format.format == vk::Format::eR32G32B32A32Sfloat && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-    });
-    if (findFormat == formats.end()) { return formats[0]; }
-    return *findFormat;
-}
-
-vk::PresentModeKHR VulkanDevice::getPresentMode() const {
-    auto presentModes = m_physicalDevice.getSurfacePresentModesKHR(m_surface);
-    auto findMode = std::ranges::find(presentModes, vk::PresentModeKHR::eFifo);
-    if (findMode != presentModes.end()) { return *findMode; }
-    return vk::PresentModeKHR::eMailbox;
-}
-
-vk::Extent2D VulkanDevice::getSwapExtent() const {
-    const auto capabilities = m_physicalDevice.getSurfaceCapabilitiesKHR(m_surface);
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    }
-
-    int width, height;
-    glfwGetFramebufferSize(static_cast<GLFWwindow*>(m_window), &width, &height);
-
-    vk::Extent2D actualExtent = {
-        static_cast<uint32_t>(width),
-        static_cast<uint32_t>(height)
-    };
-
-    actualExtent.width = std::clamp(actualExtent.width,
-                                    capabilities.minImageExtent.width,
-                                    capabilities.maxImageExtent.width);
-    actualExtent.height = std::clamp(actualExtent.height,
-                                     capabilities.minImageExtent.height,
-                                     capabilities.maxImageExtent.height);
-
-    return actualExtent;
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::debugCallback(

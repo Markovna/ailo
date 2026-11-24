@@ -1,6 +1,7 @@
 #pragma once
 
-#include <string>
+#include <functional>
+#include <vector>
 
 #include "Platform.h"
 
@@ -8,18 +9,6 @@ namespace ailo {
 
 class App;
 
-struct WindowDesc {
-    std::string title = "Ailo";
-    int width = 1280;
-    int height = 720;
-};
-
-struct Extent {
-    int width = 0;
-    int height = 0;
-};
-
-// Owns an OS window. Resource inserted by PlatformPlugin.
 class Window {
 public:
     Window(Platform& platform, const WindowDesc& desc);
@@ -31,19 +20,21 @@ public:
     Platform::WindowHandle handle() const { return m_handle; }
     bool shouldClose() const;
 
-    // Size in screen coordinates (what input events report).
     Extent size() const;
-    // Size in pixels (what the swapchain renders to).
     Extent framebufferSize() const;
-    // Framebuffer aspect ratio, or 0 when minimized.
     float aspect() const;
+
+    NativeWindow nativeWindow() const;
+    bool isRenderable() const;
+
+    void onSurfaceLost(std::function<void()> listener);
 
 private:
     Platform& m_platform;
     Platform::WindowHandle m_handle = nullptr;
+    std::vector<std::function<void()>> m_surfaceLostListeners;
 };
 
-// Frame timing, in seconds. Updated at the start of every frame.
 struct Time {
     float delta = 0.0f;
     float elapsed = 0.0f;

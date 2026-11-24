@@ -22,15 +22,15 @@
 #include "RenderPassCache.h"
 #include "SamplerCache.h"
 #include "StagePool.h"
-#include "platform/Platform.h"
+#include "SwapChain.h"
 
 namespace ailo {
 
-class SwapChain;
+struct NativeWindow;
 
 class RenderAPI {
 public:
-    explicit RenderAPI(Platform::WindowHandle window);
+    RenderAPI();
     // Waits for the GPU and destroys every remaining GPU object, then the device.
     // Everything that calls into the RenderAPI (Renderer, GPU assets, ImGuiRenderer) must be gone by then.
     ~RenderAPI();
@@ -38,10 +38,13 @@ public:
     RenderAPI(const RenderAPI&) = delete;
     RenderAPI& operator=(const RenderAPI&) = delete;
 
-    // Frame lifecycle
-    bool beginFrame();
+    bool beginFrame(const SwapChainHandle& swapChain);
     void endFrame();
     void waitIdle();
+
+    // The native window must outlive the swapchain, whose destruction is deferred: before the window goes away, release
+    // the swapchain and call waitIdle(). Not allowed inside a frame.
+    Unique<gpu::SwapChain> createSwapChain(const NativeWindow& window);
 
     // Buffer management
     Unique<gpu::VertexBufferLayout> createVertexBufferLayout(const VertexInputDescription& description);
@@ -84,8 +87,6 @@ public:
     void endGpuTimer();
     std::span<const GpuTiming> gpuTimings() const { return m_gpuTimer.timings(); }
 
-    glm::ivec2 getSwapchainExtent() const;
-
 private:
     using Buffer = gpu::Buffer;
     using DescriptorSet = gpu::DescriptorSet;
@@ -96,8 +97,6 @@ private:
 
     static VmaAllocator createAllocator(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device);
     static vk::DescriptorPool createDescriptorPoolS(vk::Device device);
-
-    bool recreateSwapchain();
 
     // Rounds down to a power of two the device supports for both color and depth attachments.
     vk::SampleCountFlagBits clampSampleCount(uint8_t samples) const;
@@ -111,12 +110,8 @@ private:
     void copyBufferToImage(vk::CommandBuffer commandBuffer, vk::Buffer buffer, vk::DeviceSize bufferOffset, vk::Image image, uint32_t width, uint32_t height, uint32_t xOffset = 0, uint32_t yOffset = 0, uint32_t baseLayer = 0, uint32_t layerCount = 1, uint32_t level = 0);
 
 private:
-    bool m_swapChainOutdated = false;
-
     // Core Vulkan objects
     VulkanDevice m_device;
-
-    friend class SwapChain;
 
     vk::CommandPool m_commandPool;
     CommandsPool m_commands;
@@ -139,8 +134,9 @@ private:
     ResourceContainer<VertexBufferLayout> m_vertexBufferLayouts;
     ResourceContainer<gpu::RenderTarget> m_renderTargets;
 
-    std::unique_ptr<SwapChain> m_swapChain;
     FrameBufferCache m_framebufferCache;
+    ResourceContainer<gpu::SwapChain> m_swapChains;
+    Shared<gpu::SwapChain> m_currentSwapChain;
     RenderPassCache m_renderPassCache;
     PipelineCache m_pipelineCache;
     SamplerCache m_samplerCache;
