@@ -18,7 +18,8 @@ Builds `assets/` into `<build>/assets/` with Ninja. Each asset is compiled by it
   `<build>/asset_build/inputs.json`, and before the next one deletes the outputs of every input whose mtime or size
   changed, so Ninja rebuilds them.
 - **Tools** (e.g. `texc`) are built by CMake into `<build>/asset_tools/`, which is passed to the generator as
-  `--tools-dir`. They compile a single asset and can write a depfile with the extra inputs they read (source images,
+  `--tools-dir`. A build that can't run the tools it would build (Android) uses another build's folder instead, named
+  by `AILO_HOST_TOOLS_DIR` (`BUILDING.md`). They compile a single asset and can write a depfile with the extra inputs they read (source images,
   includes), so editing one of those rebuilds the asset.
 
 The game's assets target runs `run.py` from the build folder with the assets folder, the config and the tools folder.
@@ -33,7 +34,8 @@ By hand, from the build folder:
 python <repo>/build/run.py --source <game>/assets --config <repo>/build/config.json --tools-dir asset_tools
 ```
 
-`--ninja` names the Ninja executable; without it, `run.py` uses `ninja` from `PATH` and fails if there is none.
+`--target` is the platform the assets are built for, `desktop` (default) or `android`; CMake passes
+`AILO_ASSET_TARGET`. Changing it rebuilds the assets that depend on it. `--ninja` names the Ninja executable; without it, `run.py` uses `ninja` from `PATH` and fails if there is none.
 Without `--source`, `--config` and `--tools-dir`, `run.py` only runs an existing manifest, by default
 `build_assets.ninja` (`--manifest`), keeping its state in `asset_build/inputs.json` (`--state`). Once the manifest
 exists, plain `ninja -f build_assets.ninja` works too, but misses inputs replaced by older files.
@@ -47,7 +49,7 @@ Strict JSON with `//` and `/* */` comments.
     "tools": {
         "texc": {
             "extensions": [ ".tex" ],
-            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
+            "args": ["--target", "$target", "--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "matc": {
@@ -73,7 +75,7 @@ Strict JSON with `//` and `/* */` comments.
 |----------------------------|---------|
 | `tools.<name>`             | Tool name: the executable `<name>` (`<name>.exe` on Windows) in the folder passed as `--tools-dir`. Assets are rebuilt when the tool changes. |
 | `tools.<name>.extensions`  | List of asset extensions, matched case-insensitively. The output has the asset's path and extension: `textures/sky.tex` builds `<build>/assets/textures/sky.tex`. An extension may belong to only one tool. |
-| `tools.<name>.args`        | Tool arguments, the same for every extension: the tool decides what to compile from `$in`'s extension. Ninja variables: `$in` is the asset file (absolute), `$out` is the output (relative to the build folder), `$root` is the assets folder (absolute; texc, matc, modelc and lightc take it as `--root` to resolve paths starting with `/`). Default: `["$in", "$out"]`. |
+| `tools.<name>.args`        | Tool arguments, the same for every extension: the tool decides what to compile from `$in`'s extension. Ninja variables: `$in` is the asset file (absolute), `$out` is the output (relative to the build folder), `$root` is the assets folder (absolute; texc, matc, modelc and lightc take it as `--root` to resolve paths starting with `/`), `$target` is the platform the assets are built for (`--target`; texc picks texture formats by it). Default: `["$in", "$out"]`. |
 | `tools.<name>.depfile`     | Optional. The Makefile-style depfile the tool writes. Its target must be `$out` as passed. |
 | `tools.<name>.description` | Optional. Printed before the asset's path. Default: the tool name. |
 
@@ -143,8 +145,8 @@ server.load<Material>("game:/materials/toon.mat");
 By hand, from the repository root and then the build folder:
 
 ```
-python build/gen_package.py --root <folder> --files <list> --build-dir <build> --bin2cpp <build>/tools/bin2cpp/bin2cpp.exe
-                            --package <name> [--namespace <ns>] [--output <folder>] [--config build/config.json --tools-dir <build>/asset_tools]
+python build/gen_package.py --root <folder> --files <list> --build-dir <build> --bin2cpp <build>/asset_tools/bin2cpp.exe
+                            --package <name> [--namespace <ns>] [--output <folder>] [--config build/config.json --tools-dir <build>/asset_tools [--target <t>]]
                             [--align <n>]
 ninja -f package_<name>.ninja
 ```

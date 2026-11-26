@@ -30,6 +30,8 @@ public:
 private:
     vk::SurfaceFormatKHR getSurfaceFormat() const;
     vk::PresentModeKHR getPresentMode() const;
+    static vk::SurfaceTransformFlagBitsKHR getPreTransform(const vk::SurfaceCapabilitiesKHR& capabilities);
+    static vk::CompositeAlphaFlagBitsKHR getCompositeAlpha(const vk::SurfaceCapabilitiesKHR& capabilities);
 
     bool needsRecreate();
     // Returns false if the surface is empty or lost.

@@ -32,9 +32,17 @@ constexpr FormatRule kDesktopFormats[] = {
     { Usage::Hdr,    std::nullopt,    Alpha::Any,    TextureFormat::BC6H },
 };
 
+// Uncompressed: mobile GPUs have no BC formats.
+constexpr FormatRule kAndroidFormats[] = {
+    { Usage::Color,  std::nullopt, Alpha::Any, TextureFormat::RGBA8 },
+    { Usage::Normal, std::nullopt, Alpha::Any, TextureFormat::RGBA8 },
+    { Usage::Hdr,    std::nullopt, Alpha::Any, TextureFormat::RGBA16F },
+};
+
 std::span<const FormatRule> formatTable(Target target) {
     switch (target) {
         case Target::Desktop: return kDesktopFormats;
+        case Target::Android: return kAndroidFormats;
     }
     throw std::logic_error("unknown target");
 }
@@ -62,6 +70,7 @@ std::string_view toString(Quality quality) {
 std::string_view toString(Target target) {
     switch (target) {
         case Target::Desktop: return "desktop";
+        case Target::Android: return "android";
     }
     return "?";
 }
@@ -81,7 +90,9 @@ std::optional<Quality> parseQuality(std::string_view name) {
 }
 
 std::optional<Target> parseTarget(std::string_view name) {
-    if (name == toString(Target::Desktop)) return Target::Desktop;
+    for (auto target : { Target::Desktop, Target::Android }) {
+        if (name == toString(target)) return target;
+    }
     return std::nullopt;
 }
 
@@ -118,6 +129,8 @@ TextureFormat chooseFormat(Target target, Usage usage, Quality quality, bool alp
 bool supports(Target target, TextureFormat format) {
     switch (target) {
         case Target::Desktop: return true;
+        // Linear filtering of 32-bit floats is optional in Vulkan and rare on mobile GPUs.
+        case Target::Android: return !ailo::isCompressed(format) && format != TextureFormat::RGBA32F;
     }
     return false;
 }

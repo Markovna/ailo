@@ -22,6 +22,7 @@ enum class Quality : uint8_t {
 // The GPU family the packages are built for; each has its own format table.
 enum class Target : uint8_t {
     Desktop,
+    Android,
 };
 
 std::string_view toString(Usage usage);

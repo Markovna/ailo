@@ -77,8 +77,8 @@ void SwapChain::create(const vk::SurfaceCapabilitiesKHR& capabilities, vk::Exten
     createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
 
     createInfo.imageSharingMode = vk::SharingMode::eExclusive;
-    createInfo.preTransform = capabilities.currentTransform;
-    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    createInfo.preTransform = getPreTransform(capabilities);
+    createInfo.compositeAlpha = getCompositeAlpha(capabilities);
     createInfo.presentMode = getPresentMode();
     createInfo.clipped = VK_TRUE;
     createInfo.oldSwapchain = m_swapchain;
@@ -171,11 +171,11 @@ void SwapChain::destroySwapchain() {
 
 vk::SurfaceFormatKHR SwapChain::getSurfaceFormat() const {
     auto formats = m_device.physicalDevice().getSurfaceFormatsKHR(*m_surface);
-    auto findFormat = std::ranges::find_if(formats, [](const auto& format) {
-        return format.format == vk::Format::eB8G8R8A8Srgb && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear;
-    });
-    if (findFormat == formats.end()) { return formats[0]; }
-    return *findFormat;
+    for (auto preferred : { vk::Format::eB8G8R8A8Srgb, vk::Format::eR8G8B8A8Srgb }) {
+        const vk::SurfaceFormatKHR surfaceFormat { preferred, vk::ColorSpaceKHR::eSrgbNonlinear };
+        if (std::ranges::find(formats, surfaceFormat) != formats.end()) { return surfaceFormat; }
+    }
+    return formats[0];
 }
 
 vk::PresentModeKHR SwapChain::getPresentMode() const {
@@ -183,6 +183,22 @@ vk::PresentModeKHR SwapChain::getPresentMode() const {
     auto findMode = std::ranges::find(presentModes, vk::PresentModeKHR::eFifo);
     if (findMode != presentModes.end()) { return *findMode; }
     return vk::PresentModeKHR::eMailbox;
+}
+
+// The renderer doesn't pre-rotate, so rotation is left to the compositor.
+vk::SurfaceTransformFlagBitsKHR SwapChain::getPreTransform(const vk::SurfaceCapabilitiesKHR& capabilities) {
+    if (capabilities.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity) {
+        return vk::SurfaceTransformFlagBitsKHR::eIdentity;
+    }
+    return capabilities.currentTransform;
+}
+
+vk::CompositeAlphaFlagBitsKHR SwapChain::getCompositeAlpha(const vk::SurfaceCapabilitiesKHR& capabilities) {
+    using enum vk::CompositeAlphaFlagBitsKHR;
+    for (auto mode : { eOpaque, eInherit, ePreMultiplied }) {
+        if (capabilities.supportedCompositeAlpha & mode) { return mode; }
+    }
+    return ePostMultiplied;
 }
 
 }

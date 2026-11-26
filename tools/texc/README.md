@@ -4,12 +4,12 @@ Packs the image(s) named by a texture definition (`.tex`) into a texture package
 data. Images are decoded with stb_image as 4 channels, then block-compressed (see [Formats](#formats)).
 
 ```
-texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop] <input.tex>
+texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop|android] <input.tex>
 texc --dump <package.tex>
 ```
 
 - `--root` is the assets folder that paths starting with `/` are relative to. The asset build passes it.
-- `--target` is the GPU family whose format table is used (default and only value: `desktop`).
+- `--target` is the GPU family whose format table is used (`desktop`, the default, or `android`).
 - `--depfile` lists the `.tex` file and every source image, so editing an image repacks it.
 - `--dump` prints a package's header: type, format, size, stored levels, the generate-mipmaps flag, data size.
 
@@ -39,15 +39,14 @@ Strict JSON (quoted keys and strings); `//` and `/* */` comments are allowed. Un
 | `quality` | `"low"` \| `"normal"` \| `"high"` | `"normal"` | Picks the format (below) and the encoder's effort. |
 | `alpha`   | bool             | detected | Color only. Whether the texture uses alpha. Unset, texc scans the pixels: alpha is used if any texel's alpha is below 255. `false` drops the alpha of an image that has some. |
 | `srgb`    | bool             | `true`  | Color only. Whether the color is sRGB. `false` for linear data (metallic/roughness, masks). |
-| `format`  | `"bc1"` \| `"bc3"` \| `"bc4"` \| `"bc5"` \| `"bc6h"` \| `"bc7"` \| `"rgba8"` \| `"rgba16f"` \| `"rgba32f"` | | Overrides the format table. The sRGB variant is picked from `srgb`; a format without one (`bc4`, `bc5`) needs `"srgb": false`. `bc6h`, `rgba16f` and `rgba32f` need `"usage": "hdr"`, the others need an LDR source. |
+| `format`  | `"bc1"` \| `"bc3"` \| `"bc4"` \| `"bc5"` \| `"bc6h"` \| `"bc7"` \| `"rgba8"` \| `"rgba16f"` \| `"rgba32f"` | | Overrides the format table, unless the target does not support the format (`android` has no `bc*` or `rgba32f`). The sRGB variant is picked from `srgb`; a format without one (`bc4`, `bc5`) needs `"srgb": false`. `bc6h`, `rgba16f` and `rgba32f` need `"usage": "hdr"`, the others need an LDR source. |
 | `mipmaps` | bool \| `"offline"` | `true`  | `true`: only level 0 is stored and the package is flagged for the chain to be generated at load time, except for block-compressed formats, which can't be filtered once compressed: for those texc generates the chain, as with `"offline"`. `"offline"`: texc box-filters the whole chain (sRGB color in linear space, each face of a cubemap on its own) and stores every level. `false`: level 0 only. |
 
 ## Formats
 
 Textures are block-compressed with the encoders of [basis_universal](https://github.com/BinomialLLC/basis_universal)
 (submodule `third_party/basis_universal`, pinned to v2.50, only linked by texc). The format is chosen from the
-texture's intent, not named in the `.tex` file: `TextureFormats.cpp` holds one table per target (`--target`, only
-`desktop` today), and the first row that matches the usage, quality and alpha wins. Color formats get their sRGB
+texture's intent, not named in the `.tex` file: `TextureFormats.cpp` holds one table per target (`--target`), and the first row that matches the usage, quality and alpha wins. Color formats get their sRGB
 variant when `srgb` is true.
 
 | Target    | Usage    | Quality         | Alpha   | Format |
@@ -57,6 +56,9 @@ variant when `srgb` is true.
 | `desktop` | `color`  | `high`          | any     | `bc7` |
 | `desktop` | `normal` | any             |         | `bc5` (x and y; z is rebuilt when sampled) |
 | `desktop` | `hdr`    | any             |         | `bc6h` |
+| `android` | `color`  | any             | any     | `rgba8` |
+| `android` | `normal` | any             |         | `rgba8` |
+| `android` | `hdr`    | any             |         | `rgba16f` |
 
 The quality also sets the effort: BC1 uses basisu's high and higher quality modes at `normal` and `high`; BC7 uses
 the real-time bc7f packer at `low`, and bc7e at its fast and slow levels at `normal` and `high`; BC6H tries more

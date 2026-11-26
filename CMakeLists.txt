@@ -75,11 +75,18 @@ add_subdirectory(third_party/vkmemalloc)
 add_subdirectory(third_party/entt)
 add_subdirectory(third_party/imgui)
 
+set(AILO_HOST_TOOLS_DIR "" CACHE PATH "Folder with prebuilt build tools (a desktop build's asset_tools), used instead of building them")
+if(CMAKE_CROSSCOMPILING AND NOT AILO_HOST_TOOLS_DIR)
+    message(FATAL_ERROR "Cross-compiling needs AILO_HOST_TOOLS_DIR, the asset_tools folder of a desktop build (see BUILDING.md).")
+endif()
+
 # Only the offline model compiler (tools/modelc) links it.
-set(BUILD_SHARED_LIBS OFF)
-set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)   # -Werror breaks on newer compilers (GCC's maybe-uninitialized in stb_image)
-add_subdirectory(third_party/assimp)
-unset(BUILD_SHARED_LIBS)
+if(NOT AILO_HOST_TOOLS_DIR)
+    set(BUILD_SHARED_LIBS OFF)
+    set(ASSIMP_WARNINGS_AS_ERRORS OFF CACHE BOOL "" FORCE)   # -Werror breaks on newer compilers (GCC's maybe-uninitialized in stb_image)
+    add_subdirectory(third_party/assimp)
+    unset(BUILD_SHARED_LIBS)
+endif()
 
 # Jolt Physics. Its config defines (JPH_DEBUG_RENDERER, JPH_PROFILE_ENABLED, JPH_FLOATING_POINT_EXCEPTIONS_ENABLED, ...)
 # are PUBLIC on the Jolt target and must match between the library and our code: never define them by hand.
@@ -110,7 +117,37 @@ else()
     find_program(AILO_NINJA ninja REQUIRED)
 endif()
 set(AILO_ASSET_TOOLS texc matc modelc lightc)
-set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
+# Everything the build runs, kept in one folder so that another build can use it as AILO_HOST_TOOLS_DIR.
+set(AILO_BUILD_TOOLS ${AILO_ASSET_TOOLS} bin2cpp glslang-standalone)
+
+if(AILO_HOST_TOOLS_DIR)
+    cmake_path(ABSOLUTE_PATH AILO_HOST_TOOLS_DIR BASE_DIRECTORY ${CMAKE_SOURCE_DIR} NORMALIZE OUTPUT_VARIABLE AILO_ASSET_TOOLS_DIR)
+    if(CMAKE_HOST_WIN32)
+        set(HOST_EXE_SUFFIX .exe)
+    endif()
+    foreach(TOOL ${AILO_BUILD_TOOLS})
+        set(TOOL_FILE ${TOOL})
+        if(TOOL STREQUAL "glslang-standalone")
+            set(TOOL_FILE glslang)
+        endif()
+        set(TOOL_PATH ${AILO_ASSET_TOOLS_DIR}/${TOOL_FILE}${HOST_EXE_SUFFIX})
+        if(NOT EXISTS ${TOOL_PATH})
+            message(FATAL_ERROR "AILO_HOST_TOOLS_DIR has no ${TOOL_FILE}: ${TOOL_PATH}")
+        endif()
+        add_executable(${TOOL} IMPORTED GLOBAL)
+        set_target_properties(${TOOL} PROPERTIES IMPORTED_LOCATION ${TOOL_PATH})
+    endforeach()
+else()
+    set(AILO_ASSET_TOOLS_DIR ${CMAKE_BINARY_DIR}/asset_tools)
+endif()
+
+if(ANDROID)
+    set(DEFAULT_ASSET_TARGET android)
+else()
+    set(DEFAULT_ASSET_TARGET desktop)
+endif()
+set(AILO_ASSET_TARGET ${DEFAULT_ASSET_TARGET} CACHE STRING "Platform the assets are built for: desktop or android")
+set_property(CACHE AILO_ASSET_TARGET PROPERTY STRINGS desktop android)
 
 # Builds FILES like the asset build (build/gen.py) and compiles them into TARGET as a C++ package written by bin2cpp
 # (tools/bin2cpp/README.md): "embedded/<PACKAGE>.h" declares a std::span<const uint8_t> per file in
@@ -145,6 +182,7 @@ function(embed_assets TARGET)
                     --bin2cpp $<TARGET_FILE:bin2cpp>
                     --config ${CMAKE_SOURCE_DIR}/build/config.json
                     --tools-dir ${AILO_ASSET_TOOLS_DIR}
+                    --target ${AILO_ASSET_TARGET}
                     --package ${EMB_PACKAGE}
                     --namespace ailo::embedded::${EMB_PACKAGE}
                     --output ${OUT_DIR}
@@ -174,15 +212,17 @@ endfunction()
 # The engine
 add_subdirectory(ailo)
 
-add_subdirectory(tools/json)
-add_subdirectory(tools/matc)
-add_subdirectory(tools/texc)
-add_subdirectory(tools/modelc)
-add_subdirectory(tools/lightc)
-add_subdirectory(tools/bin2cpp)
+if(NOT AILO_HOST_TOOLS_DIR)
+    add_subdirectory(tools/json)
+    add_subdirectory(tools/matc)
+    add_subdirectory(tools/texc)
+    add_subdirectory(tools/modelc)
+    add_subdirectory(tools/lightc)
+    add_subdirectory(tools/bin2cpp)
 
-# The generator expression keeps multi-config generators from adding a per-config subfolder.
-set_target_properties(${AILO_ASSET_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
+    # The generator expression keeps multi-config generators from adding a per-config subfolder.
+    set_target_properties(${AILO_BUILD_TOOLS} PROPERTIES RUNTIME_OUTPUT_DIRECTORY $<1:${AILO_ASSET_TOOLS_DIR}>)
+endif()
 
 add_subdirectory(samples/sandbox)
 add_subdirectory(samples/asteroids)

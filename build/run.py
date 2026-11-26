@@ -162,6 +162,8 @@ def main():
     parser.add_argument("--source", help="assets folder: generates the manifest with gen.py when needed")
     parser.add_argument("--config", help="extension -> tool config (JSON), for gen.py")
     parser.add_argument("--tools-dir", help="folder with the tools named in the config, for gen.py")
+    parser.add_argument("--target", choices=gen.TARGETS, default=gen.TARGETS[0],
+                        help="platform the assets are built for, for gen.py")
     args = parser.parse_args()
 
     if args.ninja is None:
@@ -177,8 +179,9 @@ def main():
             parser.error(f"gen.py writes {gen.MANIFEST}, not {args.manifest}")
         # After the first build ninja regenerates the manifest itself when assets are added or removed or gen.py or the
         # config change. Only a change of these arguments is left to the runner.
-        if gen.read_args(args.manifest) != gen.generator_args(args.source, ".", args.config, args.tools_dir):
-            gen.generate(args.source, ".", args.config, args.tools_dir)
+        generator_args = (args.source, ".", args.config, args.tools_dir, args.target)
+        if gen.read_args(args.manifest) != gen.generator_args(*generator_args):
+            gen.generate(*generator_args)
 
     state_path = Path(args.state)
     state = load_state(state_path)

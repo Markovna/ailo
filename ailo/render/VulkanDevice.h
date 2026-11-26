@@ -25,6 +25,7 @@ public:
     vk::Device* operator->() { return &m_device; }
 
     auto getMSAASamples() const { return m_msaaSamples; }
+    bool supportsTextureCompressionBC() const { return m_textureCompressionBC; }
 
 private:
     void createInstance();
@@ -40,6 +41,7 @@ private:
     vk::Instance m_instance;
     vk::PhysicalDevice m_physicalDevice;
     vk::SampleCountFlagBits m_msaaSamples = vk::SampleCountFlagBits::e1;
+    bool m_textureCompressionBC = false;
     vk::Device m_device;
     vk::Queue m_graphicsQueue;
     uint32_t m_graphicsQueueFamilyIndex;

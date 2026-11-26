@@ -22,7 +22,7 @@ namespace {
 
 void printUsage() {
     std::cerr <<
-        "usage: texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop]\n"
+        "usage: texc -o <output.tex> [--depfile <file>] [--root <assets folder>] [--target desktop|android]\n"
         "            <input.tex>\n"
         "       texc --dump <package.tex>\n";
 }
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
         else if (arg == "--target") {
             const std::string name = value();
             auto parsed = parseTarget(name);
-            if (!parsed) { std::cerr << "texc: unknown target " << name << " (expected desktop)\n"; return 2; }
+            if (!parsed) { std::cerr << "texc: unknown target " << name << "\n"; return 2; }
             target = *parsed;
         }
         else if (arg == "-h" || arg == "--help") { printUsage(); return 0; }
@@ -154,16 +154,13 @@ int main(int argc, char** argv) {
     }
 
     TextureFormat format;
-    if (def.format) {
+    // A "format" the target lacks falls back to the table, so that one .tex file works for every target.
+    if (def.format && supports(target, *def.format)) {
         format = *def.format;
     } else {
         const bool alpha = def.usage == Usage::Color && def.alpha.value_or(hasAlpha(*pkg));
         format = chooseFormat(target, *def.usage, def.quality, alpha);
         if (def.usage == Usage::Color && def.options.srgb) format = *withSrgb(format);
-    }
-    if (!supports(target, format)) {
-        std::cerr << sourceName << ": error: the " << toString(target) << " target has no " << toString(format) << "\n";
-        return 1;
     }
 
     // The engine generates mipmaps only for uncompressed images.

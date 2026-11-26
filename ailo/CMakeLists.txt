@@ -272,4 +272,6 @@ embed_assets(ailo PACKAGE materials ROOT ${CMAKE_SOURCE_DIR}/assets FILES
         materials/tonemap.mat
 )
 
-add_subdirectory(test)
+if(NOT ANDROID)
+    add_subdirectory(test)
+endif()

@@ -51,23 +51,15 @@ void Window::onSurfaceLost(std::function<void()> listener) {
 
 namespace {
 
-struct PausedTime {
-    double seconds = 0.0;
-};
-
 void pumpEvents(Platform& platform, Window& window, InputSystem& input, Time& time, FixedTime& fixed,
-                AppControl& control, Local<PausedTime> paused) {
+                AppControl& control) {
     platform.pumpEvents(input);
 
-    if (!window.isRenderable()) {
-        const double waitStart = platform.time();
-        while (!window.isRenderable() && !window.shouldClose()) {
-            platform.waitEvents(input);
-        }
-        paused->seconds += platform.time() - waitStart;
+    while (!window.isRenderable() && !window.shouldClose()) {
+        platform.waitEvents(input);
     }
 
-    const float now = static_cast<float>(platform.time() - paused->seconds);
+    const float now = static_cast<float>(platform.time());
     time.delta = now - time.elapsed;
     time.elapsed = now;
     fixed.accumulate(time.delta);

@@ -4,7 +4,7 @@
     "tools": {
         "texc": {
             "extensions": [ ".tex" ],
-            "args": ["--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
+            "args": ["--target", "$target", "--root", "$root", "--depfile", "$out.d", "-o", "$out", "$in"],
             "depfile": "$out.d"
         },
         "matc": {

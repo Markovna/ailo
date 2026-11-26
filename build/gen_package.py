@@ -15,7 +15,7 @@ from pathlib import Path
 # Keeps Python from writing build/__pycache__ for gen.
 sys.dont_write_bytecode = True
 
-from gen import EXE_SUFFIX, escape_path, escape_value, load_json, posix, quote, tools_by_extension
+from gen import EXE_SUFFIX, TARGETS, escape_path, escape_value, load_json, posix, quote, tools_by_extension
 
 
 def read_file_list(path, root):
@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--bin2cpp", required=True, help="the bin2cpp executable")
     parser.add_argument("--config", help="extension -> tool config (JSON); without it every file is embedded as is")
     parser.add_argument("--tools-dir", help="folder with the tools named in the config")
+    parser.add_argument("--target", choices=TARGETS, default=TARGETS[0], help="platform the files are built for")
     parser.add_argument("--align", type=int, help="bin2cpp --align (default: bin2cpp's)")
     args = parser.parse_args()
 
@@ -86,7 +87,7 @@ def main():
     if args.namespace:
         regen_command += ["--namespace", args.namespace]
     if config_path:
-        regen_command += ["--config", posix(config_path), "--tools-dir", posix(tools_dir)]
+        regen_command += ["--config", posix(config_path), "--tools-dir", posix(tools_dir), "--target", args.target]
     if args.align is not None:
         regen_command += ["--align", str(args.align)]
 
@@ -103,6 +104,7 @@ def main():
         # Its own log and deps: sharing them with build_assets.ninja would make cleandead delete the other's outputs.
         f"builddir = {work_dir}",
         f"root = {escape_value(quote(posix(root)))}",
+        f"target = {args.target}",
         "",
         "rule regen",
         f"  command = {escape_value(' '.join(quote(a) for a in regen_command))}",

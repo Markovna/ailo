@@ -14,6 +14,7 @@ add_custom_target(sandbox_assets ALL
                 --source ${CMAKE_CURRENT_SOURCE_DIR}/assets
                 --config ${CMAKE_SOURCE_DIR}/build/config.json
                 --tools-dir ${AILO_ASSET_TOOLS_DIR}
+                --target ${AILO_ASSET_TARGET}
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Building sandbox assets"
         USES_TERMINAL

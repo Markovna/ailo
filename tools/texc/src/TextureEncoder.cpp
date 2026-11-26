@@ -191,7 +191,8 @@ std::optional<TexturePackage> encodeTexture(const TexturePackage& source, Textur
                 for (size_t i = 0; i < src.size() / sizeof(float); i++) {
                     float value;
                     std::memcpy(&value, src.data() + i * sizeof(float), sizeof(float));
-                    const basist::half_float half = basist::float_to_half(value);
+                    const basist::half_float half = basist::float_to_half(
+                        std::clamp(value, -float(basist::MAX_HALF_FLOAT), float(basist::MAX_HALF_FLOAT)));
                     std::memcpy(dst + i * sizeof(half), &half, sizeof(half));
                 }
             } else if (!isCompressed(format)) {

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <format>
 #include <numeric>
 #include <stdexcept>
 
@@ -229,6 +230,10 @@ void RenderAPI::updateBuffer(const BufferHandle& handle, const void* data, uint6
 }
 
 Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, TextureFormat format, TextureUsage usage, uint32_t width, uint32_t height, uint8_t levels, uint8_t samples) {
+    if (isCompressed(format) && !m_device.supportsTextureCompressionBC()) {
+        throw std::runtime_error(std::format("the GPU does not support {} textures (the assets are built for another target)",
+                                             toString(format)));
+    }
     return m_textures.make(
         *m_device, m_device.physicalDevice(),
         type, vkutils::getFormat(format), levels, width, height,
