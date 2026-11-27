@@ -60,12 +60,16 @@ public:
         uint32_t level = 0);
     void generateMipmaps(const TextureHandle& handle);
 
+    Unique<gpu::Texture> importTexture(const gpu::ExternalImageDesc& desc);
+
     // Descriptor set management
     Unique<gpu::DescriptorSetLayout> createDescriptorSetLayout(const std::vector<DescriptorSetLayoutBinding>& bindings);
     Unique<gpu::DescriptorSet> createDescriptorSet(DescriptorSetLayoutHandle dslh);
     void updateDescriptorSetBuffer(const DescriptorSetHandle& descriptorSet, const BufferHandle& buffer, uint32_t binding, uint64_t offset = 0, uint64_t size = std::numeric_limits<decltype(size)>::max());
     void updateDescriptorSetTexture(const DescriptorSetHandle& descriptorSet, const TextureHandle& texture, uint32_t binding = 0, const SamplerParams& sampler = {});
-    Unique<gpu::RenderTarget> createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, uint8_t samples = 1);
+    // `layers` is the framebuffer layer count; 0 takes the first attachment's layer count. Every attachment must have
+    // at least that many layers. With multiview the framebuffer needs a single layer instead.
+    Unique<gpu::RenderTarget> createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, uint8_t samples = 1, uint8_t layers = 0);
 
     // Program management
     Unique<gpu::Program> createProgram(const ShaderDescription& description);
@@ -86,6 +90,10 @@ public:
     void beginGpuTimer(std::string_view name);
     void endGpuTimer();
     std::span<const GpuTiming> gpuTimings() const { return m_gpuTimer.timings(); }
+
+    // For code that creates Vulkan objects itself, such as images to import.
+    vk::Device getDevice() { return *m_device; }
+    vk::PhysicalDevice getPhysicalDevice() { return m_device.physicalDevice(); }
 
 private:
     using Buffer = gpu::Buffer;

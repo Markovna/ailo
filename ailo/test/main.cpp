@@ -14,6 +14,7 @@ void runExprVMTests();
 void runAnimGraphTests();
 void runSyncTrackTests();
 void runFootMarkerTests();
+void runRenderImportTests();
 
 int main() {
     runAppTests();
@@ -30,6 +31,7 @@ int main() {
     runAnimGraphTests();
     runSyncTrackTests();
     runFootMarkerTests();
+    runRenderImportTests();
 
     return ailo::test::finish();
 }

@@ -3,11 +3,24 @@
 #include <vulkan/vulkan.hpp>
 
 #include <optional>
+#include <vector>
 
 #include "Resources.h"
 #include "render/Resource.h"
 
 namespace ailo::gpu {
+
+struct ExternalImageDesc {
+    vk::Image image {};
+    vk::Format format = vk::Format::eUndefined;
+    uint32_t width = 0;
+    uint32_t height = 0;
+    vk::ImageUsageFlags usage {};
+    vk::ImageAspectFlags aspect = vk::ImageAspectFlagBits::eColor;
+    uint8_t layers = 1;
+    vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
+    vk::ImageLayout initialLayout = vk::ImageLayout::eUndefined;
+};
 
 class Texture : public Resource {
 public:
@@ -15,9 +28,10 @@ public:
 
     Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels,
         uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags,
-        vk::SampleCountFlagBits = vk::SampleCountFlagBits::e1);
+        vk::SampleCountFlagBits = vk::SampleCountFlagBits::e1, uint8_t layers = 1);
 
-    Texture(vk::Device device, vk::Image, vk::Format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags);
+    // Wraps an image the engine doesn't own
+    Texture(vk::Device device, const ExternalImageDesc&);
 
     ~Texture();
 
@@ -48,8 +62,16 @@ public:
 
     vk::SampleCountFlagBits getSamples() const { return m_samples; }
 
+    // A 2D view of one array layer, for rendering into a single layer. Only array textures have them.
+    vk::ImageView getLayerView(uint32_t layer) const {
+        return layer < m_layerViews.size() ? m_layerViews[layer] : vk::ImageView {};
+    }
+
+    bool ownsImage() const { return m_ownsImage; }
+
     vk::Image image {};
     vk::DeviceMemory memory {};
+    // The whole image: 2D, 2D array or cube.
     vk::ImageView imageView {};
     vk::Format format;
     vk::ImageAspectFlags aspect;
@@ -62,13 +84,16 @@ public:
 private:
     vk::Device m_device {};
     std::vector<vk::ImageLayout> m_rangeLayouts;
+    std::vector<vk::ImageView> m_layerViews;
     uint8_t m_levels = 1;
     uint8_t m_layerCount = 1;
     TextureType m_type = TextureType::Texture2D;
     vk::SampleCountFlagBits m_samples = vk::SampleCountFlagBits::e1;
     vk::ImageUsageFlags m_usage;
+    bool m_ownsImage = false;
 
-    vk::ImageView createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels, vk::ImageAspectFlags aspectFlags);
+    void createViews();
+    vk::ImageView createImageView(vk::ImageViewType viewType, uint32_t baseLayer, uint32_t layerCount) const;
     std::optional<uint32_t> findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 };
 

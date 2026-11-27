@@ -2,16 +2,18 @@
 
 #include "VulkanUtils.h"
 
+#include <cassert>
+
 namespace ailo::gpu {
 
-Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples)
-    : format(format), aspect(aspect), width(width), height(height), m_device(device), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples), m_usage(usage) {
+Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureType type, vk::Format format, uint8_t levels, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspect, vk::SampleCountFlagBits samples, uint8_t layers)
+    : format(format), aspect(aspect), width(width), height(height), m_device(device), m_levels(std::max(levels, uint8_t(1))), m_type(type), m_samples(samples), m_usage(usage), m_ownsImage(true) {
 
     if (m_levels > 1) {
         m_usage |= vk::ImageUsageFlagBits::eTransferSrc;
     }
 
-    m_layerCount = type == TextureType::Cubemap ? 6 : 1;
+    m_layerCount = type == TextureType::Cubemap ? 6 : std::max(layers, uint8_t(1));
 
     vk::ImageCreateInfo imageInfo{};
     imageInfo.imageType = vk::ImageType::e2D;
@@ -53,27 +55,48 @@ Texture::Texture(vk::Device device, vk::PhysicalDevice physicalDevice, TextureTy
     memory = device.allocateMemory(allocInfo);
     device.bindImageMemory(image, memory, 0);
 
-    imageView = createImageView(device, image, format, m_levels, aspect);
+    createViews();
 }
 
-Texture::Texture(vk::Device device, vk::Image image, vk::Format format, uint32_t width, uint32_t height, vk::ImageUsageFlags usage, vk::ImageAspectFlags aspectFlags)
-    : image(image), format(format), aspect(aspectFlags), width(width), height(height), m_device(device), m_usage(usage) {
-    imageView = createImageView(device, image, format, m_levels, aspectFlags);
+Texture::Texture(vk::Device device, const ExternalImageDesc& desc)
+    : image(desc.image), format(desc.format), aspect(desc.aspect), width(desc.width), height(desc.height),
+      m_device(device), m_layerCount(std::max(desc.layers, uint8_t(1))), m_samples(desc.samples),
+      m_usage(desc.usage), m_ownsImage(false) {
+    assert(desc.image && "ExternalImageDesc::image is null");
+    createViews();
+    setLayout(0, m_levels, desc.initialLayout);
 }
 
-vk::ImageView Texture::createImageView(vk::Device device, vk::Image image, vk::Format format, uint32_t levels,
-    vk::ImageAspectFlags aspectFlags) {
+void Texture::createViews() {
+    if (m_type == TextureType::Cubemap) {
+        imageView = createImageView(vk::ImageViewType::eCube, 0, m_layerCount);
+        return;
+    }
+
+    if (m_layerCount == 1) {
+        imageView = createImageView(vk::ImageViewType::e2D, 0, 1);
+        return;
+    }
+
+    imageView = createImageView(vk::ImageViewType::e2DArray, 0, m_layerCount);
+    m_layerViews.reserve(m_layerCount);
+    for (uint32_t layer = 0; layer < m_layerCount; layer++) {
+        m_layerViews.push_back(createImageView(vk::ImageViewType::e2D, layer, 1));
+    }
+}
+
+vk::ImageView Texture::createImageView(vk::ImageViewType viewType, uint32_t baseLayer, uint32_t layerCount) const {
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image = image;
-    viewInfo.viewType = m_type == TextureType::Texture2D ? vk::ImageViewType::e2D : vk::ImageViewType::eCube;
+    viewInfo.viewType = viewType;
     viewInfo.format = format;
-    viewInfo.subresourceRange.aspectMask = aspectFlags;
+    viewInfo.subresourceRange.aspectMask = aspect;
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = levels;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = m_layerCount;
+    viewInfo.subresourceRange.levelCount = m_levels;
+    viewInfo.subresourceRange.baseArrayLayer = baseLayer;
+    viewInfo.subresourceRange.layerCount = layerCount;
 
-    return device.createImageView(viewInfo);
+    return m_device.createImageView(viewInfo);
 }
 
 std::optional<uint32_t> Texture::findMemoryType(vk::PhysicalDevice physicalDevice, uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
@@ -89,9 +112,17 @@ std::optional<uint32_t> Texture::findMemoryType(vk::PhysicalDevice physicalDevic
 }
 
 Texture::~Texture() {
+    if (!m_device) {
+        return;
+    }
+
+    for (auto view : m_layerViews) {
+        m_device.destroyImageView(view);
+    }
     m_device.destroyImageView(imageView);
 
-    if (memory) {
+    // An imported image belongs to whoever created it.
+    if (m_ownsImage) {
         m_device.destroyImage(image);
         m_device.freeMemory(memory);
     }

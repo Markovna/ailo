@@ -93,6 +93,7 @@ struct RenderTarget : Resource {
     Shared<Texture> depth {};
     uint32_t width {};
     uint32_t height {};
+    uint32_t layers = 1;
     vk::SampleCountFlagBits samples {};
 };
 

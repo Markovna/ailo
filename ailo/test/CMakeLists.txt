@@ -15,6 +15,7 @@ add_executable(ailo_tests
         anim_graph_tests.cpp
         sync_track_tests.cpp
         foot_marker_tests.cpp
+        render_import_tests.cpp
         # modelc's foot marker detection works on package types, so it's tested here.
         ${CMAKE_SOURCE_DIR}/tools/modelc/src/FootMarkers.cpp
 )

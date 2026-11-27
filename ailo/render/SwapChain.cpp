@@ -103,8 +103,14 @@ void SwapChain::create(const vk::SurfaceCapabilitiesKHR& capabilities, vk::Exten
         rt->width = extent.width;
         rt->height = extent.height;
 
-        rt->colors[0] = m_textures.make( *m_device, image,
-            surfaceFormat.format, extent.width, extent.height, vk::ImageUsageFlagBits::eColorAttachment, vk::ImageAspectFlagBits::eColor);
+        rt->colors[0] = m_textures.make(*m_device, ExternalImageDesc {
+            .image = image,
+            .format = surfaceFormat.format,
+            .width = extent.width,
+            .height = extent.height,
+            .usage = createInfo.imageUsage,
+            .aspect = vk::ImageAspectFlagBits::eColor,
+        });
 
         rt->depth = depth;
 

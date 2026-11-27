@@ -243,6 +243,13 @@ Unique<gpu::Texture> RenderAPI::createTexture(TextureType type, TextureFormat fo
         clampSampleCount(samples));
 }
 
+Unique<gpu::Texture> RenderAPI::importTexture(const gpu::ExternalImageDesc& desc) {
+    if (!desc.image || desc.width == 0 || desc.height == 0 || desc.layers == 0 || desc.format == vk::Format::eUndefined) {
+        throw std::invalid_argument("importTexture: the image, its format, size and layer count are required");
+    }
+    return m_textures.make(*m_device, desc);
+}
+
 vk::SampleCountFlagBits RenderAPI::clampSampleCount(uint8_t samples) const {
     const auto maxSamples = static_cast<uint8_t>(m_device.getMSAASamples());
     return vkutils::getSampleCount(std::bit_floor(std::clamp<uint8_t>(samples, 1, maxSamples)));
@@ -381,15 +388,24 @@ void RenderAPI::updateDescriptorSetTexture(const DescriptorSetHandle& descriptor
 }
 
 
-Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, uint8_t samples) {
+Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment<TextureHandle>& colors, TextureHandle depth, uint32_t width, uint32_t height, uint8_t samples, uint8_t layers) {
     auto renderTarget = m_renderTargets.make();
     renderTarget->width = width;
     renderTarget->height = height;
     renderTarget->samples = clampSampleCount(samples);
 
+    if (layers == 0) {
+        auto first = std::ranges::find_if(colors, [](const TextureHandle& h) { return bool(h); });
+        const TextureHandle firstAttachment = first != colors.end() ? *first : depth;
+        layers = firstAttachment ? m_textures.get(firstAttachment).getLayerCount() : 1;
+    }
+    renderTarget->layers = layers;
+
+    // Stand-ins get the render target's layer count, so they cover every layer rendered to.
     auto createMsaaTexture = [&](const Texture& texture, vk::ImageUsageFlags usage) -> Shared<Texture> {
         return m_textures.make(*m_device, m_device.physicalDevice(), TextureType::Texture2D, texture.format, 1,
-            width, height, usage | vk::ImageUsageFlagBits::eTransientAttachment, texture.aspect, renderTarget->samples);
+            width, height, usage | vk::ImageUsageFlagBits::eTransientAttachment, texture.aspect, renderTarget->samples,
+            layers);
     };
 
     for (uint32_t i = 0; i < colors.size(); i++) {
@@ -398,6 +414,7 @@ Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment
         }
         auto color = m_textures.share(colors[i]);
         assert(color->getSamples() == vk::SampleCountFlagBits::e1);
+        assert(color->getLayerCount() >= layers && "A color attachment has fewer layers than the render target");
         if (renderTarget->samples != vk::SampleCountFlagBits::e1) {
             renderTarget->colors[i] = createMsaaTexture(*color, vk::ImageUsageFlagBits::eColorAttachment);
             renderTarget->resolve[i] = std::move(color);
@@ -408,6 +425,7 @@ Unique<gpu::RenderTarget> RenderAPI::createRenderTarget(const PerColorAttachment
 
     if (depth) {
         auto depthTexture = m_textures.share(depth);
+        assert(depthTexture->getLayerCount() >= layers && "The depth attachment has fewer layers than the render target");
         // Depth isn't resolved: a single-sampled depth texture gets a multisampled stand-in and is never written.
         if (depthTexture->getSamples() != renderTarget->samples) {
             assert(depthTexture->getSamples() == vk::SampleCountFlagBits::e1);
@@ -504,7 +522,7 @@ void RenderAPI::beginRenderPass(const RenderTargetHandle& rth, const RenderPassD
     }
 
     auto& renderPass = m_renderPassCache.getOrCreate(description, fbFormat);
-    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, rt.width, rt.height);
+    auto& frameBuffer = m_framebufferCache.getOrCreate(renderPass, fbFormat, fbImageView, rt.width, rt.height, rt.layers);
 
     m_pipelineCache.bindRenderPass(renderPass, fbFormat);
 

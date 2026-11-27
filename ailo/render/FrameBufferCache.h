@@ -12,7 +12,7 @@ namespace ailo {
 class FrameBuffer {
 public:
     FrameBuffer(vk::Device device, DeletionQueue& deletionQueue, vk::RenderPass renderPass,
-                const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height);
+                const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height, uint32_t layers);
     ~FrameBuffer();
 
     FrameBuffer(const FrameBuffer&) = delete;
@@ -36,6 +36,7 @@ private:
         vk::ImageView depth;
         uint32_t width {};
         uint32_t height {};
+        uint32_t layers {};
         vk::SampleCountFlagBits samples {};
 
         bool operator==(const CacheKey& other) const = default;
@@ -49,6 +50,7 @@ private:
                 utils::hash_combine(seed, static_cast<VkImageView>(key.resolve[i]));
             }
             utils::hash_combine(seed, static_cast<VkImageView>(key.depth));
+            utils::hash_combine(seed, key.layers);
             utils::hash_combine(seed, key.width);
             utils::hash_combine(seed, key.height);
             utils::hash_combine(seed, key.samples);
@@ -65,7 +67,7 @@ public:
         vk::RenderPass,
         const gpu::FrameBufferFormat& formats,
         const gpu::FrameBufferImageView& views,
-        uint32_t width, uint32_t height);
+        uint32_t width, uint32_t height, uint32_t layers = 1);
 
     void clear();
 

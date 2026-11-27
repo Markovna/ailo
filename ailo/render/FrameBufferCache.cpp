@@ -7,7 +7,7 @@ FrameBuffer::FrameBuffer(
     DeletionQueue& deletionQueue,
     vk::RenderPass renderPass,
     const gpu::FrameBufferImageView& views,
-    uint32_t width, uint32_t height)
+    uint32_t width, uint32_t height, uint32_t layers)
         : m_device(device), m_deletionQueue(deletionQueue) {
 
     std::array<vk::ImageView, 2 * kMaxColorAttachments + 1> attachments;
@@ -33,7 +33,7 @@ FrameBuffer::FrameBuffer(
     framebufferInfo.pAttachments = attachments.data();
     framebufferInfo.width = width;
     framebufferInfo.height = height;
-    framebufferInfo.layers = 1;
+    framebufferInfo.layers = layers;
 
     m_framebuffer = device.createFramebuffer(framebufferInfo);
 }
@@ -45,7 +45,7 @@ FrameBuffer::~FrameBuffer() {
 }
 
 FrameBuffer& FrameBufferCache::getOrCreate(vk::RenderPass renderPass, const gpu::FrameBufferFormat& formats,
-    const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height) {
+    const gpu::FrameBufferImageView& views, uint32_t width, uint32_t height, uint32_t layers) {
 
     // The render pass is intentionally not part of the key: a framebuffer can be used with any render pass
     // compatible with the one it was created with, and compatibility is fully determined by the attachments
@@ -57,10 +57,11 @@ FrameBuffer& FrameBufferCache::getOrCreate(vk::RenderPass renderPass, const gpu:
         .depth = views.depth,
         .width = width,
         .height = height,
+        .layers = layers,
         .samples = formats.samples
     };
 
-    auto [it, result] = m_cache.tryEmplace(query, m_device, m_deletionQueue, renderPass, views, width, height);
+    auto [it, result] = m_cache.tryEmplace(query, m_device, m_deletionQueue, renderPass, views, width, height, layers);
     return it->second;
 }
 
