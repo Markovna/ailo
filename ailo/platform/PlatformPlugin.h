@@ -38,6 +38,13 @@ private:
 struct Time {
     float delta = 0.0f;
     float elapsed = 0.0f;
+
+    float maxDelta = 0.25f;
+    float speed = 1.0f;
+    bool paused = false;
+
+    float realDelta = 0.0f;
+    double realElapsed = 0.0;
 };
 
 // Resources: Platform, Window, InputSystem, Time.

@@ -3,6 +3,8 @@
 #include "app/App.h"
 #include "input/InputSystem.h"
 
+#include <algorithm>
+
 namespace ailo {
 
 Window::Window(Platform& platform, const WindowDesc& desc)
@@ -59,9 +61,12 @@ void pumpEvents(Platform& platform, Window& window, InputSystem& input, Time& ti
         platform.waitEvents(input);
     }
 
-    const float now = static_cast<float>(platform.time());
-    time.delta = now - time.elapsed;
-    time.elapsed = now;
+    const double now = platform.time();
+    time.realDelta = static_cast<float>(now - time.realElapsed);
+    time.realElapsed = now;
+
+    time.delta = time.paused ? 0.0f : std::min(time.realDelta, time.maxDelta) * time.speed;
+    time.elapsed += time.delta;
     fixed.accumulate(time.delta);
 
     if (window.shouldClose()) {
@@ -79,7 +84,7 @@ void PlatformPlugin::build(App& app) {
     auto& platform = app.insertResource<Platform>();
     app.insertResource<Window>(platform, window);
     app.insertResource<InputSystem>();
-    app.insertResource<Time>(Time { .delta = 0.0f, .elapsed = static_cast<float>(platform.time()) });
+    app.insertResource<Time>(Time { .realElapsed = platform.time() });
 
     app.addSystem(Stage::First, pumpEvents, "PlatformPlugin::pumpEvents");
     app.addSystem(Stage::PreUpdate, processInput, "PlatformPlugin::processInput");

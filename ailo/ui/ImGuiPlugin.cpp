@@ -41,7 +41,7 @@ void subscribeInput(InputSystem& input) {
 
 void beginFrame(const Window& window, const Time& time, InputCapture& capture) {
     ImGuiIO& io = ImGui::GetIO();
-    io.DeltaTime = time.delta > 0.0f ? time.delta : 1.0f / 60.0f;
+    io.DeltaTime = time.realDelta > 0.0f ? time.realDelta : 1.0f / 60.0f;
 
     auto size = window.size();
     auto fbSize = window.framebufferSize();
