@@ -16,7 +16,7 @@ class ResourceContainer final : public ResourceContainerBase {
     static_assert(std::is_base_of_v<Resource, ResourceType>, "GPU resources must derive from Resource");
 
 public:
-    using Handle = Handle<ResourceType>;
+    using Handle = ailo::Handle<ResourceType>;
     using value_type = ResourceType;
     using reference = value_type&;
     using pointer = value_type*;
